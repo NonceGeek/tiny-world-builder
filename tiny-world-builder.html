@@ -479,6 +479,137 @@
   @media (max-width: 600px) {
     .welcome-tips { grid-template-columns: 1fr; }
   }
+
+  /* -------- auth modal -------- */
+  .auth-modal {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .auth-modal[hidden] { display: none; }
+  .auth-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 32px 28px 24px;
+    width: min(400px, 100%);
+    box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .auth-card .auth-title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 26px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    text-align: center;
+  }
+  .auth-card .auth-title em {
+    font-style: italic;
+    color: #a08454;
+  }
+  .auth-card .auth-subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: -8px;
+  }
+  .auth-card label {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 12px; font-weight: 500; color: var(--muted);
+  }
+  .auth-card input[type="email"],
+  .auth-card input[type="password"],
+  .auth-card input[type="text"] {
+    font: inherit;
+    font-size: 14px;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .auth-card input:focus {
+    border-color: #b89c5e;
+  }
+  .auth-btn {
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 11px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.12s, transform 0.08s;
+  }
+  .auth-btn:hover { opacity: 0.88; }
+  .auth-btn:active { transform: translateY(1px); }
+  .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .auth-link {
+    background: none; border: none;
+    color: var(--accent);
+    font: inherit; font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .auth-link:hover { color: var(--ink); }
+  .auth-footer {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .auth-error {
+    background: #fdf2f0;
+    border: 1px solid #f0d2cc;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #b84838;
+  }
+  .auth-error[hidden] { display: none; }
+  .auth-success {
+    background: #f0f7ec;
+    border: 1px solid #c8dfc0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #3d7a2a;
+  }
+  .auth-success[hidden] { display: none; }
+  .auth-form[hidden] { display: none; }
+  .auth-divider {
+    display: flex; align-items: center; gap: 12px;
+    font-size: 12px; color: var(--muted);
+  }
+  .auth-divider::before,
+  .auth-divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--line);
+  }
+  .auth-google-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: #fff;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.15s;
+  }
+  .auth-google-btn:hover { background: #fafaf8; border-color: #ccc; }
+  .auth-google-btn:active { transform: translateY(1px); }
+  .auth-google-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .auth-oauth-section[hidden] { display: none; }
+
   #cloud-layer {
     position: fixed;
     inset: -12%;
@@ -501,31 +632,7 @@
     to { transform: translate3d(4%, 2%, 0); }
   }
 
-  /* -------- auth / profile / saves -------- */
-  .auth-btn {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    padding: 6px 14px;
-    border-radius: 10px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-    cursor: pointer;
-    box-shadow: 0 1px 0 rgba(60, 40, 10, 0.04);
-    transition: background 0.12s, transform 0.08s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .auth-btn:hover { background: #faf5ea; }
-  .auth-btn:active { transform: translateY(1px); }
-  .auth-avatar {
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 1px solid var(--line);
-  }
+  /* -------- profile / saves -------- */
   .saves-list { list-style: none; padding: 0; margin: 10px 0 0; max-height: 300px; overflow-y: auto; }
   .saves-list li {
     display: flex;
@@ -604,7 +711,8 @@
     <button class="btn" id="generate" title="Generate world from a prompt" hidden>✨ Generate</button>
     <button class="btn" id="render-settings" title="Render settings">Render</button>
     <button class="btn" id="clear">Clear</button>
-    <button class="auth-btn" id="auth-btn">Sign in</button>
+    <button class="btn" id="account-btn" hidden>My Account</button>
+    <button class="btn" id="auth-logout-btn" hidden>Sign out</button>
   </div>
 
   <div id="account-modal" class="modal" hidden>
@@ -637,7 +745,6 @@
         <div class="modal-foot">
           <span id="profile-status"></span>
           <button class="btn" id="profile-save" type="button">Save Profile</button>
-          <button class="btn" id="auth-logout" type="button">Sign out</button>
         </div>
       </div>
       <div id="panel-saves" hidden>
@@ -651,6 +758,81 @@
         <div class="save-empty" id="saves-empty" hidden>No saved builds yet. Build a world and save it above.</div>
       </div>
     </form>
+  </div>
+
+  <div id="auth-modal" class="auth-modal">
+    <div class="auth-card">
+      <div class="auth-title">Tiny World <em>Builder</em></div>
+      <div class="auth-subtitle">Sign in to start building</div>
+      <div id="auth-error" class="auth-error" hidden></div>
+      <div id="auth-success" class="auth-success" hidden></div>
+
+      <!-- Login form -->
+      <div id="auth-login" class="auth-form">
+        <div id="auth-oauth-login" class="auth-oauth-section" hidden>
+          <button class="auth-google-btn" id="auth-google-login" type="button">
+            <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.01 24.01 0 0 0 0 21.56l7.98-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Sign in with Google
+          </button>
+          <div class="auth-divider">or</div>
+        </div>
+        <label>Email
+          <input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <label>Password
+          <input id="auth-password" type="password" autocomplete="current-password" placeholder="Your password" />
+        </label>
+        <button class="auth-btn" id="auth-login-btn" type="button">Sign in</button>
+        <div class="auth-footer">
+          <button class="auth-link" id="auth-show-signup" type="button">Create an account</button>
+          &middot;
+          <button class="auth-link" id="auth-show-forgot" type="button">Forgot password?</button>
+        </div>
+      </div>
+
+      <!-- Signup form -->
+      <div id="auth-signup" class="auth-form" hidden>
+        <div id="auth-oauth-signup" class="auth-oauth-section" hidden>
+          <button class="auth-google-btn" id="auth-google-signup" type="button">
+            <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.01 24.01 0 0 0 0 21.56l7.98-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            Sign up with Google
+          </button>
+          <div class="auth-divider">or</div>
+        </div>
+        <label>Name
+          <input id="auth-signup-name" type="text" autocomplete="name" placeholder="Your name" />
+        </label>
+        <label>Email
+          <input id="auth-signup-email" type="email" autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <label>Password
+          <input id="auth-signup-password" type="password" autocomplete="new-password" placeholder="Choose a password" />
+        </label>
+        <button class="auth-btn" id="auth-signup-btn" type="button">Create account</button>
+        <div class="auth-footer">
+          Already have an account? <button class="auth-link" id="auth-show-login" type="button">Sign in</button>
+        </div>
+      </div>
+
+      <!-- Forgot password form -->
+      <div id="auth-forgot" class="auth-form" hidden>
+        <label>Email
+          <input id="auth-forgot-email" type="email" autocomplete="email" placeholder="you@example.com" />
+        </label>
+        <button class="auth-btn" id="auth-forgot-btn" type="button">Send reset link</button>
+        <div class="auth-footer">
+          <button class="auth-link" id="auth-back-login" type="button">Back to sign in</button>
+        </div>
+      </div>
+
+      <!-- Password reset form (shown after recovery callback) -->
+      <div id="auth-reset" class="auth-form" hidden>
+        <label>New password
+          <input id="auth-reset-password" type="password" autocomplete="new-password" placeholder="Choose a new password" />
+        </label>
+        <button class="auth-btn" id="auth-reset-btn" type="button">Set new password</button>
+      </div>
+    </div>
   </div>
 
   <div id="welcome-modal" class="modal">
@@ -817,8 +999,8 @@
     Right-drag / <kbd>Space</kbd> drag pan · <kbd>P</kbd> perspective
   </div>
 
+  <script src="auth.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js"></script>
   <script>
   /* =====================================================================
      Tiny World Builder — single-file Three.js scene + tile editor
@@ -5662,22 +5844,11 @@
     });
   }
 
-  // -------- Auth0 + profile + saves --------
-  (function initAuth() {
-    const AUTH0_DOMAIN = window.__AUTH0_DOMAIN || '';
-    const AUTH0_CLIENT_ID = window.__AUTH0_CLIENT_ID || '';
-    const AUTH0_AUDIENCE = window.__AUTH0_AUDIENCE || '';
-    if (!AUTH0_DOMAIN || !AUTH0_CLIENT_ID) return;
-
-    let auth0Client = null;
-    let accessToken = null;
-    let userProfile = null;
-    let userBuilds = [];
-
-    const authBtn = document.getElementById('auth-btn');
+  // -------- profile + saves --------
+  function initAccountModal() {
+    const Auth = window.NetlifyAuth;
     const modal = document.getElementById('account-modal');
     const closeBtn = document.getElementById('account-close');
-    const logoutBtn = document.getElementById('auth-logout');
     const tabProfile = document.getElementById('tab-profile');
     const tabSaves = document.getElementById('tab-saves');
     const panelProfile = document.getElementById('panel-profile');
@@ -5692,6 +5863,10 @@
     const saveName = document.getElementById('save-name');
     const savesList = document.getElementById('saves-list');
     const savesEmpty = document.getElementById('saves-empty');
+    const accountBtn = document.getElementById('account-btn');
+
+    let userProfile = null;
+    let userBuilds = [];
 
     function showTab(tab) {
       const isProfile = tab === 'profile';
@@ -5709,30 +5884,21 @@
     closeBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
+    async function getAccessToken() {
+      const user = await Auth.getUser();
+      return user && user.token ? user.token.access_token : null;
+    }
+
     async function apiCall(path, method, body) {
+      const token = await getAccessToken();
+      if (!token) return null;
       const opts = {
         method,
-        headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
       };
       if (body) opts.body = JSON.stringify(body);
       const r = await fetch(path, opts);
       return r.json();
-    }
-
-    function updateAuthBtn() {
-      if (userProfile) {
-        authBtn.innerHTML = '';
-        if (userProfile.image) {
-          const img = document.createElement('img');
-          img.src = userProfile.image;
-          img.className = 'auth-avatar';
-          img.alt = '';
-          authBtn.appendChild(img);
-        }
-        authBtn.appendChild(document.createTextNode(userProfile.username));
-      } else {
-        authBtn.textContent = 'My Account';
-      }
     }
 
     async function loadProfile() {
@@ -5746,7 +5912,6 @@
           profileAvatarImg.src = p.image;
           profileAvatarImg.hidden = false;
         }
-        updateAuthBtn();
       }
     }
 
@@ -5767,7 +5932,6 @@
       });
       if (result && (result.id || result.username)) {
         userProfile = result;
-        updateAuthBtn();
         profileStatus.textContent = 'Saved!';
         setTimeout(() => profileStatus.textContent = '', 2000);
       } else {
@@ -5835,56 +5999,255 @@
       loadBuilds();
     });
 
-    logoutBtn.addEventListener('click', async () => {
-      closeModal();
-      await auth0Client.logout({ logoutParams: { returnTo: window.location.origin } });
+    accountBtn.addEventListener('click', () => {
+      openModal();
+      loadProfile();
     });
+  }
 
-    async function initAuth0() {
-      auth0Client = await window.auth0.createAuth0Client({
-        domain: AUTH0_DOMAIN,
-        clientId: AUTH0_CLIENT_ID,
-        authorizationParams: {
-          redirect_uri: window.location.origin,
-          audience: AUTH0_AUDIENCE,
-        },
-        cacheLocation: 'localstorage',
-      });
-
-      if (window.location.search.includes('code=') && window.location.search.includes('state=')) {
-        await auth0Client.handleRedirectCallback();
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-
-      const isAuthenticated = await auth0Client.isAuthenticated();
-      if (isAuthenticated) {
-        accessToken = await auth0Client.getTokenSilently();
-        authBtn.textContent = 'My Account';
-        authBtn.addEventListener('click', () => {
-          openModal();
-          loadProfile();
-        });
-        loadProfile();
-      } else {
-        authBtn.textContent = 'Sign in';
-        authBtn.addEventListener('click', () => {
-          auth0Client.loginWithRedirect();
-        });
-      }
+  // -------- auth --------
+  function initAuth() {
+    const Auth = window.NetlifyAuth;
+    if (!Auth) {
+      bootApp();
+      return;
     }
 
-    initAuth0().catch(err => console.error('Auth0 init error:', err));
-  })();
+    const modal = document.getElementById('auth-modal');
+    const errorEl = document.getElementById('auth-error');
+    const successEl = document.getElementById('auth-success');
+    const loginForm = document.getElementById('auth-login');
+    const signupForm = document.getElementById('auth-signup');
+    const forgotForm = document.getElementById('auth-forgot');
+    const resetForm = document.getElementById('auth-reset');
+    const logoutBtn = document.getElementById('auth-logout-btn');
+    const accountBtn = document.getElementById('account-btn');
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.hidden = false;
+      successEl.hidden = true;
+    }
+
+    function showSuccess(msg) {
+      successEl.textContent = msg;
+      successEl.hidden = false;
+      errorEl.hidden = true;
+    }
+
+    function clearMessages() {
+      errorEl.hidden = true;
+      successEl.hidden = true;
+    }
+
+    function showForm(name) {
+      clearMessages();
+      loginForm.hidden = name !== 'login';
+      signupForm.hidden = name !== 'signup';
+      forgotForm.hidden = name !== 'forgot';
+      resetForm.hidden = name !== 'reset';
+      const subtitle = modal.querySelector('.auth-subtitle');
+      if (name === 'login') subtitle.textContent = 'Sign in to start building';
+      else if (name === 'signup') subtitle.textContent = 'Create your account';
+      else if (name === 'forgot') subtitle.textContent = 'Reset your password';
+      else if (name === 'reset') subtitle.textContent = 'Choose a new password';
+    }
+
+    function setLoading(btn, loading) {
+      btn.disabled = loading;
+      btn.textContent = loading ? 'Please wait…' : btn.dataset.label;
+    }
+
+    document.getElementById('auth-login-btn').dataset.label = 'Sign in';
+    document.getElementById('auth-signup-btn').dataset.label = 'Create account';
+    document.getElementById('auth-forgot-btn').dataset.label = 'Send reset link';
+    document.getElementById('auth-reset-btn').dataset.label = 'Set new password';
+
+    document.getElementById('auth-show-signup').addEventListener('click', () => showForm('signup'));
+    document.getElementById('auth-show-forgot').addEventListener('click', () => showForm('forgot'));
+    document.getElementById('auth-show-login').addEventListener('click', () => showForm('login'));
+    document.getElementById('auth-back-login').addEventListener('click', () => showForm('login'));
+
+    // Google OAuth
+    document.getElementById('auth-google-login').addEventListener('click', () => Auth.oauthLogin('google'));
+    document.getElementById('auth-google-signup').addEventListener('click', () => Auth.oauthLogin('google'));
+
+    // Show Google buttons if the provider is enabled
+    Auth.getSettings().then(settings => {
+      if (settings && settings.providers && settings.providers.google) {
+        document.getElementById('auth-oauth-login').hidden = false;
+        document.getElementById('auth-oauth-signup').hidden = false;
+      }
+    }).catch(() => {});
+
+    function enterApp() {
+      modal.hidden = true;
+      logoutBtn.hidden = false;
+      accountBtn.hidden = false;
+      bootApp();
+      initAccountModal();
+    }
+
+    // Login
+    document.getElementById('auth-login-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('auth-login-btn');
+      const email = document.getElementById('auth-email').value.trim();
+      const password = document.getElementById('auth-password').value;
+      if (!email || !password) { showError('Please enter your email and password.'); return; }
+      setLoading(btn, true);
+      try {
+        await Auth.login(email, password);
+        enterApp();
+      } catch (err) {
+        if (err instanceof Auth.AuthError) {
+          showError(err.status === 401 ? 'Invalid email or password.' : err.message);
+        } else if (err instanceof Auth.MissingIdentityError) {
+          showError('Identity is not enabled on this site.');
+        } else {
+          showError('Something went wrong. Please try again.');
+        }
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    // Signup
+    document.getElementById('auth-signup-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('auth-signup-btn');
+      const name = document.getElementById('auth-signup-name').value.trim();
+      const email = document.getElementById('auth-signup-email').value.trim();
+      const password = document.getElementById('auth-signup-password').value;
+      if (!email || !password) { showError('Please enter an email and password.'); return; }
+      setLoading(btn, true);
+      try {
+        const user = await Auth.signup(email, password, { full_name: name });
+        if (user.emailVerified) {
+          enterApp();
+        } else {
+          showSuccess('Check your email to confirm your account, then sign in.');
+          showForm('login');
+        }
+      } catch (err) {
+        if (err instanceof Auth.AuthError) {
+          showError(err.status === 403 ? 'Signups are not allowed.' : err.message);
+        } else if (err instanceof Auth.MissingIdentityError) {
+          showError('Identity is not enabled on this site.');
+        } else {
+          showError('Something went wrong. Please try again.');
+        }
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    // Forgot password
+    document.getElementById('auth-forgot-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('auth-forgot-btn');
+      const email = document.getElementById('auth-forgot-email').value.trim();
+      if (!email) { showError('Please enter your email address.'); return; }
+      setLoading(btn, true);
+      try {
+        await Auth.requestPasswordRecovery(email);
+        showSuccess('Check your email for a password reset link.');
+      } catch (err) {
+        if (err instanceof Auth.AuthError) {
+          showError(err.message);
+        } else {
+          showError('Something went wrong. Please try again.');
+        }
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    // Password reset
+    document.getElementById('auth-reset-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('auth-reset-btn');
+      const password = document.getElementById('auth-reset-password').value;
+      if (!password) { showError('Please choose a new password.'); return; }
+      setLoading(btn, true);
+      try {
+        await Auth.updateUser({ password });
+        showSuccess('Password updated. You are now signed in.');
+        setTimeout(enterApp, 1200);
+      } catch (err) {
+        if (err instanceof Auth.AuthError) {
+          showError(err.message);
+        } else {
+          showError('Something went wrong. Please try again.');
+        }
+      } finally {
+        setLoading(btn, false);
+      }
+    });
+
+    // Logout
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await Auth.logout();
+      } catch (_) {}
+      logoutBtn.hidden = true;
+      accountBtn.hidden = true;
+      modal.hidden = false;
+      showForm('login');
+    });
+
+    // Handle auth callbacks (OAuth, recovery, confirmation, invite)
+    async function processCallback() {
+      try {
+        const result = await Auth.handleAuthCallback();
+        if (!result) return false;
+        switch (result.type) {
+          case 'oauth':
+          case 'confirmation':
+            enterApp();
+            return true;
+          case 'recovery':
+            showForm('reset');
+            return true;
+          case 'invite':
+            showSuccess('Set a password to accept your invite.');
+            showForm('reset');
+            return true;
+          case 'email_change':
+            showSuccess('Email address updated.');
+            return true;
+        }
+      } catch (err) {
+        if (err instanceof Auth.AuthError) showError(err.message);
+      }
+      return false;
+    }
+
+    // Check existing session or callback
+    (async () => {
+      const handled = await processCallback();
+      if (handled) return;
+      const user = await Auth.getUser();
+      if (user) {
+        enterApp();
+      } else {
+        modal.hidden = false;
+      }
+    })();
+  }
 
   // -------- boot --------
-  initWelcomeDialog();
-  buildToolbar();
-  selectTool(DEFAULT_TOOL);
-  if (!loadState()) loadInitialScene();
-  resetCameraDefaults();
-  ensureGhostBoardsAroundTarget();
-  onResize();
-  requestAnimationFrame(animate);
+  let appBooted = false;
+  function bootApp() {
+    if (appBooted) return;
+    appBooted = true;
+    initWelcomeDialog();
+    buildToolbar();
+    selectTool(DEFAULT_TOOL);
+    if (!loadState()) loadInitialScene();
+    resetCameraDefaults();
+    ensureGhostBoardsAroundTarget();
+    onResize();
+    requestAnimationFrame(animate);
+  }
+
+  initAuth();
   </script>
 </body>
 </html>

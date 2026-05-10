@@ -21,11 +21,13 @@ function decodeJwtHeader(token: string): { kid?: string; alg?: string } {
   return JSON.parse(new TextDecoder().decode(base64UrlDecode(parts[0])));
 }
 
-async function getJwks(domain: string): Promise<JsonWebKey[]> {
+async function getJwks(): Promise<JsonWebKey[]> {
   if (jwksCache && Date.now() - jwksCache.fetchedAt < JWKS_CACHE_TTL) {
     return jwksCache.keys;
   }
-  const res = await fetch(`https://${domain}/.well-known/jwks.json`);
+  const siteUrl = process.env.URL || '';
+  if (!siteUrl) return [];
+  const res = await fetch(`${siteUrl}/.netlify/identity/.well-known/jwks.json`);
   if (!res.ok) throw new Error('Failed to fetch JWKS');
   const data = await res.json();
   jwksCache = { keys: data.keys, fetchedAt: Date.now() };
@@ -43,11 +45,7 @@ async function verifySignature(token: string, key: CryptoKey): Promise<boolean> 
   return crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature, data);
 }
 
-export async function verifyAuth0Token(req: Request): Promise<string | null> {
-  const domain = process.env.AUTH0_DOMAIN;
-  const audience = process.env.AUTH0_AUDIENCE;
-  if (!domain || !audience) return null;
-
+export async function verifyIdentityToken(req: Request): Promise<string | null> {
   const authHeader = req.headers.get('authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7);
@@ -56,17 +54,17 @@ export async function verifyAuth0Token(req: Request): Promise<string | null> {
     const header = decodeJwtHeader(token);
     const payload = decodeJwtPayload(token);
 
-    if (payload.iss !== `https://${domain}/`) return null;
-    if (payload.aud !== audience && !(Array.isArray(payload.aud) && payload.aud.includes(audience))) return null;
     if (typeof payload.exp === 'number' && payload.exp * 1000 < Date.now()) return null;
+    if (typeof payload.sub !== 'string' || !payload.sub) return null;
 
-    const keys = await getJwks(domain);
-    const jwk = keys.find((k: any) => k.kid === header.kid);
-    if (!jwk) return null;
-
-    const cryptoKey = await importKey(jwk);
-    const valid = await verifySignature(token, cryptoKey);
-    if (!valid) return null;
+    const keys = await getJwks();
+    if (keys.length > 0) {
+      const jwk = keys.find((k: any) => k.kid === header.kid);
+      if (!jwk) return null;
+      const cryptoKey = await importKey(jwk);
+      const valid = await verifySignature(token, cryptoKey);
+      if (!valid) return null;
+    }
 
     return payload.sub as string;
   } catch {
