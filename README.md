@@ -1,8 +1,6 @@
 # Tiny World Builder
 
-A self-contained 3D voxel world editor in a single HTML file. No build, no
-dependencies installed locally — just open `tiny-world-builder.html` in a
-browser. Three.js r128 is pulled from cdnjs at runtime.
+<img width="1200" height="973" alt="HIADXbhWsAASKB-" src="https://github.com/user-attachments/assets/ab3db0e8-b86a-4102-8215-4a4603978c8b" />
 
 ## Run
 
