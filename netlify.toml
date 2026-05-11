@@ -2,6 +2,7 @@
   base = "."
   command = "./publish.sh"
   publish = "dist"
+  edge_functions = "netlify/edge-functions"
 
 [build.environment]
   NODE_VERSION = "22"

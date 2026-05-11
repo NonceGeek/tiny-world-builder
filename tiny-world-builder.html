@@ -153,6 +153,10 @@
     justify-content: center;
     color: var(--ink);
   }
+  .btn.icon.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
   .btn.icon svg {
     width: 18px;
     height: 18px;
@@ -803,12 +807,53 @@
   .profile-section { margin-bottom: 16px; }
   .profile-section label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 500; }
   .profile-section input[type="text"],
+  .profile-section input[type="url"],
   .profile-section textarea {
     width: 100%; padding: 8px 10px;
     border: 1px solid var(--line); border-radius: 8px;
     font-family: inherit; font-size: 13px;
     background: var(--panel); color: var(--ink);
   }
+  .api-keys-list {
+    list-style: none; padding: 0; margin: 8px 0 0;
+    max-height: 180px; overflow-y: auto;
+  }
+  .api-keys-list li {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    background: var(--panel);
+    font-size: 12.5px;
+  }
+  .api-keys-list .api-key-label { font-weight: 500; }
+  .api-keys-list .api-key-meta { font-size: 11px; color: var(--muted); }
+  .api-keys-list .api-key-actions { display: flex; gap: 6px; }
+  .api-keys-list .api-key-actions button {
+    background: none; border: none; cursor: pointer;
+    font-size: 12px; padding: 4px 8px; border-radius: 4px;
+    color: var(--muted);
+  }
+  .api-keys-list .api-key-actions button:hover { color: var(--ink); background: var(--line); }
+  .api-key-reveal {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: #fdf7e2;
+    border: 1px solid #e3cb86;
+    border-radius: 8px;
+    font-family: 'Inter', monospace;
+    font-size: 12px;
+    color: #5a4516;
+    word-break: break-all;
+    line-height: 1.4;
+  }
+  .api-key-reveal[hidden] { display: none; }
+  .api-key-reveal strong { display: block; font-family: 'Inter', sans-serif; font-size: 12px; margin-bottom: 4px; color: #7a5d18; }
+  #api-status { font-size: 12px; color: var(--muted); flex: 1; }
+  #api-status.error { color: #b84838; }
+  #api-status.success { color: #3d7a2a; }
   .profile-section textarea { resize: vertical; min-height: 60px; }
   .profile-hint { margin-top: 4px; font-size: 11px; color: var(--muted); }
   .profile-photo-row { display: flex; align-items: center; gap: 12px; }
@@ -913,6 +958,7 @@
       <div class="tab-bar">
         <button type="button" id="tab-profile" class="active">Profile</button>
         <button type="button" id="tab-saves">My Builds</button>
+        <button type="button" id="tab-api">Developer</button>
       </div>
       <div id="panel-profile">
         <div class="profile-section">
@@ -957,6 +1003,37 @@
         </div>
         <ul class="saves-list" id="saves-list"></ul>
         <div class="save-empty" id="saves-empty" hidden>No saved builds yet. Build a world and save it above.</div>
+      </div>
+      <div id="panel-api" hidden>
+        <div class="profile-section">
+          <label>API keys
+            <div class="profile-hint">Bearer tokens for external integrations. Treat them like passwords — anyone with one can drive your world.</div>
+          </label>
+          <ul class="api-keys-list" id="api-keys-list"></ul>
+          <div class="modal-foot" style="margin-top:8px;">
+            <label style="flex:1;">
+              <input type="text" id="api-key-label" placeholder="Label (e.g. zapier)" style="width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;" />
+            </label>
+            <button class="btn" id="api-key-generate" type="button">Generate key</button>
+          </div>
+          <div class="api-key-reveal" id="api-key-reveal" hidden></div>
+        </div>
+        <div class="profile-section">
+          <label>Outbound webhook URL
+            <input type="url" id="api-webhook-url" autocomplete="off" placeholder="https://example.com/hook" />
+            <div class="profile-hint">JSON-POSTed on place / erase / clear / save events. Sent with <code>Authorization: Bearer &lt;key&gt;</code>.</div>
+          </label>
+        </div>
+        <div class="profile-section">
+          <label>Inbound SSE relay URL
+            <input type="url" id="api-sse-url" autocomplete="off" placeholder="https://example.com/sse" />
+            <div class="profile-hint">EventSource the browser will subscribe to. Push commands here to drive the world from outside.</div>
+          </label>
+        </div>
+        <div class="modal-foot">
+          <span id="api-status"></span>
+          <button class="btn" id="api-save" type="button">Save</button>
+        </div>
       </div>
     </form>
   </div>
@@ -1136,6 +1213,14 @@
         <input id="render-visible-size" type="range" min="8" max="20" step="1" />
         <output id="render-visible-size-value"></output>
       </div>
+      <label>Home board size
+        <select id="render-home-grid">
+          <option value="8">8 × 8</option>
+          <option value="12">12 × 12</option>
+          <option value="16">16 × 16</option>
+          <option value="20">20 × 20</option>
+        </select>
+      </label>
       <div class="range-row">
         <span>Lighting</span>
         <input id="render-lighting" type="range" min="50" max="145" step="1" />
@@ -1188,6 +1273,11 @@
         <output id="render-brightness-value"></output>
       </div>
       <div class="range-row">
+        <span>Gamma</span>
+        <input id="render-gamma" type="range" min="60" max="180" step="1" />
+        <output id="render-gamma-value"></output>
+      </div>
+      <div class="range-row">
         <span>Saturation</span>
         <input id="render-saturation" type="range" min="80" max="130" step="1" />
         <output id="render-saturation-value"></output>
@@ -1230,7 +1320,20 @@
      ===================================================================== */
 
   // -------- constants --------
-  const GRID = 8;
+  // GRID is the home board edge length. Mutable: the user can resize it
+  // to 8 / 12 / 16 / 20 from Render Settings. Tiles outside the current
+  // home grid are still tracked in world[][] (used by ghost boards and
+  // export) but rendered grayscale; growing GRID brings those tiles into
+  // the home area and rebuilds them in full colour.
+  const HOME_GRID_DEFAULT = 8;
+  const HOME_GRID_MIN = 8;
+  const HOME_GRID_MAX = 20;
+  const HOME_GRID_OPTIONS = [8, 12, 16, 20];
+  let GRID = HOME_GRID_DEFAULT;
+  try {
+    const stored = parseInt(localStorage.getItem('tinyworld:home-grid') || '', 10);
+    if (HOME_GRID_OPTIONS.includes(stored)) GRID = stored;
+  } catch (_) {}
   const TILE = 1;
   const TOP_H = 0.18;     // grass slab thickness
   const DIRT_H = 0.55;    // dirt block height (visible side)
@@ -1240,6 +1343,7 @@
     saturation: 'tinyworld:render:saturation',
     contrast: 'tinyworld:render:contrast',
     brightness: 'tinyworld:render:brightness',
+    gamma: 'tinyworld:render:gamma',
     vignette: 'tinyworld:render:vignette',
     warmth: 'tinyworld:render:warmth',
     shadow: 'tinyworld:render:shadow',
@@ -1256,13 +1360,14 @@
     objectOpacity: 'tinyworld:render:objectOpacity',
     version: 'tinyworld:render:version',
   };
-  const RENDER_SETTINGS_VERSION = '9';
+  const RENDER_SETTINGS_VERSION = '10';
   const RENDER_DEFAULTS = {
     post: '0',
     resolution: '1',
     saturation: '1',
     contrast: '1',
     brightness: '1',
+    gamma: '1',
     vignette: '0.04',
     warmth: '0',
     shadow: 'balanced',
@@ -1362,6 +1467,7 @@
       saturation: { value: storedNumber(RENDER_LS.saturation, 1.0, 0.8, 1.3) },
       contrast: { value: storedNumber(RENDER_LS.contrast, 1.0, 0.85, 1.25) },
       brightness: { value: storedNumber(RENDER_LS.brightness, 1.0, 0.75, 1.3) },
+      gamma: { value: storedNumber(RENDER_LS.gamma, 1.0, 0.6, 1.8) },
       warmth: { value: storedNumber(RENDER_LS.warmth, 0, -0.08, 0.08) },
     },
     vertexShader: [
@@ -1378,6 +1484,7 @@
       'uniform float saturation;',
       'uniform float contrast;',
       'uniform float brightness;',
+      'uniform float gamma;',
       'uniform float warmth;',
       'varying vec2 vUv;',
       'void main() {',
@@ -1393,6 +1500,7 @@
       '  col = (col - 0.5) * contrast + 0.5;',
       '  col *= brightness;',
       '  col += vec3(warmth, warmth * 0.55, -warmth * 0.25);',
+      '  col = pow(max(col, vec3(0.0)), vec3(1.0 / max(gamma, 0.001)));',
       '  float d = distance(vUv, vec2(0.5));',
       '  col *= 1.0 - smoothstep(0.44, 0.84, d) * vignette;',
       '  gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);',
@@ -3660,9 +3768,12 @@
   const world = [];
   const cellMeshes = {}; // 'x,z' -> { tile, object }
 
-  for (let x = 0; x < GRID; x++) {
+  // Pre-allocate world[][] up to HOME_GRID_MAX so adjacency lookups for
+  // tiles at the edge of any future grid size find a real neighbour cell
+  // (read as 'no kind, grass') rather than undefined.
+  for (let x = 0; x < HOME_GRID_MAX; x++) {
     world[x] = [];
-    for (let z = 0; z < GRID; z++) world[x][z] = { terrain: 'grass', terrainFloors: 1, kind: null, floors: 1, buildingType: null, fenceSide: null, extras: [] };
+    for (let z = 0; z < HOME_GRID_MAX; z++) world[x][z] = { terrain: 'grass', terrainFloors: 1, kind: null, floors: 1, buildingType: null, fenceSide: null, extras: [] };
   }
 
   const MAX_FLOORS = 8;
@@ -5097,6 +5208,9 @@
       });
     }
     saveState();
+    if (typeof fireWebhook === 'function') {
+      fireWebhook('cell.set', { x, z, cell: world[x][z] });
+    }
   }
 
   // Cinderella rule: only ONE pumpkin tile across the home grid is the
@@ -6195,7 +6309,7 @@
         }
       }
     }
-    const data = { v: STORAGE_VERSION, cells, cameraMode, toolId: selectedTool && selectedTool.id };
+    const data = { v: STORAGE_VERSION, gridSize: GRID, cells, cameraMode, toolId: selectedTool && selectedTool.id };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const ts   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -6226,26 +6340,103 @@
   });
 
   function togglePerspective() {
+    if (postProcessingEnabled) {
+      // Post-processing pipeline is tuned for the isometric framing —
+      // perspective modes break the shader, so the toggle is locked.
+      setCameraMode('ortho');
+      return;
+    }
     const next = cameraMode === 'ortho' ? 'soft' : (cameraMode === 'soft' ? 'perspective' : 'ortho');
     setCameraMode(next);
   }
 
   function setCameraMode(mode) {
-    cameraMode = ['ortho', 'soft', 'perspective'].includes(mode) ? mode : 'ortho';
+    const requested = ['ortho', 'soft', 'perspective'].includes(mode) ? mode : 'ortho';
+    cameraMode = postProcessingEnabled ? 'ortho' : requested;
     camera = cameraMode === 'ortho' ? orthoCam : (cameraMode === 'soft' ? softCam : persCam);
     perspBtn.classList.toggle('on', cameraMode !== 'ortho');
+    perspBtn.classList.toggle('disabled', postProcessingEnabled);
     perspBtn.setAttribute('data-tooltip',
+      postProcessingEnabled ? 'Isometric (locked — disable post-processing to change)' :
       cameraMode === 'ortho' ? 'Isometric' :
       cameraMode === 'soft'  ? 'Soft perspective' : 'Perspective');
     onResize();
   }
 
   function resetCameraDefaults() {
-    viewSize = DEFAULT_VIEW_SIZE;
+    // Scale the default view to the current home board so the whole
+    // grid sits inside the frame regardless of size (8 / 12 / 16 / 20).
+    viewSize = DEFAULT_VIEW_SIZE * (GRID / HOME_GRID_DEFAULT);
     azimuth = DEFAULT_AZIMUTH;
     polar = DEFAULT_POLAR;
     target.copy(DEFAULT_TARGET);
     setCameraMode(DEFAULT_CAMERA_MODE);
+  }
+
+  // Resize the home board between the allowed presets (8 / 12 / 16 / 20).
+  // World data outside the previous board is preserved in world[][] —
+  // growing the grid brings those tiles into the home area (so the
+  // existing 'outside home' grayscale is no longer applied to them).
+  // Shrinking is supported but the now-outside cells aren't re-rendered
+  // in their outside-home form; expansion is the primary path.
+  function setHomeGridSize(n, opts) {
+    const skipRebuild = !!(opts && opts.skipRebuild);
+    if (!HOME_GRID_OPTIONS.includes(n) || n === GRID) return;
+    GRID = n;
+    try { localStorage.setItem('tinyworld:home-grid', String(GRID)); } catch (_) {}
+
+    // Drop every ghost board — their world positions are anchored to GRID.
+    for (const [key, board] of ghostBoards) {
+      worldGroup.remove(board);
+      disposeGroup(board);
+    }
+    ghostBoards.clear();
+    ghostBoardCells.clear();
+
+    // Dispose every existing cell mesh; cellPos depends on GRID so all
+    // tiles need to be re-positioned. setCell will rebuild from
+    // world[x][z] which we never throw away.
+    for (const key of Object.keys(cellMeshes)) {
+      const entry = cellMeshes[key];
+      if (entry.tile)   { worldGroup.remove(entry.tile);   disposeGroup(entry.tile); }
+      if (entry.object) { worldGroup.remove(entry.object); disposeGroup(entry.object); }
+      if (entry.extras) for (const m of entry.extras) { worldGroup.remove(m); disposeGroup(m); }
+      delete cellMeshes[key];
+    }
+
+    if (skipRebuild) return;
+
+    // Rebuild every home cell from the surviving world data.
+    suppressSave = true;
+    for (let x = 0; x < GRID; x++) {
+      for (let z = 0; z < GRID; z++) {
+        const c = world[x][z];
+        setCell(x, z, {
+          terrain: c.terrain || 'grass',
+          terrainFloors: c.terrainFloors || 1,
+          kind: c.kind || null,
+          floors: c.floors || 1,
+          buildingType: c.buildingType || null,
+          fenceSide: c.fenceSide || null,
+          rotationY: c.rotationY || 0,
+          offsetX: c.offsetX || 0,
+          offsetZ: c.offsetZ || 0,
+          animate: false,
+          forceTile: true,
+        });
+        // Re-render extras (tufts/fences) without animating drops.
+        if (Array.isArray(c.extras) && c.extras.length && typeof renderCellExtras === 'function') {
+          renderCellExtras(x, z);
+        }
+      }
+    }
+    suppressSave = false;
+
+    // Re-create ghost boards around the freshly-sized home.
+    if (typeof ensureGhostBoardsAroundTarget === 'function') ensureGhostBoardsAroundTarget();
+    // Re-frame the camera so the new board centres correctly.
+    resetCameraDefaults();
+    saveState();
   }
 
   // Smoothly tween the camera target/zoom back to the home 8x8 grid
@@ -6280,6 +6471,7 @@
   function doReset() {
     loadInitialScene();
     resetCameraDefaults();
+    if (typeof fireWebhook === 'function') fireWebhook('world.reset', {});
   }
 
   function confirmReset() {
@@ -6319,6 +6511,7 @@
           tileDelay: (x + z) * TILE_STAGGER,
           forceTile: true,
         });
+    if (typeof fireWebhook === 'function') fireWebhook('world.clear', {});
   }
 
   // -------- render settings --------
@@ -6333,7 +6526,9 @@
     const resolutionEl = document.getElementById('render-resolution');
     const distanceEl = document.getElementById('render-distance');
     const visibleSizeEl = document.getElementById('render-visible-size');
+    const homeGridEl = document.getElementById('render-home-grid');
     const brightnessEl = document.getElementById('render-brightness');
+    const gammaEl = document.getElementById('render-gamma');
     const lightingEl = document.getElementById('render-lighting');
     const saturationEl = document.getElementById('render-saturation');
     const contrastEl = document.getElementById('render-contrast');
@@ -6351,6 +6546,7 @@
     const distanceValue = document.getElementById('render-distance-value');
     const visibleSizeValue = document.getElementById('render-visible-size-value');
     const brightnessValue = document.getElementById('render-brightness-value');
+    const gammaValue = document.getElementById('render-gamma-value');
     const lightingValue = document.getElementById('render-lighting-value');
     const saturationValue = document.getElementById('render-saturation-value');
     const contrastValue = document.getElementById('render-contrast-value');
@@ -6371,7 +6567,9 @@
       resolutionEl.value = String(Math.round(renderResolutionScale * 100));
       distanceEl.value = String(renderVisibleDistance);
       visibleSizeEl.value = String(renderVisibleSize);
+      if (homeGridEl) homeGridEl.value = String(GRID);
       brightnessEl.value = String(Math.round(postMaterial.uniforms.brightness.value * 100));
+      gammaEl.value = String(Math.round(postMaterial.uniforms.gamma.value * 100));
       lightingEl.value = String(Math.round(renderLighting * 100));
       saturationEl.value = String(Math.round(postMaterial.uniforms.saturation.value * 100));
       contrastEl.value = String(Math.round(postMaterial.uniforms.contrast.value * 100));
@@ -6389,6 +6587,7 @@
       distanceValue.textContent = distanceEl.value;
       visibleSizeValue.textContent = visibleSizeEl.value + 'x' + visibleSizeEl.value;
       brightnessValue.textContent = brightnessEl.value + '%';
+      gammaValue.textContent = gammaEl.value + '%';
       lightingValue.textContent = lightingEl.value + '%';
       saturationValue.textContent = saturationEl.value + '%';
       contrastValue.textContent = contrastEl.value + '%';
@@ -6411,6 +6610,7 @@
       localStorage.setItem(RENDER_LS.visibleDistance, String(renderVisibleDistance));
       localStorage.setItem(RENDER_LS.visibleSize, String(renderVisibleSize));
       localStorage.setItem(RENDER_LS.brightness, postMaterial.uniforms.brightness.value.toFixed(2));
+      localStorage.setItem(RENDER_LS.gamma, postMaterial.uniforms.gamma.value.toFixed(2));
       localStorage.setItem(RENDER_LS.lighting, renderLighting.toFixed(2));
       localStorage.setItem(RENDER_LS.saturation, postMaterial.uniforms.saturation.value.toFixed(2));
       localStorage.setItem(RENDER_LS.contrast, postMaterial.uniforms.contrast.value.toFixed(2));
@@ -6428,12 +6628,18 @@
     }
 
     function applyFromControls() {
+      const wasPost = postProcessingEnabled;
       postProcessingEnabled = postEl.checked;
+      // Force isometric whenever post-processing turns on — the shader
+      // pipeline depends on the ortho framing.
+      if (postProcessingEnabled && cameraMode !== 'ortho') setCameraMode('ortho');
+      else if (postProcessingEnabled !== wasPost) setCameraMode(cameraMode);
       setShadowQuality(shadowEl.value);
       setRenderResolutionScale(parseInt(resolutionEl.value, 10) / 100);
       setRenderVisibleDistance(parseInt(distanceEl.value, 10));
       setRenderVisibleSize(parseInt(visibleSizeEl.value, 10));
       postMaterial.uniforms.brightness.value = parseInt(brightnessEl.value, 10) / 100;
+      postMaterial.uniforms.gamma.value = parseInt(gammaEl.value, 10) / 100;
       renderLighting = parseInt(lightingEl.value, 10) / 100;
       applyLightingSettings();
       postMaterial.uniforms.saturation.value = parseInt(saturationEl.value, 10) / 100;
@@ -6467,9 +6673,17 @@
     });
     closeBtn.addEventListener('click', () => { modal.hidden = true; });
     modal.addEventListener('click', e => { if (e.target === modal) modal.hidden = true; });
-    for (const el of [postEl, shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, saturationEl, contrastEl, vignetteEl, warmthEl, cloudsEl, cloudSpeedEl, cloudHeightEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl]) {
+    for (const el of [postEl, shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, gammaEl, lightingEl, saturationEl, contrastEl, vignetteEl, warmthEl, cloudsEl, cloudSpeedEl, cloudHeightEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl]) {
       el.addEventListener('input', applyFromControls);
       el.addEventListener('change', applyFromControls);
+    }
+    // Home grid size — a separate listener because it triggers a full
+    // re-render rather than uniforms/material tweaks.
+    if (homeGridEl) {
+      homeGridEl.addEventListener('change', () => {
+        const n = parseInt(homeGridEl.value, 10);
+        setHomeGridSize(n);
+      });
     }
     resetBtn.addEventListener('click', () => {
       postProcessingEnabled = false;
@@ -6478,6 +6692,7 @@
       setRenderVisibleDistance(2);
       setRenderVisibleSize(16);
       postMaterial.uniforms.brightness.value = 1;
+      postMaterial.uniforms.gamma.value = 1;
       renderLighting = 1.34;
       applyLightingSettings();
       postMaterial.uniforms.saturation.value = 1;
@@ -7547,6 +7762,7 @@
         }
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           v: STORAGE_VERSION,
+          gridSize: GRID,
           cells,
           cameraMode,
           toolId: selectedTool && selectedTool.id,
@@ -7568,6 +7784,15 @@
     }
     if (data.v !== 1 && data.v !== 2 && data.v !== 3 && data.v !== 4) return false;
 
+    // Restore the saved home grid size before painting cells so the new
+    // tiles are framed correctly and ghost boards land in the right
+    // position. Falls back to the current GRID if the save predates the
+    // gridSize field.
+    if (HOME_GRID_OPTIONS.includes(data.gridSize) && data.gridSize !== GRID) {
+      // The cell loop below repaints every tile, so skip the rebuild
+      // step inside setHomeGridSize and just dispose old meshes.
+      setHomeGridSize(data.gridSize, { skipRebuild: true });
+    }
     suppressSave = true;
     const overrides = new Map();
     for (const entry of data.cells) {
@@ -7653,6 +7878,7 @@
     suppressSave = false;
 
     resetCameraDefaults();
+    if (typeof ensureGhostBoardsAroundTarget === 'function') ensureGhostBoardsAroundTarget();
     if (data.toolId) {
       const tool = TOOLS.find(t => t.id === data.toolId);
       if (tool) selectTool(tool);
@@ -7660,6 +7886,227 @@
     saveState();
     return true;
   }
+
+  // -------- API / webhooks / SSE bridge --------
+  // Stored in localStorage so anon and logged-in users both have a place
+  // to keep their config. Keys are generated client-side as v4-ish UUIDs.
+  const API_LS = 'tinyworld:api:v1';
+  const apiConfig = (function loadApiConfig() {
+    try {
+      const raw = localStorage.getItem(API_LS);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          keys: Array.isArray(parsed.keys) ? parsed.keys : [],
+          webhookUrl: parsed.webhookUrl || '',
+          sseUrl: parsed.sseUrl || '',
+        };
+      }
+    } catch (_) {}
+    return { keys: [], webhookUrl: '', sseUrl: '' };
+  })();
+
+  function persistApiConfig() {
+    try { localStorage.setItem(API_LS, JSON.stringify(apiConfig)); } catch (_) {}
+  }
+
+  function generateApiKey() {
+    // RFC4122 v4-ish UUID using crypto where available.
+    const bytes = new Uint8Array(16);
+    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(bytes);
+    else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+    return 'twb_' + hex.slice(0, 8) + '_' + hex.slice(8, 16) + hex.slice(16, 24) + hex.slice(24);
+  }
+
+  function pickPrimaryToken() {
+    return apiConfig.keys.length ? apiConfig.keys[0].secret : '';
+  }
+
+  // ---- outbound webhooks ----
+  // Coalesce bursts of mutations so a clear-board doesn't fire 64 webhooks.
+  let webhookQueue = [];
+  let webhookFlushTimer = null;
+  function fireWebhook(event, payload) {
+    if (!apiConfig.webhookUrl) return;
+    webhookQueue.push({ event, payload, at: Date.now() });
+    clearTimeout(webhookFlushTimer);
+    webhookFlushTimer = setTimeout(flushWebhookQueue, 120);
+  }
+  function flushWebhookQueue() {
+    if (!apiConfig.webhookUrl || !webhookQueue.length) return;
+    const events = webhookQueue.splice(0, webhookQueue.length);
+    const token = pickPrimaryToken();
+    fetch(apiConfig.webhookUrl, {
+      method: 'POST',
+      headers: Object.assign(
+        { 'Content-Type': 'application/json' },
+        token ? { Authorization: 'Bearer ' + token } : {}
+      ),
+      body: JSON.stringify({ source: 'tiny-world-builder', events }),
+      mode: 'cors',
+      keepalive: true,
+    }).catch(err => {
+      // Fail silently — webhook downtime shouldn't kill the editor.
+      // Log so devs can find it in the console.
+      console.warn('[webhook]', err);
+    });
+  }
+
+  // ---- inbound SSE relay ----
+  let sseSource = null;
+  function connectSseRelay() {
+    if (sseSource) { try { sseSource.close(); } catch (_) {} sseSource = null; }
+    const url = apiConfig.sseUrl;
+    if (!url) return;
+    // EventSource doesn't allow custom headers — append token as a query
+    // param if there's room for one. The relay should accept either.
+    const token = pickPrimaryToken();
+    let target = url;
+    if (token) {
+      const sep = url.indexOf('?') >= 0 ? '&' : '?';
+      target = url + sep + 'token=' + encodeURIComponent(token);
+    }
+    try {
+      sseSource = new EventSource(target);
+    } catch (err) {
+      console.warn('[sse] failed to connect', err);
+      return;
+    }
+    sseSource.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        applyRemoteCommand(msg);
+      } catch (err) {
+        console.warn('[sse] bad message', err, e.data);
+      }
+    };
+    sseSource.onerror = (err) => {
+      // Browser auto-reconnects; nothing to do.
+      console.warn('[sse] error', err);
+    };
+  }
+
+  function applyRemoteCommand(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    const op = msg.op || msg.event;
+    if (op === 'place' || op === 'set_cell') {
+      const { x, z, terrain, kind, floors, buildingType, fenceSide, rotationY, offsetX, offsetZ } = msg;
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      if (x < 0 || x >= GRID || z < 0 || z >= GRID) return;
+      setCell(x, z, {
+        terrain: terrain || (world[x][z] && world[x][z].terrain) || 'grass',
+        terrainFloors: world[x][z] ? terrainLevelForCell(world[x][z]) : 1,
+        kind: kind || null,
+        floors: floors || 1,
+        buildingType: buildingType || null,
+        fenceSide: fenceSide || null,
+        rotationY: rotationY || 0,
+        offsetX: offsetX || 0,
+        offsetZ: offsetZ || 0,
+      });
+    } else if (op === 'clear') {
+      doClear();
+    } else if (op === 'reset') {
+      doReset();
+    }
+  }
+
+  // ---- panel hooks ----
+  function renderApiPanel() {
+    const list = document.getElementById('api-keys-list');
+    const urlField = document.getElementById('api-webhook-url');
+    const sseField = document.getElementById('api-sse-url');
+    if (!list || !urlField || !sseField) return;
+    list.innerHTML = '';
+    if (!apiConfig.keys.length) {
+      const li = document.createElement('li');
+      li.className = 'save-empty';
+      li.style.justifyContent = 'center';
+      li.textContent = 'No keys yet. Generate one to get started.';
+      list.appendChild(li);
+    } else {
+      for (const k of apiConfig.keys) {
+        const li = document.createElement('li');
+        const left = document.createElement('div');
+        const lbl = document.createElement('div');
+        lbl.className = 'api-key-label';
+        lbl.textContent = k.label || 'Untitled key';
+        const meta = document.createElement('div');
+        meta.className = 'api-key-meta';
+        meta.textContent = 'twb_…' + k.secret.slice(-8) + ' · ' + new Date(k.created).toLocaleDateString();
+        left.appendChild(lbl);
+        left.appendChild(meta);
+        const actions = document.createElement('div');
+        actions.className = 'api-key-actions';
+        const del = document.createElement('button');
+        del.textContent = 'Revoke';
+        del.title = 'Delete this key';
+        del.addEventListener('click', () => {
+          apiConfig.keys = apiConfig.keys.filter(x => x.id !== k.id);
+          persistApiConfig();
+          renderApiPanel();
+        });
+        actions.appendChild(del);
+        li.appendChild(left);
+        li.appendChild(actions);
+        list.appendChild(li);
+      }
+    }
+    urlField.value = apiConfig.webhookUrl || '';
+    sseField.value = apiConfig.sseUrl || '';
+  }
+
+  function initApiPanel() {
+    const genBtn = document.getElementById('api-key-generate');
+    const labelInput = document.getElementById('api-key-label');
+    const reveal = document.getElementById('api-key-reveal');
+    const saveBtn = document.getElementById('api-save');
+    const urlField = document.getElementById('api-webhook-url');
+    const sseField = document.getElementById('api-sse-url');
+    const status = document.getElementById('api-status');
+    if (!genBtn || !saveBtn) return;
+    genBtn.addEventListener('click', () => {
+      const secret = generateApiKey();
+      const entry = {
+        id: Math.random().toString(36).slice(2, 10),
+        label: (labelInput.value || '').trim() || 'API key',
+        secret,
+        created: Date.now(),
+      };
+      apiConfig.keys.unshift(entry);
+      persistApiConfig();
+      labelInput.value = '';
+      reveal.hidden = false;
+      reveal.innerHTML = '';
+      const head = document.createElement('strong');
+      head.textContent = 'Copy this token now — it won’t be shown in full again.';
+      const body = document.createElement('div');
+      body.textContent = secret;
+      reveal.appendChild(head);
+      reveal.appendChild(body);
+      renderApiPanel();
+    });
+    saveBtn.addEventListener('click', () => {
+      apiConfig.webhookUrl = (urlField.value || '').trim();
+      apiConfig.sseUrl     = (sseField.value || '').trim();
+      persistApiConfig();
+      status.textContent = 'Saved.';
+      status.className = 'success';
+      setTimeout(() => { status.textContent = ''; status.className = ''; }, 1800);
+      connectSseRelay();
+    });
+  }
+
+  // Wire the API tab to its UI initialiser; expose renderApiPanel for the
+  // tab switcher.
+  window.__initApiPanel = initApiPanel;
+  window.__renderApiPanel = renderApiPanel;
+  // Connect the SSE relay (if configured) at startup so remote commands
+  // can drive even an unattended browser.
+  setTimeout(connectSseRelay, 0);
 
   function loadState() {
     let data;
@@ -7695,8 +8142,10 @@
     const closeBtn = document.getElementById('account-close');
     const tabProfile = document.getElementById('tab-profile');
     const tabSaves = document.getElementById('tab-saves');
+    const tabApi = document.getElementById('tab-api');
     const panelProfile = document.getElementById('panel-profile');
     const panelSaves = document.getElementById('panel-saves');
+    const panelApi = document.getElementById('panel-api');
     const profileUsername = document.getElementById('profile-username');
     const profileDisplayName = document.getElementById('profile-display-name');
     const profileAbout = document.getElementById('profile-about');
@@ -7716,15 +8165,20 @@
     let userBuilds = [];
 
     function showTab(tab) {
-      const isProfile = tab === 'profile';
-      tabProfile.classList.toggle('active', isProfile);
-      tabSaves.classList.toggle('active', !isProfile);
-      panelProfile.hidden = !isProfile;
-      panelSaves.hidden = isProfile;
-      if (!isProfile) loadBuilds();
+      tabProfile.classList.toggle('active', tab === 'profile');
+      tabSaves.classList.toggle('active',   tab === 'saves');
+      if (tabApi) tabApi.classList.toggle('active', tab === 'api');
+      panelProfile.hidden = tab !== 'profile';
+      panelSaves.hidden   = tab !== 'saves';
+      if (panelApi) panelApi.hidden = tab !== 'api';
+      if (tab === 'saves') loadBuilds();
+      if (tab === 'api' && typeof window.__renderApiPanel === 'function') window.__renderApiPanel();
     }
+    // Initialise the API panel handlers once per account-modal lifetime.
+    if (typeof window.__initApiPanel === 'function') window.__initApiPanel();
     tabProfile.addEventListener('click', () => showTab('profile'));
     tabSaves.addEventListener('click', () => showTab('saves'));
+    if (tabApi) tabApi.addEventListener('click', () => showTab('api'));
 
     function openModal() { modal.hidden = false; }
     function closeModal() { modal.hidden = true; }
@@ -7886,7 +8340,7 @@
       if (!userProfile) { alert('Please save your profile first.'); showTab('profile'); return; }
       const name = saveName.value.trim() || ('Build ' + new Date().toLocaleDateString());
       const cells = snapshotCells();
-      const data = { v: STORAGE_VERSION, cells, cameraMode, toolId: selectedTool && selectedTool.id };
+      const data = { v: STORAGE_VERSION, gridSize: GRID, cells, cameraMode, toolId: selectedTool && selectedTool.id };
       await apiCall('/api/builds', 'POST', { name, data });
       saveName.value = '';
       loadBuilds();
