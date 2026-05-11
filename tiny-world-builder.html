@@ -2347,7 +2347,10 @@
     return g;
   }
 
-  function makeBridge(orientation) {
+  // Bridge evolves with stacked clicks (cell.floors):
+  //   L1 wood plank → L2 covered wood → L3 stone flat → L4 stone arch.
+  // Higher levels clamp to the stone arch (visually maxed out).
+  function makeBridgeWoodPlank() {
     const g = new THREE.Group();
     const deckY = 0.09;
     for (let i = -2; i <= 2; i++) {
@@ -2369,8 +2372,151 @@
     const shadow = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.035, 0.50), M.bridgeWoodD);
     shadow.position.y = 0.025;
     g.add(shadow);
+    return g;
+  }
+
+  function makeBridgeCoveredWood() {
+    const g = new THREE.Group();
+    const deckY = 0.09;
+    // Deck planks
+    for (let i = -2; i <= 2; i++) {
+      const plank = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.06, 0.08), M.bridgeWood);
+      plank.position.set(0, deckY, i * 0.10);
+      g.add(plank);
+    }
+    // Low side walls
+    for (const z of [-0.32, 0.32]) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.28, 0.05), M.bridgeWoodD);
+      wall.position.set(0, deckY + 0.17, z);
+      g.add(wall);
+    }
+    // Corner posts under the eaves
+    for (const x of [-0.44, 0.44]) {
+      for (const z of [-0.32, 0.32]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.46, 0.05), M.bridgeWoodD);
+        post.position.set(x, deckY + 0.23, z);
+        g.add(post);
+      }
+    }
+    // Pitched roof — two angled panels meeting at a ridge.
+    // Sign matters: positive rotation around X tips the panel's +z edge
+    // DOWN, so the side at z=-0.17 needs a NEGATIVE rotation to push its
+    // inner edge (toward the centre) UP to the ridge. Inverted signs here
+    // produce a valley roof instead of a peak.
+    const ridgeY = deckY + 0.52;
+    const eaveY  = deckY + 0.42;
+    for (const side of [-1, 1]) {
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.05, 0.42), M.bridgeWood);
+      panel.position.set(0, (ridgeY + eaveY) / 2, side * 0.17);
+      panel.rotation.x = side * 0.42;
+      g.add(panel);
+    }
+    // Ridge cap sits along the apex line where the panels meet.
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(1.08, 0.06, 0.07), M.bridgeWoodD);
+    ridge.position.set(0, ridgeY + 0.02, 0);
+    g.add(ridge);
+    // Cast shadow on the water
+    const shadow = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.035, 0.62), M.bridgeWoodD);
+    shadow.position.y = 0.025;
+    g.add(shadow);
+    return g;
+  }
+
+  function makeBridgeStoneFlat() {
+    const g = new THREE.Group();
+    const deckY = 0.11;
+    // Stone deck slab
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.10, 0.64), M.castleStone);
+    deck.position.set(0, deckY, 0);
+    g.add(deck);
+    // Darker trim along the underside
+    const trim = new THREE.Mesh(new THREE.BoxGeometry(1.00, 0.06, 0.66), M.castleStoneD);
+    trim.position.set(0, deckY - 0.07, 0);
+    g.add(trim);
+    // Stone parapets along both long edges
+    for (const z of [-0.30, 0.30]) {
+      const parapet = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.20, 0.08), M.castleStone);
+      parapet.position.set(0, deckY + 0.16, z);
+      g.add(parapet);
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.04, 0.10), M.castleStoneD);
+      cap.position.set(0, deckY + 0.28, z);
+      g.add(cap);
+      // Small repeated balusters baked in as box pattern
+      for (const bx of [-0.30, 0, 0.30]) {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.10), M.castleStoneD);
+        pillar.position.set(bx, deckY + 0.06, z);
+        g.add(pillar);
+      }
+    }
+    // End abutments (chunky blocks at each end)
+    for (const x of [-0.44, 0.44]) {
+      const abut = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.22, 0.68), M.castleStoneD);
+      abut.position.set(x, deckY - 0.04, 0);
+      g.add(abut);
+    }
+    const shadow = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.035, 0.64), M.castleStoneD);
+    shadow.position.y = 0.025;
+    g.add(shadow);
+    return g;
+  }
+
+  function makeBridgeStoneArch() {
+    const g = new THREE.Group();
+    // Arched deck — segments stepping up to a centre peak, parabolic profile.
+    const baseDeckY = 0.12;
+    const arcHeight = 0.18;
+    const SEGS = 7;
+    for (let i = 0; i < SEGS; i++) {
+      const t = i / (SEGS - 1); // 0..1
+      const x = -0.42 + t * 0.84;
+      const arch = arcHeight * 4 * (t - t * t); // parabola peaking at t=0.5
+      const y = baseDeckY + arch;
+      const segW = 0.84 / SEGS + 0.02;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.10, 0.62), M.castleStone);
+      seg.position.set(x, y, 0);
+      g.add(seg);
+      // Parapet segments tracking the deck height
+      for (const sz of [-0.30, 0.30]) {
+        const para = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.16, 0.07), M.castleStone);
+        para.position.set(x, y + 0.13, sz);
+        g.add(para);
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(segW + 0.02, 0.03, 0.09), M.castleStoneD);
+        cap.position.set(x, y + 0.23, sz);
+        g.add(cap);
+      }
+    }
+    // Visible arched underside — darker stones forming the load-bearing arch
+    const UNDER_SEGS = 5;
+    for (let i = 0; i < UNDER_SEGS; i++) {
+      const t = i / (UNDER_SEGS - 1);
+      const x = -0.34 + t * 0.68;
+      const arch = arcHeight * 4 * (t - t * t) * 0.55;
+      const y = 0.04 + arch;
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 0.60), M.castleStoneD);
+      seg.position.set(x, y, 0);
+      g.add(seg);
+    }
+    // Chunky end piers anchoring the arch
+    for (const x of [-0.46, 0.46]) {
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.30, 0.68), M.castleStoneD);
+      pier.position.set(x, 0.07, 0);
+      g.add(pier);
+    }
+    const shadow = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.035, 0.62), M.castleStoneD);
+    shadow.position.y = 0.025;
+    g.add(shadow);
+    return g;
+  }
+
+  function makeBridge(orientation, level) {
+    const lv = Math.max(1, Math.min(4, level || 1));
+    let g;
+    if      (lv === 1) g = makeBridgeWoodPlank();
+    else if (lv === 2) g = makeBridgeCoveredWood();
+    else if (lv === 3) g = makeBridgeStoneFlat();
+    else               g = makeBridgeStoneArch();
     if (orientation === 'z') g.rotation.y = Math.PI / 2;
-    g.userData = { kind: 'bridge' };
+    g.userData = { kind: 'bridge', level: lv };
     castReceive(g);
     return g;
   }
@@ -4201,7 +4347,7 @@
     let mesh = null;
     if      (cell.kind === 'tree')      mesh = makeTree();
     else if (cell.kind === 'rock')      mesh = makeRock(getGhostRockNeighbors(cells, x, z), level, x + 1000, z + 1000);
-    else if (cell.kind === 'bridge')    mesh = makeBridge(ghostBridgeOrientation(cells, x, z));
+    else if (cell.kind === 'bridge')    mesh = makeBridge(ghostBridgeOrientation(cells, x, z), cell.floors || 1);
     else if (cell.kind === 'tuft')      mesh = makeTuft();
     else if (cell.kind === 'crop')      mesh = makeCrop();
     else if (cell.kind === 'corn')      mesh = makeCorn();
@@ -4952,7 +5098,7 @@
 
     if      (kind === 'tree')      mesh = makeTree();
     else if (kind === 'rock')      mesh = makeRock(getRockNeighbors(x, z), level, x, z, world[x][z].terrain === 'water');
-    else if (kind === 'bridge')    mesh = makeBridge(getBridgeOrientation(x, z));
+    else if (kind === 'bridge')    mesh = makeBridge(getBridgeOrientation(x, z), level);
     else if (kind === 'tuft')      mesh = makeTuft();
     else if (kind === 'crop')      mesh = makeCrop();
     else if (kind === 'corn')      mesh = makeCorn();
@@ -5470,9 +5616,19 @@
   let ghostRotation = 0;         // radians (added on top of any deterministic rotation)
   let ghostOffsetX = 0;          // within-tile x nudge
   let ghostOffsetZ = 0;          // within-tile z nudge
-  const GHOST_ROT_STEP = Math.PI / 12;    // 15° per arrow press
+  const GHOST_ROT_STEP = Math.PI / 2;     // 90° per arrow press — snaps to cardinal facings
   const GHOST_OFFSET_STEP = 0.06;          // ~6% of a tile per arrow press
   const GHOST_OFFSET_LIMIT = 0.32;         // clamp so the ghost stays on the tile
+  function snapRot(r) {
+    // Snap to the nearest 90°, wrap into [-PI, PI). Keeps floating-point
+    // drift from accumulating across many arrow presses and guarantees the
+    // committed rotation matches one of four cardinal facings.
+    const step = Math.PI / 2;
+    let v = Math.round(r / step) * step;
+    while (v >  Math.PI) v -= 2 * Math.PI;
+    while (v <= -Math.PI) v += 2 * Math.PI;
+    return v;
+  }
 
   function ghostToolSignature(tool) {
     if (!tool || tool.erase || tool.auto) return null;
@@ -5562,7 +5718,9 @@
       baseY + 0.01,
       currentHover.worldZ + ghostOffsetZ
     );
-    ghostPreview.rotation.y = ghostRotation;
+    // Always render the preview at the snapped angle so it matches the
+    // rotation that consumeGhostTransform will commit on click.
+    ghostPreview.rotation.y = snapRot(ghostRotation);
   }
 
   function resetGhostTransform() {
@@ -6008,7 +6166,9 @@
   // Read the current ghost rotation/offset to attach to a fresh setCell.
   // Resets the live ghost transform so the next placement starts clean.
   function consumeGhostTransform() {
-    const t = { rotationY: ghostRotation, offsetX: ghostOffsetX, offsetZ: ghostOffsetZ };
+    // Snap one more time so the saved rotation matches the preview exactly
+    // even if anything has nudged ghostRotation by a non-90° amount.
+    const t = { rotationY: snapRot(ghostRotation), offsetX: ghostOffsetX, offsetZ: ghostOffsetZ };
     resetGhostTransform();
     return t;
   }
@@ -6081,7 +6241,10 @@
     }
     if (selectedTool.kind) {
       if (cell.kind === selectedTool.kind) {
-        const newLevel = Math.min((cell.floors || 1) + 1, MAX_FLOORS);
+        // Bridges have only 4 visual styles (wood → covered → stone → arch),
+        // so cap their stacking there instead of running up to MAX_FLOORS.
+        const stackMax = selectedTool.kind === 'bridge' ? 4 : MAX_FLOORS;
+        const newLevel = Math.min((cell.floors || 1) + 1, stackMax);
         if (newLevel === (cell.floors || 1)) return;
         setCell(x, z, { terrain: cell.terrain, terrainFloors: terrainLevelForCell(cell), kind: selectedTool.kind, floors: newLevel });
         return;
@@ -6360,8 +6523,8 @@
         else                              panCameraByCells(0, 1);
         return;
       }
-      if (e.key === 'ArrowLeft')  ghostRotation -= GHOST_ROT_STEP;
-      if (e.key === 'ArrowRight') ghostRotation += GHOST_ROT_STEP;
+      if (e.key === 'ArrowLeft')  ghostRotation = snapRot(ghostRotation - GHOST_ROT_STEP);
+      if (e.key === 'ArrowRight') ghostRotation = snapRot(ghostRotation + GHOST_ROT_STEP);
       if (e.key === 'ArrowUp')    ghostOffsetZ = Math.max(-GHOST_OFFSET_LIMIT, ghostOffsetZ - GHOST_OFFSET_STEP);
       if (e.key === 'ArrowDown')  ghostOffsetZ = Math.min( GHOST_OFFSET_LIMIT, ghostOffsetZ + GHOST_OFFSET_STEP);
       updateGhostPlacement();
