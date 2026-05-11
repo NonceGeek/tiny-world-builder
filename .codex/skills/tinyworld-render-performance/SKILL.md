@@ -38,7 +38,7 @@ GPU caches (introduced for low-end GPU + visible-distance scaling):
   black) + `HemisphereLight` (warm sky/ground gradient) + the
   directional sun. All three are scaled by the lighting slider in
   `applyLightingSettings()`.
-- Ghost boards should not cast shadows, and usually should not receive shadows either.
+- Ghost boards DO participate in the shadow pass — same sun, same shadows everywhere. `prepareFadeable` no longer forces castShadow/receiveShadow off on ghost meshes; the factory-level `castReceive` / `groundReceiveOnly` choices apply uniformly.
 - Smoke particles must be capped and must not cast/receive shadows.
 
 Validation:
