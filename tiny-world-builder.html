@@ -269,8 +269,6 @@
     border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 14px;
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.85) inset,
-      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
       0 1px 2px rgba(20, 30, 50, 0.05),
       0 12px 36px -12px rgba(40, 50, 80, 0.22);
     padding: 8px 10px;
@@ -418,8 +416,6 @@
     align-items: center;
     gap: 3px;
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.85) inset,
-      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
       0 1px 2px rgba(20, 30, 50, 0.05),
       0 12px 36px -12px rgba(40, 50, 80, 0.22);
     backdrop-filter: blur(22px) saturate(180%);
@@ -9009,7 +9005,9 @@
     btn.className = 'tool' + ((opts && opts.flyout) ? ' flyout-tool' : '');
     btn.dataset.id = t.id;
     btn.type = 'button';
-    btn.title = t.label + (t.shortcut ? ' (' + t.shortcut.toUpperCase() + ')' : '');
+    const toolTip = t.label + (t.shortcut ? ' (' + t.shortcut.toUpperCase() + ')' : '');
+    btn.title = toolTip;
+    btn.setAttribute('data-tooltip', toolTip);
 
     if (t.eraser || t.auto || t.select) {
       const swatch = document.createElement('div');
@@ -9098,6 +9096,7 @@
       btn.type = 'button';
       btn.dataset.group = group.id;
       btn.title = group.label;
+      btn.setAttribute('data-tooltip', group.label);
       if (rep && !rep.eraser && !rep.auto) {
         const canvas = document.createElement('canvas');
         canvas.className = 'tool-thumb';
@@ -9116,9 +9115,6 @@
       chev.className = 'chev';
       chev.textContent = '▴';
       btn.appendChild(chev);
-      btn.addEventListener('pointerenter', e => {
-        if (e.pointerType === 'mouse') showToolGroup(group, btn);
-      });
       btn.addEventListener('click', e => {
         e.stopPropagation();
         showToolGroup(group, btn);
