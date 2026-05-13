@@ -2234,6 +2234,10 @@
 
       <div class="gen-section" data-section="advanced">
         <label class="gen-check">
+          <input type="checkbox" id="gen-procedural" />
+          <span>Procedural (offline) <em class="gen-hint">— skip the LLM, generate directly from seed</em></span>
+        </label>
+        <label class="gen-check">
           <input type="checkbox" id="gen-plan-first" />
           <span>Sketch a topology plan first <em class="gen-hint">(uses gpt-image-1, OpenAI key)</em></span>
         </label>
@@ -10056,8 +10060,56 @@
   // -------- animation loop --------
   let prevT = 0;
   let smokeTimer = 0;
+  // Item 5 — additive perf controls.
+  //   docHidden = true while the tab is in the background. We still queue
+  //     the next rAF (browsers throttle it anyway) but skip all per-frame
+  //     work so we don't spin animation state forward off-screen.
+  //   perfFrameTimes / perfDpr drive a coarse low-fps DPR backoff: if the
+  //     average frame time stays >30ms for ~90 frames we drop pixelRatio
+  //     by one notch (min 1.0), then restore when the average recovers.
+  let docHidden = false;
+  document.addEventListener('visibilitychange', () => {
+    docHidden = !!document.hidden;
+  });
+  const perfFrameTimes = [];
+  let perfLastT = 0;
+  let perfDprScale = 1.0;
+  let perfRefractoryFrames = 0;
+  const PERF_TARGET_MS = 28;   // ~36fps threshold to consider "slow"
+  const PERF_RESTORE_MS = 19;  // ~52fps to restore
+  function perfTick(now) {
+    if (perfLastT) perfFrameTimes.push(now - perfLastT);
+    perfLastT = now;
+    if (perfFrameTimes.length > 90) perfFrameTimes.shift();
+    if (perfRefractoryFrames > 0) { perfRefractoryFrames--; return; }
+    if (perfFrameTimes.length < 60) return;
+    const sum = perfFrameTimes.reduce((a, b) => a + b, 0);
+    const avg = sum / perfFrameTimes.length;
+    if (avg > PERF_TARGET_MS && perfDprScale > 0.65) {
+      perfDprScale = Math.max(0.65, perfDprScale - 0.15);
+      try { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, BASE_DPR_CAP) * renderResolutionScale * perfDprScale); } catch (_) {}
+      perfRefractoryFrames = 180;
+      console.debug('[perf] DPR backoff ->', perfDprScale.toFixed(2), 'avg', avg.toFixed(1) + 'ms');
+    } else if (avg < PERF_RESTORE_MS && perfDprScale < 1.0) {
+      perfDprScale = Math.min(1.0, perfDprScale + 0.15);
+      try { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, BASE_DPR_CAP) * renderResolutionScale * perfDprScale); } catch (_) {}
+      perfRefractoryFrames = 240;
+      console.debug('[perf] DPR restore ->', perfDprScale.toFixed(2), 'avg', avg.toFixed(1) + 'ms');
+    }
+  }
+
   function animate(now) {
     requestAnimationFrame(animate);
+    if (docHidden) {
+      // Tab is in background — keep the rAF heartbeat going (browsers
+      // throttle it to ~1Hz anyway) but skip every animated subsystem
+      // and the render call. Saves CPU/GPU when the user is on another
+      // tab without leaking time-skew (prevT is reset on resume).
+      prevT = 0;
+      perfLastT = 0;
+      return;
+    }
+    perfTick(now);
     const t = now / 1000;
     const dt = prevT ? Math.min(t - prevT, 0.05) : 0;
     prevT = t;
@@ -10615,6 +10667,197 @@
     return JSON.stringify(block.input);
   }
 
+  // Item 4 — procedural map generator (offline, deterministic). Emits a
+  // v=4 world directly from seed + biome composition + elevation profile.
+  // Ports the *concept* of OWB's biome / elevation / scatter pipeline
+  // into tinyworld's 8x8 schema without touching the render pipeline.
+  // Algorithm:
+  //   1. Two Mulberry32-derived noise fields (terrain & elevation) sampled
+  //      per (x,z) on the home grid plus a small smoothing pass for
+  //      coherence (4-neighbour average).
+  //   2. Rank cells by terrain noise, slice by cumulative biome %, then
+  //      paint terrain + kind per biome bucket.
+  //   3. Rank cells by elevation noise, slice by cumulative elevation %,
+  //      then assign terrainFloors (plains=1, hills=2..3, mountains=4..7).
+  //   4. Place settlement cells with cluster-friendly hints so houses
+  //      auto-promote when adjacent (handled by setCell's clustering).
+  function generateProceduralWorld({ seed, biomes, elevation }) {
+    const size = GRID;
+    const rng = makeMulberry32(seed || randomSeed());
+    function noiseField() {
+      const f = [];
+      for (let x = 0; x < size; x++) {
+        f[x] = [];
+        for (let z = 0; z < size; z++) f[x][z] = rng();
+      }
+      // One 4-neighbour smoothing pass — keeps the noise from looking
+      // like static and produces small blobs.
+      const out = [];
+      for (let x = 0; x < size; x++) {
+        out[x] = [];
+        for (let z = 0; z < size; z++) {
+          let sum = f[x][z], n = 1;
+          if (x > 0)        { sum += f[x-1][z]; n++; }
+          if (x < size - 1) { sum += f[x+1][z]; n++; }
+          if (z > 0)        { sum += f[x][z-1]; n++; }
+          if (z < size - 1) { sum += f[x][z+1]; n++; }
+          out[x][z] = sum / n;
+        }
+      }
+      return out;
+    }
+    const terrainNoise = noiseField();
+    const elevNoise = noiseField();
+
+    // Flatten + sort to bucket cells.
+    const cellList = [];
+    for (let x = 0; x < size; x++)
+      for (let z = 0; z < size; z++)
+        cellList.push({ x, z, n: terrainNoise[x][z], e: elevNoise[x][z] });
+
+    const total = cellList.length;
+    // Order biome buckets so water sits at the lowest noise and
+    // settlement sits at the highest — produces water shores at the
+    // bottom of "valleys" and towns on "highlands".
+    const biomeOrder = ['water', 'dirt', 'grass', 'forest', 'settlement'];
+    const sortedByNoise = cellList.slice().sort((a, b) => a.n - b.n);
+    const biomeBuckets = {};
+    let cursor = 0;
+    for (const k of biomeOrder) {
+      const pct = Math.max(0, Math.min(100, Number(biomes[k]) || 0));
+      const count = Math.round(total * pct / 100);
+      biomeBuckets[k] = sortedByNoise.slice(cursor, cursor + count);
+      cursor += count;
+    }
+    // Round-off — push the remainder to grass (or the first non-empty
+    // bucket) so 64 cells always get assigned.
+    if (cursor < total) {
+      const overflow = sortedByNoise.slice(cursor);
+      (biomeBuckets.grass || biomeBuckets[biomeOrder.find(k => biomeBuckets[k].length > 0)] || []).push(...overflow);
+    }
+
+    // Elevation buckets — ranked by elev noise (independent of biome).
+    const elevOrder = ['plains', 'hills', 'mountains'];
+    const sortedByElev = cellList.slice().sort((a, b) => a.e - b.e);
+    const elevBuckets = {};
+    cursor = 0;
+    for (const k of elevOrder) {
+      const pct = Math.max(0, Math.min(100, Number(elevation[k]) || 0));
+      const count = Math.round(total * pct / 100);
+      elevBuckets[k] = new Set(sortedByElev.slice(cursor, cursor + count).map(c => c.x + ',' + c.z));
+      cursor += count;
+    }
+
+    function elevTier(x, z) {
+      const k = x + ',' + z;
+      if (elevBuckets.mountains && elevBuckets.mountains.has(k)) return 'mountains';
+      if (elevBuckets.hills && elevBuckets.hills.has(k)) return 'hills';
+      return 'plains';
+    }
+    function elevFloors(tier) {
+      if (tier === 'mountains') return 4 + Math.floor(rng() * 4);
+      if (tier === 'hills') return 2 + Math.floor(rng() * 2);
+      return 1;
+    }
+
+    const out = { v: 4, gridSize: size, cells: [] };
+
+    function pushCell(x, z, terrain, kind, floors, terrainFloors, buildingType, fenceSide) {
+      out.cells.push({
+        x, z,
+        terrain: terrain || 'grass',
+        kind: kind || null,
+        floors: floors || 1,
+        terrainFloors: terrainFloors || 1,
+        buildingType: buildingType || null,
+        fenceSide: fenceSide || null,
+      });
+    }
+
+    function biomeOfCell(x, z) {
+      for (const k of biomeOrder) {
+        if (biomeBuckets[k] && biomeBuckets[k].some(c => c.x === x && c.z === z)) return k;
+      }
+      return 'grass';
+    }
+
+    // Quick lookup map (avoid the .some loop above for every cell).
+    const biomeLookup = {};
+    for (const k of biomeOrder) {
+      for (const c of (biomeBuckets[k] || [])) biomeLookup[c.x + ',' + c.z] = k;
+    }
+    function fastBiome(x, z) { return biomeLookup[x + ',' + z] || 'grass'; }
+
+    // First pass — paint terrain by biome. Mountains override to rock
+    // when sitting on grass-style biomes, and we suppress kinds on
+    // water cells (no kinds float, per the schema).
+    for (let x = 0; x < size; x++) {
+      for (let z = 0; z < size; z++) {
+        const biome = fastBiome(x, z);
+        const tier = elevTier(x, z);
+        const tf = elevFloors(tier);
+        let terrain = 'grass';
+        let kind = null;
+        let floors = 1;
+        let bType = null;
+
+        if (biome === 'water') {
+          terrain = 'water';
+        } else if (biome === 'dirt') {
+          terrain = 'dirt';
+          // Sprinkle some crops at moderate density.
+          if (rng() < 0.45) {
+            const cropKinds = ['crop', 'corn', 'wheat', 'pumpkin', 'carrot', 'sunflower'];
+            kind = cropKinds[Math.floor(rng() * cropKinds.length)];
+            floors = 1 + Math.floor(rng() * 2);
+          }
+        } else if (biome === 'grass') {
+          terrain = 'grass';
+          // Occasional decoration on plains: tuft / flower / bush / animal.
+          const roll = rng();
+          if (tier === 'plains' && roll < 0.12)      { kind = 'tuft'; }
+          else if (tier === 'plains' && roll < 0.18) { kind = 'flower'; }
+          else if (tier === 'plains' && roll < 0.22) { kind = 'bush'; }
+          else if (tier === 'plains' && roll < 0.26) { kind = 'cow'; }
+          else if (tier === 'plains' && roll < 0.30) { kind = 'sheep'; }
+        } else if (biome === 'forest') {
+          terrain = 'grass';
+          if (tier === 'mountains') {
+            kind = 'rock';
+            floors = 1 + Math.floor(rng() * 3);
+          } else {
+            kind = 'tree';
+            floors = 1 + Math.floor(rng() * 3);
+          }
+        } else if (biome === 'settlement') {
+          terrain = (tier === 'mountains') ? 'grass' : 'path';
+          if (rng() < 0.7) {
+            kind = 'house';
+            floors = 1 + Math.floor(rng() * 3);
+            // Mountain-biome settlements turn into towers.
+            if (tier === 'mountains') bType = 'tower';
+          }
+        }
+
+        // Mountains on water stay water; everywhere else mountains can
+        // become rocky outcrops if the biome rolled to leave a kind unset.
+        if (tier === 'mountains' && terrain !== 'water' && !kind) {
+          kind = 'rock';
+          floors = 2 + Math.floor(rng() * 3);
+        }
+
+        // Suppress kinds on water (bridges are placed later if needed).
+        if (terrain === 'water') { kind = null; bType = null; }
+
+        pushCell(x, z, terrain, kind, floors, tf, bType, null);
+      }
+    }
+
+    return out;
+  }
+  // Expose for tests / command palette.
+  window.__generateProceduralWorld = generateProceduralWorld;
+
   // Item 12 — ask gpt-image-1 to draft a topology sketch first so the
   // text model has a visual reference for valleys / hills / water.
   // Returns a data: URL or hosted URL (whatever the API returns).  Best
@@ -10887,6 +11130,11 @@
     const seedCopyBtn = document.getElementById('gen-seed-copy');
     const seedPasteBtn = document.getElementById('gen-seed-paste');
     const planFirstEl = document.getElementById('gen-plan-first');
+    const proceduralEl = document.getElementById('gen-procedural');
+    if (proceduralEl) proceduralEl.checked = localStorage.getItem('tinyworld:gen:procedural') === '1';
+    if (proceduralEl) proceduralEl.addEventListener('change', () => {
+      try { localStorage.setItem('tinyworld:gen:procedural', proceduralEl.checked ? '1' : '0'); } catch (_) {}
+    });
     const biomeSlidersEl = document.getElementById('gen-biome-sliders');
     const biomeSumEl = document.getElementById('gen-biome-sum');
     const elevSlidersEl = document.getElementById('gen-elev-sliders');
@@ -11068,6 +11316,31 @@
       const biomes = { ...biomeState };
       const elevation = { ...elevState };
       const planFirst = !!(planFirstEl && planFirstEl.checked);
+      const procedural = !!(proceduralEl && proceduralEl.checked);
+
+      // Procedural path — bypass the LLM entirely.
+      if (procedural) {
+        const effectiveSeed = seed || randomSeed();
+        if (!seed && seedEl) seedEl.value = effectiveSeed;
+        goBtn.disabled = true;
+        setStatus('generating offline…', 'busy');
+        try {
+          const data = generateProceduralWorld({ seed: effectiveSeed, biomes, elevation });
+          const err = (typeof validateWorld === 'function') ? validateWorld(data) : null;
+          if (err) throw new Error('procedural schema: ' + err);
+          if (typeof applyState === 'function' && !applyState(data)) {
+            throw new Error('renderer rejected the procedural scene');
+          }
+          setStatus('done · seed: ' + effectiveSeed, '');
+        } catch (err) {
+          console.error('procedural generate failed:', err);
+          setStatus(String(err.message || err).slice(0, 140), 'error');
+        } finally {
+          goBtn.disabled = false;
+        }
+        return;
+      }
+
       if (!promptRaw) { setStatus('enter a prompt', 'error'); return; }
       if (!key)       { setStatus('enter an API key', 'error'); return; }
       // Auto-sum guard: re-normalise on the fly if a row is off (defensive).
@@ -12730,6 +13003,16 @@
       items.push({ group: 'World', label: 'Generate from prompt…', hint: 'AI generation panel', kbd: '⌘G', run: () => {
         if (typeof openGenerateModal === 'function') openGenerateModal();
         else topBtnAction('generate')();
+      } });
+      items.push({ group: 'World', label: 'Generate procedurally (offline)', hint: 'seed + biomes, no LLM', run: () => {
+        try {
+          const state = (typeof window.__genState === 'function') ? window.__genState() : null;
+          const seed = (state && state.seed) || randomSeed();
+          const biomes = (state && state.biomes) || { grass: 55, forest: 20, water: 10, dirt: 10, settlement: 5 };
+          const elevation = (state && state.elevation) || { plains: 55, hills: 30, mountains: 15 };
+          const data = generateProceduralWorld({ seed, biomes, elevation });
+          applyState(data);
+        } catch (err) { console.warn('[palette] procedural failed:', err); }
       } });
       // Settings tabs (router into the Settings modal)
       items.push({ group: 'Settings', label: 'Settings — Screen', run: settingsTab('screen') });
