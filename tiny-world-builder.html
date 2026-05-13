@@ -1851,11 +1851,17 @@
   <!-- View modes popup -->
   <div class="topbar-popup" id="view-popup" hidden role="menu">
     <div class="topbar-popup-title">Camera view</div>
+    <button class="view-option" data-view="topdown" role="menuitem">
+      <span class="view-thumb" aria-hidden="true">
+        <svg viewBox="0 0 32 28" width="36" height="32"><rect x="6" y="6" width="20" height="16" rx="1" fill="#a08454"/><rect x="9" y="9" width="14" height="10" fill="#cdb98a"/><rect x="11" y="11" width="3" height="3" fill="#86b53e"/><rect x="18" y="14" width="3" height="3" fill="#86b53e"/></svg>
+      </span>
+      <span class="view-body"><strong>Top-down</strong><em>bird's eye, straight down</em></span>
+    </button>
     <button class="view-option" data-view="ortho" role="menuitem">
       <span class="view-thumb" aria-hidden="true">
         <svg viewBox="0 0 32 28" width="36" height="32"><path d="M16 4 28 11l-12 7L4 11z" fill="#cdb98a"/><path d="M16 18l12-7v9l-12 7z" fill="#a08454"/><path d="M16 18l-12-7v9l12 7z" fill="#8a6f44"/></svg>
       </span>
-      <span class="view-body"><strong>Top-down</strong><em>isometric, locked</em></span>
+      <span class="view-body"><strong>Isometric</strong><em>angled overhead</em></span>
     </button>
     <button class="view-option" data-view="soft" role="menuitem">
       <span class="view-thumb" aria-hidden="true">
@@ -8575,24 +8581,48 @@
   // Expose for the command palette.
   window.__adjustHoverTerrainHeight = adjustHoverTerrainHeight;
 
+  // Stash the user's last orbital polar so toggling out of true top-down
+  // can return to a sensible angled view instead of getting stuck flat.
+  let polarBeforeTopdown = null;
   function setCameraMode(mode) {
-    const requested = ['ortho', 'soft', 'perspective', 'fp'].includes(mode) ? mode : 'ortho';
+    const requested = ['ortho', 'topdown', 'soft', 'perspective', 'fp'].includes(mode) ? mode : 'ortho';
     // 'fp' (first-person walk) gates on post-processing the same way the
     // other perspective modes do — post forces ortho.
     const effective = postProcessingEnabled ? 'ortho' : requested;
     if (effective !== 'fp' && fp.active) exitFP();
-    cameraMode = effective;
+    // 'topdown' is orthoCam with polar snapped to ~0 (straight down).
+    // Internally we still store cameraMode='ortho' for everything that
+    // branches on it (renderer, ghost-board code, persistence) — the
+    // angle is the only thing that differs.
+    if (effective === 'topdown') {
+      if (cameraMode !== 'ortho' || polar > 0.05) polarBeforeTopdown = polar;
+      polar = 0.001;
+      cameraMode = 'ortho';
+    } else if (effective === 'ortho') {
+      // Returning to isometric from a true top-down — restore the
+      // previous orbital polar so the user isn't dropped back flat.
+      if (polar < 0.05 && polarBeforeTopdown != null) {
+        polar = polarBeforeTopdown;
+        polarBeforeTopdown = null;
+      }
+      cameraMode = 'ortho';
+    } else {
+      cameraMode = effective;
+    }
     camera = cameraMode === 'ortho' ? orthoCam
            : cameraMode === 'soft'  ? softCam
            : persCam;
-    perspBtn.classList.toggle('on', cameraMode !== 'ortho');
+    const isTopdown = (effective === 'topdown') || (cameraMode === 'ortho' && polar < 0.05);
+    perspBtn.classList.toggle('on', cameraMode !== 'ortho' || isTopdown);
     perspBtn.classList.toggle('disabled', postProcessingEnabled);
     perspBtn.setAttribute('data-tooltip',
       postProcessingEnabled ? 'Isometric (locked — disable post-processing to change)' :
+      isTopdown              ? 'Top-down (bird\'s eye)' :
       cameraMode === 'ortho' ? 'Isometric' :
       cameraMode === 'soft'  ? 'Soft perspective' :
       cameraMode === 'fp'    ? 'Walk (esc to exit)' : 'Perspective');
     if (effective === 'fp') enterFP();
+    if (typeof updateCamera === 'function') updateCamera();
     onResize();
   }
 
@@ -13160,8 +13190,15 @@
     if (viewBtn && viewPopup) {
       function paintViewActive() {
         const mode = (typeof cameraMode !== 'undefined') ? cameraMode : 'ortho';
+        // 'topdown' is a virtual mode (ortho + polar≈0). Detect it so the
+        // bird's-eye row stays highlighted instead of the Isometric row.
+        const isTopdown = (mode === 'ortho') && (typeof polar !== 'undefined') && polar < 0.05;
         viewPopup.querySelectorAll('.view-option').forEach(opt => {
-          opt.classList.toggle('active', opt.getAttribute('data-view') === mode);
+          const v = opt.getAttribute('data-view');
+          let active = (v === mode);
+          if (v === 'topdown') active = isTopdown;
+          if (v === 'ortho')   active = (mode === 'ortho' && !isTopdown);
+          opt.classList.toggle('active', active);
         });
       }
       viewBtn.addEventListener('click', e => {
