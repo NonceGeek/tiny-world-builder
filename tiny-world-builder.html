@@ -16098,6 +16098,11 @@
           const p = e.target.closest('.pill');
           if (!p) return;
           weather = p.getAttribute('data-weather');
+          if (weather === 'snow' && season !== 'winter') {
+            season = 'winter';
+            applySeason(season);
+            try { localStorage.setItem(SEASON_LS, season); } catch (_) {}
+          }
           applyWeather(weather);
           paintPills();
           try { localStorage.setItem(WEATHER_LS, weather); } catch (_) {}
