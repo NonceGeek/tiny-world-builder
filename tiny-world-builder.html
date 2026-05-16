@@ -3963,6 +3963,11 @@
               <output id="render-pixel-normal-edge-value"></output>
             </div>
             <div class="range-row">
+              <span>Shader antialias</span>
+              <input id="render-shader-antialias" type="range" min="0" max="100" step="1" />
+              <output id="render-shader-antialias-value"></output>
+            </div>
+            <div class="range-row">
               <span>Tilt blur</span>
               <input id="render-tilt-blur" type="range" min="0" max="8" step="0.5" />
               <output id="render-tilt-blur-value"></output>
@@ -4220,9 +4225,10 @@
     pixelSize: 'tinyworld:render:pixelSize',
     pixelDepthEdge: 'tinyworld:render:pixelDepthEdge',
     pixelNormalEdge: 'tinyworld:render:pixelNormalEdge',
+    shaderAntialias: 'tinyworld:render:shaderAntialias',
     version: 'tinyworld:render:version',
   };
-  const RENDER_SETTINGS_VERSION = '19';
+  const RENDER_SETTINGS_VERSION = '20';
   const RENDER_DEFAULTS = {
     // Defaults tuned to keep image quality crisp while still trimming
     // a few cheap things off the per-frame budget.
@@ -4263,6 +4269,7 @@
     // bevels, risers and decals, which can read as terrain artifacts.
     pixelDepthEdge: '0',
     pixelNormalEdge: '0',
+    shaderAntialias: '0',
   };
   const renderSettingsReset = localStorage.getItem(RENDER_LS.version) !== RENDER_SETTINGS_VERSION;
   if (renderSettingsReset) {
@@ -4387,6 +4394,7 @@
   let renderPixelSize = Math.round(storedNumber(RENDER_LS.pixelSize, 1, 1, 12));
   let renderPixelDepthEdge = storedNumber(RENDER_LS.pixelDepthEdge, 0, 0, 1);
   let renderPixelNormalEdge = storedNumber(RENDER_LS.pixelNormalEdge, 0, 0, 1);
+  let renderShaderAntialias = storedNumber(RENDER_LS.shaderAntialias, 0, 0, 1);
   let renderTiltBlur = storedNumber(RENDER_LS.tiltBlur, 1.0, 0, 8);
   let renderTiltFocus = storedNumber(RENDER_LS.tiltFocus, 65, 15, 80);
   let renderGhostOpacity = storedNumber(RENDER_LS.ghostOpacity, 1, 0.05, 1);
@@ -4446,10 +4454,7 @@
   }
 
   function ghostBoardsEnabledForGrid() {
-    // Surrounding preview/ghost boards are disabled. They were rendering large
-    // off-board terrain sheets at the top-left/top-right of the view, which
-    // reads as artifacts while editing the single home board.
-    return false;
+    return renderBudgetForGrid(GRID).ghostRadius > 0;
   }
 
   function syncGhostRenderBudget() {
@@ -4586,6 +4591,7 @@
           resolution: { value: new THREE.Vector2(targetW, targetH) },
           depthEdgeStrength: { value: 0.0 },
           normalEdgeStrength: { value: 0.0 },
+          antialiasStrength: { value: 0.0 },
           useNormals: { value: 0.0 },
         },
         vertexShader: [
@@ -4602,10 +4608,25 @@
           'uniform vec2 resolution;',
           'uniform float depthEdgeStrength;',
           'uniform float normalEdgeStrength;',
+          'uniform float antialiasStrength;',
           'uniform float useNormals;',
           'varying vec2 vUv;',
           'float readDepth(vec2 uv) { return texture2D(tDepth, uv).r; }',
           'vec3 readNormal(vec2 uv) { return normalize(texture2D(tNormal, uv).xyz * 2.0 - 1.0); }',
+          'float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }',
+          'vec3 antialiasColor(vec2 uv, vec2 texel, vec3 center) {',
+          '  if (antialiasStrength <= 0.001) return center;',
+          '  vec3 cL = texture2D(tColor, uv - vec2(texel.x, 0.0)).rgb;',
+          '  vec3 cR = texture2D(tColor, uv + vec2(texel.x, 0.0)).rgb;',
+          '  vec3 cU = texture2D(tColor, uv - vec2(0.0, texel.y)).rgb;',
+          '  vec3 cD = texture2D(tColor, uv + vec2(0.0, texel.y)).rgb;',
+          '  float lC = luma(center);',
+          '  float lo = min(lC, min(min(luma(cL), luma(cR)), min(luma(cU), luma(cD))));',
+          '  float hi = max(lC, max(max(luma(cL), luma(cR)), max(luma(cU), luma(cD))));',
+          '  float edgeMask = smoothstep(0.025, 0.18, hi - lo) * antialiasStrength;',
+          '  vec3 avg = (center * 4.0 + cL + cR + cU + cD) * 0.125;',
+          '  return mix(center, avg, edgeMask);',
+          '}',
           'float depthEdge(vec2 uv, vec2 texel) {',
           '  float d = readDepth(uv);',
           '  float dL = readDepth(uv - vec2(texel.x, 0.0));',
@@ -4631,6 +4652,7 @@
           'void main() {',
           '  vec2 texel = 1.0 / resolution;',
           '  vec3 col = texture2D(tColor, vUv).rgb;',
+          '  col = antialiasColor(vUv, texel, col);',
           '  float de = depthEdge(vUv, texel) * depthEdgeStrength;',
           '  float ne = useNormals > 0.5 ? normalEdge(vUv, texel) * normalEdgeStrength : 0.0;',
           '  float edge = clamp(max(de, ne), 0.0, 1.0);',
@@ -4654,15 +4676,19 @@
 
   function renderScene() {
     renderer.info.reset();
-    const usePixelation = renderPixelSize > 1 && !(renderer.xr && renderer.xr.isPresenting);
-    if (!usePixelation) {
+    const xrPresenting = renderer.xr && renderer.xr.isPresenting;
+    const usePixelation = renderPixelSize > 1 && !xrPresenting;
+    const useShaderAA = renderShaderAntialias > 0.001 && !xrPresenting;
+    const usePost = usePixelation || useShaderAA;
+    if (!usePost) {
       renderer.render(scene, camera);
       if (statsOverlay) sampleStats();
       return;
     }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     const wantNormals = renderPixelNormalEdge > 0.001;
-    ensurePixelResources(size.x, size.y, renderPixelSize, wantNormals);
+    const postPixelSize = usePixelation ? renderPixelSize : 1;
+    ensurePixelResources(size.x, size.y, postPixelSize, wantNormals);
     const prevTarget = renderer.getRenderTarget();
     renderer.setRenderTarget(pixelState.target);
     renderer.clear();
@@ -4685,9 +4711,10 @@
     uniforms.tColor.value = pixelState.target.texture;
     uniforms.tDepth.value = pixelState.target.depthTexture;
     uniforms.tNormal.value = wantNormals && pixelState.normalTarget ? pixelState.normalTarget.texture : null;
-    uniforms.depthEdgeStrength.value = renderPixelDepthEdge;
-    uniforms.normalEdgeStrength.value = renderPixelNormalEdge;
-    uniforms.useNormals.value = wantNormals ? 1.0 : 0.0;
+    uniforms.depthEdgeStrength.value = usePixelation ? renderPixelDepthEdge : 0;
+    uniforms.normalEdgeStrength.value = usePixelation ? renderPixelNormalEdge : 0;
+    uniforms.antialiasStrength.value = renderShaderAntialias;
+    uniforms.useNormals.value = wantNormals && usePixelation ? 1.0 : 0.0;
     renderer.setRenderTarget(prevTarget);
     renderer.render(pixelState.quadScene, pixelState.quadCam);
     if (statsOverlay) sampleStats();
@@ -5430,41 +5457,11 @@
     // us from drawing tiles that are completely off-screen. Removing riser bottoms
     // entirely is a possible further optimization if triangle count becomes an issue.
     if (!skipTerrain) {
-      let riserSize = TILE * 1.04;
-      let topSize   = TILE * 0.98;
-      let riserBevel = 0.04;
-      let topBevel   = 0.06;
-
-      if (terrain === 'grass' || terrain === 'path' || terrain === 'water') {
-        // Top overhangs the riser. For grass this hides the brown dirt wall
-        // from above; for path it hides the pathTrim riser ring that
-        // otherwise reads as a darker outline around every path tile; for
-        // water it hides the dark waterDk riser ring around each tile (both
-        // are very obvious under the pixelation depth-edge pass).
-        riserSize  = TILE * 0.98;
-        topSize    = TILE * 1.04;
-        riserBevel = 0.02;
-        topBevel   = 0.04;
-      }
-
-      if (rise > 0) {
-        // Only raised terrain needs a side wall. Flat tiles are just their top
-        // slab; drawing an extra hidden riser below them creates visible
-        // scalloped/triangular "bunting" along edges in pixel mode.
-        let riserMat = terrain === 'grass' ? M.dirt : M.dirt;
-        if (terrain === 'path')  riserMat = M.pathTrim;
-        if (terrain === 'water') riserMat = M.waterDk;
-        if (terrain === 'dirt')  riserMat = M.dirtRich;
-        if (terrain === 'stone') riserMat = M.stone;
-        if (terrain === 'lava')  riserMat = M.lava;
-        if (terrain === 'sand')  riserMat = M.sand;
-        if (terrain === 'snow')  riserMat = M.snow;
-
-        const riserGeo = getOpenBoxGeometry(riserSize, rise, riserSize, true, true, skipE, skipW, skipS, skipN);
-        const riser = new THREE.Mesh(riserGeo, riserMat);
-        riser.position.y = rise * 0.5;
-        g.add(riser);
-      }
+      const riserSize = TILE * 0.98;
+      // All terrain tops slightly overlap their footprint. That prevents the
+      // sky/background from peeking through rasterization gaps between tiles,
+      // especially in chunky pixel mode.
+      const topSize = TILE * 1.012;
 
       // top cap
       let topMat = M.grass;
@@ -5483,27 +5480,40 @@
       top.position.y = rise + TOP_H * 0.5;
       g.add(top);
 
-      let sideMat = terrain === 'grass' ? M.dirt : topMat;
-      if (terrain === 'path')  sideMat = M.pathTrim;
-      if (terrain === 'water') sideMat = M.waterDk;
-      function exposedSide(dir, neighborLevel) {
-        const neighborTop = typeof neighborLevel === 'number'
-          ? terrainRiseForLevel(neighborLevel) + TOP_H
-          : 0;
-        const height = topY - neighborTop;
+      function addSideStrip(dir, y0, y1, mat) {
+        const height = y1 - y0;
         if (height <= 0.001) return;
-        const t = 0.035;
+        const t = 0.045;
         const geo = (dir === 'n' || dir === 's')
           ? getOpenBoxGeometry(topSize, height, t, true, true)
           : getOpenBoxGeometry(t, height, topSize, true, true);
-        const side = new THREE.Mesh(geo, sideMat);
-        const off = topSize * 0.5;
-        const y = neighborTop + height * 0.5;
+        const side = new THREE.Mesh(geo, mat);
+        const off = topSize * 0.5 - t * 0.5;
+        const y = y0 + height * 0.5;
         if (dir === 'n') side.position.set(0, y, -off);
         if (dir === 's') side.position.set(0, y,  off);
         if (dir === 'w') side.position.set(-off, y, 0);
         if (dir === 'e') side.position.set( off, y, 0);
         g.add(side);
+      }
+      function exposedSide(dir, neighborLevel) {
+        const neighborTop = typeof neighborLevel === 'number'
+          ? terrainRiseForLevel(neighborLevel) + TOP_H
+          : -DIRT_H;
+        if (neighborTop >= topY - 0.001) return;
+
+        if (terrain === 'grass') {
+          // Grass edge reads as grass first, then dirt underneath — like a
+          // physical tile with a green cap sitting on soil.
+          addSideStrip(dir, Math.max(neighborTop, rise), topY, M.grass);
+          addSideStrip(dir, neighborTop, rise, M.dirt);
+          return;
+        }
+
+        let sideMat = topMat;
+        if (terrain === 'path')  sideMat = M.pathTrim;
+        if (terrain === 'water') sideMat = M.waterDk;
+        addSideStrip(dir, neighborTop, topY, sideMat);
       }
       exposedSide('n', levelN.n);
       exposedSide('s', levelN.s);
@@ -10528,8 +10538,8 @@
     homeTileGeomDirt = new THREE.BoxGeometry(dirtSize, DIRT_H, dirtSize);
     homeTileGeomDirt.translate(0, DIRT_H / 2, 0); // bottom-anchored
 
-    homeTileGeomTop = getOpenBoxGeometry(TILE * 0.98, TOP_H, TILE * 0.98, false, true, true, true, true, true);
-    homeTileGeomWater = getOpenBoxGeometry(TILE * 0.99, TOP_H, TILE * 0.99, false, true, true, true, true, true);
+    homeTileGeomTop = getOpenBoxGeometry(TILE * 1.012, TOP_H, TILE * 1.012, false, true, true, true, true, true);
+    homeTileGeomWater = getOpenBoxGeometry(TILE * 1.012, TOP_H, TILE * 1.012, false, true, true, true, true, true);
   }
 
   function getHomeTileBucket(terrain) {
@@ -10732,7 +10742,7 @@
     if (terrain === 'sand')  mat = M.sand;
     if (terrain === 'snow')  mat = M.snow;
 
-    const slab = new THREE.Mesh(getOpenBoxGeometry(TILE * 0.98, TOP_H, TILE * 0.98, false, true, true, true, true, true), mat);
+    const slab = new THREE.Mesh(getOpenBoxGeometry(TILE * 1.012, TOP_H, TILE * 1.012, false, true, true, true, true, true), mat);
     slab.position.y = rise + TOP_H * 0.5;
 
     slab.userData = {
@@ -14857,6 +14867,7 @@
     const pixelSizeEl = document.getElementById('render-pixel-size');
     const pixelDepthEdgeEl = document.getElementById('render-pixel-depth-edge');
     const pixelNormalEdgeEl = document.getElementById('render-pixel-normal-edge');
+    const shaderAntialiasEl = document.getElementById('render-shader-antialias');
     const tiltBlurEl = document.getElementById('render-tilt-blur');
     const tiltFocusEl = document.getElementById('render-tilt-focus');
     const ghostOpacityEl = document.getElementById('render-ghost-opacity');
@@ -14878,6 +14889,7 @@
     const pixelSizeValue = document.getElementById('render-pixel-size-value');
     const pixelDepthEdgeValue = document.getElementById('render-pixel-depth-edge-value');
     const pixelNormalEdgeValue = document.getElementById('render-pixel-normal-edge-value');
+    const shaderAntialiasValue = document.getElementById('render-shader-antialias-value');
     const tiltBlurValue = document.getElementById('render-tilt-blur-value');
     const tiltFocusValue = document.getElementById('render-tilt-focus-value');
     const ghostOpacityValue = document.getElementById('render-ghost-opacity-value');
@@ -14915,6 +14927,7 @@
       pixelSizeEl.value = String(renderPixelSize);
       pixelDepthEdgeEl.value = String(Math.round(renderPixelDepthEdge * 100));
       pixelNormalEdgeEl.value = String(Math.round(renderPixelNormalEdge * 100));
+      shaderAntialiasEl.value = String(Math.round(renderShaderAntialias * 100));
       tiltBlurEl.value = String(renderTiltBlur);
       tiltFocusEl.value = String(Math.round(renderTiltFocus));
       ghostOpacityEl.value = String(Math.round(renderGhostOpacity * 100));
@@ -14936,6 +14949,7 @@
       pixelSizeValue.textContent = pixelSizeEl.value + (pixelSizeEl.value === '1' ? ' (off)' : 'x');
       pixelDepthEdgeValue.textContent = pixelDepthEdgeEl.value + '%';
       pixelNormalEdgeValue.textContent = pixelNormalEdgeEl.value + '%';
+      shaderAntialiasValue.textContent = shaderAntialiasEl.value + '%';
       tiltBlurValue.textContent = tiltBlurEl.value + 'px';
       tiltFocusValue.textContent = tiltFocusEl.value + '%';
       ghostOpacityValue.textContent = ghostOpacityEl.value + '%';
@@ -14962,6 +14976,7 @@
       localStorage.setItem(RENDER_LS.pixelSize, String(renderPixelSize));
       localStorage.setItem(RENDER_LS.pixelDepthEdge, renderPixelDepthEdge.toFixed(2));
       localStorage.setItem(RENDER_LS.pixelNormalEdge, renderPixelNormalEdge.toFixed(2));
+      localStorage.setItem(RENDER_LS.shaderAntialias, renderShaderAntialias.toFixed(2));
       localStorage.setItem(RENDER_LS.tiltBlur, renderTiltBlur.toFixed(1));
       localStorage.setItem(RENDER_LS.tiltFocus, renderTiltFocus.toFixed(0));
       localStorage.setItem(RENDER_LS.ghostOpacity, renderGhostOpacity.toFixed(2));
@@ -14993,6 +15008,7 @@
       renderPixelSize = Math.max(1, Math.min(12, parseInt(pixelSizeEl.value, 10) || 1));
       renderPixelDepthEdge = parseInt(pixelDepthEdgeEl.value, 10) / 100;
       renderPixelNormalEdge = parseInt(pixelNormalEdgeEl.value, 10) / 100;
+      renderShaderAntialias = parseInt(shaderAntialiasEl.value, 10) / 100;
       renderTiltBlur = parseFloat(tiltBlurEl.value);
       renderTiltFocus = parseInt(tiltFocusEl.value, 10);
       applyTiltShiftSettings();
@@ -15035,7 +15051,7 @@
     });
     closeBtn.addEventListener('click', () => { closeTinyModal(modal); });
     modal.addEventListener('click', e => { if (e.target === modal) closeTinyModal(modal); });
-    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, distanceMistEl, backdropEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl]) {
+    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, distanceMistEl, backdropEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, shaderAntialiasEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl]) {
       if (!el) continue;
       el.addEventListener('input', applyFromControls);
       el.addEventListener('change', applyFromControls);
@@ -15070,6 +15086,7 @@
       renderPixelSize = 1;
       renderPixelDepthEdge = 0;
       renderPixelNormalEdge = 0;
+      renderShaderAntialias = 0;
       renderTiltBlur = 3.5;
       renderTiltFocus = 18;
       applyTiltShiftSettings();
