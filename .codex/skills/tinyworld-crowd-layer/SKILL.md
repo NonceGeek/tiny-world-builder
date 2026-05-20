@@ -18,6 +18,13 @@ Use this skill when changing TinyWorld's 2.5D crowd/person sprite system.
 - Choose `down/up/left/right` frames from the camera's horizontal angle relative to the person's heading; steep overhead views use a baked collapsed-body `top` frame.
 - Each person has a circular zone (`radius`) around its 3D point for collision, hit testing, visibility, and later avoidance.
 - Keep the crowd layer vanilla JS with no bundler and no npm runtime dependencies.
+- **Toggling & State**: The crowd can be enabled/disabled via the global variable `crowdEnabled` (persisted in `localStorage` via `RENDER_LS.crowdEnabled`, starting from settings version `'21'`).
+  - When `crowdEnabled` is false, `seedCrowdPeople()` clears the sprites and exits early, and the update loop is bypassed.
+  - When toggled on, the layer is initialized lazily via `initCrowdLayer()` or populated/re-seeded via `seedCrowdPeople()`.
+  - Toggles must be present in both the Settings Modal and the Live Crowd Panel, and synchronized via `syncControls()` and `applyFromControls()`.
+- **UI & Interaction**: The live Crowd Controls panel uses the same glassmorphism design parameters as the map panel (translucent background, thin white border, inset glow, saturate backdrop-blur filter).
+  - The panel is draggable using pointer capture events on its header/chrome, clamping positions within the viewport and saving state to `localStorage` under `tinyworld:crowd.pos`.
+  - The panel is collapsible off-screen to the right (via `transform: translateX(...)`), and triggers a `👥` right-edge handle button when closed. The collapsed state is persisted to `localStorage` under `tinyworld:crowd.collapsed`.
 
 ## Asset contract
 

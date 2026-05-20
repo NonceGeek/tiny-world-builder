@@ -359,25 +359,114 @@
   }
   .crowd-panel {
     position: fixed;
-    top: 96px;
-    right: 14px;
+    top: 290px;
+    right: 24px;
     z-index: 42;
     width: 248px;
-    max-height: calc(100vh - 190px);
+    max-height: calc(100vh - 340px);
     overflow: auto;
-    background: rgba(255, 255, 255, 0.76);
-    border: 1px solid rgba(80, 70, 54, 0.22);
-    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 18px;
     box-shadow:
-      0 1px 2px rgba(20, 30, 50, 0.08),
-      0 18px 44px -16px rgba(40, 50, 80, 0.30);
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,
+      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
+      0 1px 2px rgba(20, 30, 50, 0.05),
+      0 12px 36px -12px rgba(40, 50, 80, 0.22);
     padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
+    cursor: grab;
+    transition:
+      transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.28s ease,
+      top 0.1s ease,
+      left 0.1s ease;
   }
+  .crowd-panel.dragging { cursor: grabbing; transition: none; }
+  .crowd-panel.hidden {
+    transform: translateX(calc(100% + 28px));
+    opacity: 0;
+    pointer-events: none;
+  }
+  .crowd-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(120, 130, 150, 0.12);
+    cursor: grab;
+    user-select: none;
+  }
+  .crowd-panel-toggle {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 500;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    background: rgba(255, 255, 255, 0.45);
+    cursor: pointer;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,
+      0 1px 2px rgba(20, 30, 50, 0.04);
+    backdrop-filter: blur(10px) saturate(180%);
+    -webkit-backdrop-filter: blur(10px) saturate(180%);
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .crowd-panel-toggle:hover {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.68);
+    border-color: rgba(255, 255, 255, 0.75);
+  }
+  .crowd-panel-handle {
+    position: fixed;
+    right: 24px;
+    top: 290px;
+    transform: translateY(-50%);
+    z-index: 41;
+    width: 34px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #8a7a58;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 20px;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,
+      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
+      0 1px 2px rgba(20, 30, 50, 0.05),
+      0 12px 36px -12px rgba(40, 50, 80, 0.22);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.12s;
+    user-select: none;
+  }
+  .crowd-panel-handle:hover {
+    color: var(--ink);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
+      0 1px 3px rgba(20, 30, 50, 0.08),
+      0 16px 40px -10px rgba(40, 50, 80, 0.28);
+    transform: translateY(-50%) scale(1.02);
+  }
+  .crowd-panel-handle:active { transform: translateY(-50%) scale(0.98); }
+  .crowd-panel-handle[hidden] { display: none; }
   .crowd-panel h3 {
     margin: 0;
     font-size: 12px;
@@ -1257,7 +1346,9 @@
   }
   body.vehicle-demo-active .agent-input,
   body.vehicle-demo-active #agent-panel,
-  body.vehicle-demo-active #agent-panel-handle {
+  body.vehicle-demo-active #agent-panel-handle,
+  body.vehicle-demo-active #crowd-panel,
+  body.vehicle-demo-active #crowd-panel-handle {
     display: none;
   }
   @keyframes vehicle-demo-pulse {
@@ -2165,7 +2256,9 @@
   body.showcase .minimap-wrap,
   body.showcase #agent-input,
   body.showcase #agent-panel,
-  body.showcase #agent-panel-handle {
+  body.showcase #agent-panel-handle,
+  body.showcase #crowd-panel,
+  body.showcase #crowd-panel-handle {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.5s ease;
@@ -2422,6 +2515,10 @@
   body.tod-dusk  .agent-input,
   body.tod-night .agent-panel,
   body.tod-dusk  .agent-panel,
+  body.tod-night .crowd-panel,
+  body.tod-dusk  .crowd-panel,
+  body.tod-night .crowd-panel-handle,
+  body.tod-dusk  .crowd-panel-handle,
   body.tod-night .minimap-card,
   body.tod-dusk  .minimap-card,
   body.tod-night .flyout,
@@ -3607,7 +3704,10 @@
   </div>
 
   <div class="crowd-panel" id="crowd-panel">
-    <h3>Crowd controls</h3>
+    <div class="crowd-panel-head">
+      <h3>Crowd controls</h3>
+      <button type="button" class="crowd-panel-toggle" id="crowd-panel-toggle" aria-label="Close crowd controls">×</button>
+    </div>
     <label class="crowd-row">Mode
       <select id="crowd-mode">
         <option value="wander">Wander path</option>
@@ -3632,6 +3732,7 @@
       <input id="crowd-zone-radius-live" type="range" min="8" max="80" step="1" />
       <output id="crowd-zone-radius-live-value"></output>
     </label>
+    <label class="crowd-check"><input id="crowd-enabled-live" type="checkbox" /> Enable crowd</label>
     <label class="crowd-check"><input id="crowd-show-zones-live" type="checkbox" /> Show rings</label>
     <label class="crowd-check"><input id="crowd-show-arrows-live" type="checkbox" /> Show direction arrows</label>
     <label class="crowd-check"><input id="crowd-paused-live" type="checkbox" /> Pause</label>
@@ -3640,6 +3741,7 @@
       <button class="btn" id="crowd-debug-live" type="button">Debug</button>
     </div>
   </div>
+  <button id="crowd-panel-handle" class="crowd-panel-handle" title="Show crowd controls" aria-label="Show crowd controls" hidden>👥</button>
 
   <div class="brand">
     <div class="title">Tiny World <em>Builder</em></div>
@@ -4380,6 +4482,10 @@
               <output id="crowd-zone-radius-value"></output>
             </div>
             <label class="gen-check">
+              <input type="checkbox" id="crowd-enabled" />
+              <span>Enable crowd <em class="gen-hint">spawn 2.5D ambient people on paths</em></span>
+            </label>
+            <label class="gen-check">
               <input type="checkbox" id="crowd-show-zones" />
               <span>Show collision zones <em class="gen-hint">rings around each 3D point</em></span>
             </label>
@@ -4776,9 +4882,10 @@
     crowdDebug: 'tinyworld:crowd:debug',
     crowdMode: 'tinyworld:crowd:mode',
     crowdShowArrows: 'tinyworld:crowd:showArrows',
+    crowdEnabled: 'tinyworld:crowd:enabled',
     version: 'tinyworld:render:version',
   };
-  const RENDER_SETTINGS_VERSION = '20';
+  const RENDER_SETTINGS_VERSION = '21';
   const RENDER_DEFAULTS = {
     // Defaults tuned to keep image quality crisp while still trimming
     // a few cheap things off the per-frame budget.
@@ -4837,6 +4944,7 @@
     crowdDebug: '1',
     crowdMode: 'wander',
     crowdShowArrows: '1',
+    crowdEnabled: '1',
   };
   const renderSettingsReset = localStorage.getItem(RENDER_LS.version) !== RENDER_SETTINGS_VERSION;
   if (renderSettingsReset) {
@@ -5586,6 +5694,17 @@
     const hit = geomCache.get(key);
     if (hit) return hit;
     const g = new THREE.BoxGeometry(qw, qh, qd);
+    g.userData.cached = true;
+    geomCache.set(key, g);
+    return g;
+  }
+
+  function getDodecahedronGeometry(r) {
+    const qr = Math.round(r * 20) / 20;
+    const key = 'dodecahedron|' + qr;
+    const hit = geomCache.get(key);
+    if (hit) return hit;
+    const g = new THREE.DodecahedronGeometry(qr, 0);
     g.userData.cached = true;
     geomCache.set(key, g);
     return g;
@@ -11178,6 +11297,7 @@
   let crowdDebug = localStorage.getItem(RENDER_LS.crowdDebug) !== '0';
   let crowdMode = localStorage.getItem(RENDER_LS.crowdMode) || 'wander';
   let crowdShowArrows = localStorage.getItem(RENDER_LS.crowdShowArrows) !== '0';
+  let crowdEnabled = localStorage.getItem(RENDER_LS.crowdEnabled) !== '0';
 
   function persistCrowdSettings() {
     localStorage.setItem(RENDER_LS.crowdCount, String(crowdCount));
@@ -11192,6 +11312,7 @@
     localStorage.setItem(RENDER_LS.crowdDebug, crowdDebug ? '1' : '0');
     localStorage.setItem(RENDER_LS.crowdMode, crowdMode);
     localStorage.setItem(RENDER_LS.crowdShowArrows, crowdShowArrows ? '1' : '0');
+    localStorage.setItem(RENDER_LS.crowdEnabled, crowdEnabled ? '1' : '0');
   }
 
   function crowdConfigOverride() {
@@ -11276,6 +11397,7 @@
   function seedCrowdPeople() {
     if (!crowdLayer || !crowdLayer.loaded) return;
     crowdLayer.clear();
+    if (!crowdEnabled) return;
     const pathCells = collectCrowdPathCells();
     const count = Math.min(crowdCount, pathCells.length);
     if (!count) return;
@@ -11298,7 +11420,7 @@
   }
 
   function initCrowdLayer() {
-    if (crowdLayer || crowdLoadStarted || !window.TinyCrowdLayer) return;
+    if (crowdLayer || crowdLoadStarted || !window.TinyCrowdLayer || !crowdEnabled) return;
     crowdLoadStarted = true;
     crowdLayer = new window.TinyCrowdLayer({
       THREE,
@@ -12251,6 +12373,24 @@
     return mat;
   }
 
+  const particleMatCache = new Map();
+  function getCachedParticleMaterial(baseMat, opacity, colorHex) {
+    const qOpacity = Math.round(opacity * 16) / 16;
+    const key = baseMat.uuid + '|' + qOpacity + '|' + (colorHex !== undefined ? colorHex : 'default');
+    let hit = particleMatCache.get(key);
+    if (hit) return hit;
+    const mat = baseMat.clone();
+    if (colorHex !== undefined) {
+      mat.color.setHex(colorHex);
+    }
+    mat.opacity = qOpacity;
+    mat.userData = mat.userData || {};
+    mat.userData.cached = true;
+    particleMatCache.set(key, mat);
+    return mat;
+  }
+
+
   function prepareFadeable(group, opts) {
     const { ghost = false, opacity = 1, grayscale = false } = opts || {};
     group.userData.preview = !!ghost;
@@ -12364,6 +12504,7 @@
     const budgetMs = 3.5;
     const start = performance.now();
 
+    let count = 0;
     for (const root of opacityRoots) {
       const targetOpacity = root.userData.targetOpacity;
       if (targetOpacity === undefined) { opacityRoots.delete(root); continue; }
@@ -12418,9 +12559,10 @@
         opacityRoots.delete(root);
       }
 
+      count++;
       // Budget check — bail early if we've used our time slice.
       // The remaining roots will continue transitioning on the next frame.
-      if (performance.now() - start > budgetMs) {
+      if (count % 16 === 0 && performance.now() - start > budgetMs) {
         break;
       }
     }
@@ -12676,220 +12818,7 @@
     }
   }
 
-  // -------- Home world tile instancing (fork-style, zoom-aware LOD) --------
-  // One InstancedMesh pair (dirt + top) per terrain type for the entire editable
-  // home board. This is the main reason the fork can do 256²+ smoothly.
-  //
-  // LOD: when renderVisibleSize is large (zoomed out), we automatically swap
-  // the expensive roundedSlab caps for cheap BoxGeometry (same visual at
-  // distance, ~20× fewer triangles). When you zoom back in, we swap back.
-  //
-  // Elevation is handled with per-instance matrix (Y-scale on dirt column +
-  // Y-offset on top cap), exactly like the fork.
-
-  const homeTileBuckets = new Map(); // terrain id → bucket
-  let homeTileCapacity = 0;
-  let homeTileUseLowDetail = false;
-
-  let homeTileGeomDirt = null;
-  let homeTileGeomTop = null;
-  let homeTileGeomWater = null;
-
-  const HOME_TILE_LOW_DETAIL_THRESHOLD = 48; // kept for compatibility; caps are clean slabs in both modes
-
-  function ensureHomeTileGeoms() {
-    const wantLowDetail = (typeof renderVisibleSize === 'number' && renderVisibleSize > HOME_TILE_LOW_DETAIL_THRESHOLD);
-
-    if (homeTileGeomDirt && homeTileUseLowDetail === wantLowDetail) return;
-
-    homeTileUseLowDetail = wantLowDetail;
-
-    const dirtSize = TILE * 1.04;
-    homeTileGeomDirt = new THREE.BoxGeometry(dirtSize, DIRT_H, dirtSize);
-    homeTileGeomDirt.translate(0, DIRT_H / 2, 0); // bottom-anchored
-
-    homeTileGeomTop = new THREE.BoxGeometry(TILE * 1.0, TOP_H, TILE * 1.0);
-    homeTileGeomTop.translate(0, TOP_H / 2, 0);
-    homeTileGeomWater = new THREE.BoxGeometry(TILE * 1.0, TOP_H, TILE * 1.0);
-    homeTileGeomWater.translate(0, TOP_H / 2, 0);
-  }
-
-  function getHomeTileBucket(terrain) {
-    let b = homeTileBuckets.get(terrain);
-    if (b) return b;
-
-    ensureHomeTileGeoms();
-
-    const topMat = (terrain === 'path')  ? M.path :
-                   (terrain === 'water') ? M.water :
-                   (terrain === 'dirt')  ? M.dirtRich :
-                   (terrain === 'stone') ? M.stone :
-                   (terrain === 'lava')  ? M.lava :
-                   (terrain === 'sand')  ? M.sand :
-                   (terrain === 'snow')  ? M.snow : M.grass;
-
-    const riserMat = (terrain === 'path')  ? M.pathTrim :
-                     (terrain === 'water') ? M.waterDk :
-                     (terrain === 'dirt')  ? M.dirtRich :
-                     (terrain === 'stone') ? M.stone :
-                     (terrain === 'lava')  ? M.lava :
-                     (terrain === 'sand')  ? M.sand :
-                     (terrain === 'snow')  ? M.snow : M.dirt;
-
-    const dirtMesh = new THREE.InstancedMesh(homeTileGeomDirt, riserMat, homeTileCapacity);
-    const topMesh  = new THREE.InstancedMesh(homeTileGeomTop, topMat, homeTileCapacity);
-
-    for (const m of [dirtMesh, topMesh]) {
-      m.castShadow = false;
-      m.receiveShadow = true;
-      m.count = 0;
-      m.frustumCulled = false; // ortho camera usually sees the whole home board
-      m.userData = { isHomeTileInstance: true, terrain, keyAt: [] };
-    }
-    topMesh.userData.keyAt = dirtMesh.userData.keyAt;
-
-    worldGroup.add(dirtMesh);
-    worldGroup.add(topMesh);
-
-    b = {
-      terrain,
-      dirtMesh,
-      topMesh,
-      slots: new Map(), // 'x,z' → idx
-      keyAt: dirtMesh.userData.keyAt,
-      count: 0
-    };
-    homeTileBuckets.set(terrain, b);
-    return b;
-  }
-
-  function _writeHomeTileInstance(b, idx, posX, posZ, rise) {
-    const DUMMY = new THREE.Object3D();
-    const dirtHeight = DIRT_H + rise;
-    const sy = dirtHeight / DIRT_H;
-
-    DUMMY.scale.set(1, sy, 1);
-    DUMMY.position.set(posX, -DIRT_H, posZ);
-    DUMMY.updateMatrix();
-    b.dirtMesh.setMatrixAt(idx, DUMMY.matrix);
-
-    DUMMY.scale.set(1, 1, 1);
-    DUMMY.position.set(posX, rise, posZ);
-    DUMMY.updateMatrix();
-    b.topMesh.setMatrixAt(idx, DUMMY.matrix);
-  }
-
-  function setHomeTileInstance(x, z, terrain, posX, posZ, rise = 0) {
-    const key = x + ',' + z;
-    const existing = findHomeTileBucketFor(key);
-
-    if (existing && existing.terrain !== terrain) {
-      _removeFromHomeTileBucket(existing, key);
-    } else if (existing && existing.terrain === terrain) {
-      const idx = existing.slots.get(key);
-      _writeHomeTileInstance(existing, idx, posX, posZ, rise);
-      _flushHomeTileBucket(existing);
-      return;
-    }
-
-    if (!terrain) return;
-
-    const b = getHomeTileBucket(terrain);
-    const idx = b.count;
-
-    _writeHomeTileInstance(b, idx, posX, posZ, rise);
-    b.slots.set(key, idx);
-    b.keyAt[idx] = key;
-    b.count++;
-    _flushHomeTileBucket(b);
-  }
-
-  function clearHomeTileInstance(x, z) {
-    const key = x + ',' + z;
-    const b = findHomeTileBucketFor(key);
-    if (b) _removeFromHomeTileBucket(b, key);
-  }
-
-  function findHomeTileBucketFor(key) {
-    for (const b of homeTileBuckets.values()) {
-      if (b.slots.has(key)) return b;
-    }
-    return null;
-  }
-
-  function _removeFromHomeTileBucket(b, key) {
-    const idx = b.slots.get(key);
-    if (idx === undefined) return;
-    const lastIdx = b.count - 1;
-
-    if (idx !== lastIdx) {
-      const TMP = new THREE.Matrix4();
-      b.dirtMesh.getMatrixAt(lastIdx, TMP);
-      b.dirtMesh.setMatrixAt(idx, TMP);
-      b.topMesh.getMatrixAt(lastIdx, TMP);
-      b.topMesh.setMatrixAt(idx, TMP);
-      const movedKey = b.keyAt[lastIdx];
-      b.keyAt[idx] = movedKey;
-      b.slots.set(movedKey, idx);
-    }
-
-    b.slots.delete(key);
-    b.keyAt[lastIdx] = null;
-    b.count--;
-    _flushHomeTileBucket(b);
-  }
-
-  function _flushHomeTileBucket(b) {
-    b.dirtMesh.instanceMatrix.needsUpdate = true;
-    b.topMesh.instanceMatrix.needsUpdate = true;
-    b.dirtMesh.count = b.count;
-    b.topMesh.count = b.count;
-  }
-
-  function initHomeTileInstancing(gridSize) {
-    homeTileCapacity = gridSize * gridSize;
-    // Clear any previous buckets (for grid size changes)
-    for (const b of homeTileBuckets.values()) {
-      worldGroup.remove(b.dirtMesh);
-      worldGroup.remove(b.topMesh);
-    }
-    homeTileBuckets.clear();
-    homeTileGeomDirt = null;
-    homeTileGeomTop = null;
-    homeTileGeomWater = null;
-  }
-
-  // Rebuild all home tile instances when LOD mode changes due to zoom
-  function rebuildHomeTileInstancesLOD() {
-    const newLowDetail = (typeof renderVisibleSize === 'number' && renderVisibleSize > HOME_TILE_LOW_DETAIL_THRESHOLD);
-    if (newLowDetail === homeTileUseLowDetail) return;
-
-    // Collect current state
-    const currentState = [];
-    for (const b of homeTileBuckets.values()) {
-      for (const [key, idx] of b.slots) {
-        const [x, z] = key.split(',').map(Number);
-        const rise = elevAtHome ? elevAtHome.get(key) || 0 : 0; // we'll add elevAtHome later if needed
-        currentState.push({ x, z, terrain: b.terrain, rise });
-      }
-    }
-
-    // Clear everything
-    for (const b of homeTileBuckets.values()) {
-      worldGroup.remove(b.dirtMesh);
-      worldGroup.remove(b.topMesh);
-    }
-    homeTileBuckets.clear();
-    homeTileGeomDirt = null;
-    homeTileGeomTop = null;
-
-    // Re-create all instances with new geometry LOD
-    for (const { x, z, terrain, rise } of currentState) {
-      const posX = x * TILE;
-      const posZ = z * TILE;
-      setHomeTileInstance(x, z, terrain, posX, posZ, rise);
-    }
-  }
+  // Unused Home world tile instancing pruned for performance and size optimization.
 
   // Cheap single-mesh version used for ghost/preview boards.
   // Full makeTile creates riser + top + decals (multiple meshes per tile).
@@ -17211,6 +17140,7 @@
     const crowdZoneRadiusEl = document.getElementById('crowd-zone-radius');
     const crowdShowZonesEl = document.getElementById('crowd-show-zones');
     const crowdPausedEl = document.getElementById('crowd-paused');
+    const crowdEnabledEl = document.getElementById('crowd-enabled');
     const crowdDebugEl = document.getElementById('crowd-debug');
     const crowdReseedEl = document.getElementById('crowd-reseed');
     const crowdModeEl = document.getElementById('crowd-mode');
@@ -17221,6 +17151,7 @@
     const crowdShowZonesLiveEl = document.getElementById('crowd-show-zones-live');
     const crowdShowArrowsLiveEl = document.getElementById('crowd-show-arrows-live');
     const crowdPausedLiveEl = document.getElementById('crowd-paused-live');
+    const crowdEnabledLiveEl = document.getElementById('crowd-enabled-live');
     const crowdReseedLiveEl = document.getElementById('crowd-reseed-live');
     const crowdDebugLiveEl = document.getElementById('crowd-debug-live');
     const ghostOpacityEl = document.getElementById('render-ghost-opacity');
@@ -17305,6 +17236,7 @@
       if (crowdZoneRadiusEl) crowdZoneRadiusEl.value = String(Math.round(crowdZoneRadius * 100));
       if (crowdShowZonesEl) crowdShowZonesEl.checked = !!crowdShowZones;
       if (crowdPausedEl) crowdPausedEl.checked = !!crowdPaused;
+      if (crowdEnabledEl) crowdEnabledEl.checked = !!crowdEnabled;
       if (crowdDebugEl) crowdDebugEl.checked = !!crowdDebug;
       if (crowdModeEl) crowdModeEl.value = crowdMode;
       if (crowdCountLiveEl) crowdCountLiveEl.value = String(crowdCount);
@@ -17314,6 +17246,7 @@
       if (crowdShowZonesLiveEl) crowdShowZonesLiveEl.checked = !!crowdShowZones;
       if (crowdShowArrowsLiveEl) crowdShowArrowsLiveEl.checked = !!crowdShowArrows;
       if (crowdPausedLiveEl) crowdPausedLiveEl.checked = !!crowdPaused;
+      if (crowdEnabledLiveEl) crowdEnabledLiveEl.checked = !!crowdEnabled;
       resolutionValue.textContent = resolutionEl.value + '%';
       distanceValue.textContent = distanceEl.value;
       visibleSizeValue.textContent = visibleSizeEl.value + 'x' + visibleSizeEl.value;
@@ -17381,6 +17314,7 @@
       localStorage.setItem(RENDER_LS.voxelTerrain, renderVoxelTerrain ? '1' : '0');
       localStorage.setItem(RENDER_LS.terrainVoxelResolution, renderTerrainVoxelResolution);
       localStorage.setItem(RENDER_LS.autoExpand, renderAutoExpand ? '1' : '0');
+      localStorage.setItem(RENDER_LS.crowdEnabled, crowdEnabled ? '1' : '0');
     }
 
     function applyFromControls() {
@@ -17388,6 +17322,7 @@
       const oldVoxelBevel = renderVoxelBevel;
       const oldVoxelTerrain = renderVoxelTerrain;
       const oldTerrainVoxelResolution = renderTerrainVoxelResolution;
+      const oldCrowdEnabled = crowdEnabled;
       setShadowQuality(shadowEl.value);
       setRenderResolutionScale(parseInt(resolutionEl.value, 10) / 100);
       setRenderVisibleDistance(parseInt(distanceEl.value, 10));
@@ -17440,7 +17375,12 @@
       if (crowdShowArrowsLiveEl) crowdShowArrows = !!crowdShowArrowsLiveEl.checked;
       if (crowdPausedLiveEl) crowdPaused = !!crowdPausedLiveEl.checked;
       if (crowdDebugEl) crowdDebug = !!crowdDebugEl.checked;
-      applyCrowdSettings();
+      if (crowdEnabledEl) crowdEnabled = !!crowdEnabledEl.checked;
+      if (crowdEnabledLiveEl) crowdEnabled = !!crowdEnabledLiveEl.checked;
+      applyCrowdSettings({ reseed: oldCrowdEnabled !== crowdEnabled });
+      if (crowdEnabled && !crowdLayer) {
+        initCrowdLayer();
+      }
       if (Math.abs(oldVoxelGap - renderVoxelGap) > 0.001 || Math.abs(oldVoxelBevel - renderVoxelBevel) > 0.001) scheduleVoxelStampRefresh();
       if (oldVoxelTerrain !== renderVoxelTerrain || oldTerrainVoxelResolution !== renderTerrainVoxelResolution) rebuildTerrainRender();
       updateGhostRenderBubble();
@@ -17479,7 +17419,7 @@
     });
     closeBtn.addEventListener('click', () => { closeTinyModal(modal); });
     modal.addEventListener('click', e => { if (e.target === modal) closeTinyModal(modal); });
-    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, distanceMistEl, backdropEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, shaderAntialiasEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl, voxelGapEl, voxelBevelEl, voxelTerrainEl, terrainVoxelResolutionEl, crowdCountEl, crowdScaleEl, crowdSpeedEl, crowdBobEl, crowdSwayEl, crowdLeanEl, crowdZoneRadiusEl, crowdShowZonesEl, crowdPausedEl, crowdDebugEl, crowdModeEl, crowdCountLiveEl, crowdScaleLiveEl, crowdSpeedLiveEl, crowdZoneRadiusLiveEl, crowdShowZonesLiveEl, crowdShowArrowsLiveEl, crowdPausedLiveEl]) {
+    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, distanceMistEl, backdropEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, shaderAntialiasEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl, voxelGapEl, voxelBevelEl, voxelTerrainEl, terrainVoxelResolutionEl, crowdCountEl, crowdScaleEl, crowdSpeedEl, crowdBobEl, crowdSwayEl, crowdLeanEl, crowdZoneRadiusEl, crowdShowZonesEl, crowdPausedEl, crowdEnabledEl, crowdDebugEl, crowdModeEl, crowdCountLiveEl, crowdScaleLiveEl, crowdSpeedLiveEl, crowdZoneRadiusLiveEl, crowdShowZonesLiveEl, crowdShowArrowsLiveEl, crowdPausedLiveEl, crowdEnabledLiveEl]) {
       if (!el) continue;
       el.addEventListener('input', applyFromControls);
       el.addEventListener('change', applyFromControls);
@@ -17537,7 +17477,11 @@
       crowdDebug = true;
       crowdMode = 'wander';
       crowdShowArrows = true;
+      crowdEnabled = true;
       applyCrowdSettings({ reseed: true });
+      if (crowdEnabled && !crowdLayer) {
+        initCrowdLayer();
+      }
       renderAutoExpand = false;
       const autoExpandEl = document.getElementById('minimap-autoexpand');
       if (autoExpandEl) autoExpandEl.checked = false;
@@ -18860,7 +18804,8 @@
       || (houseObj.userData.chimneyTop ? [houseObj.userData.chimneyTop] : []);
     for (const top of tops) {
       if (smokeParticles.length >= MAX_SMOKE_PARTICLES) break;
-      const s = new THREE.Mesh(smokeGeo, smokeMat.clone());
+      const initialOpacity = 0.65;
+      const s = new THREE.Mesh(smokeGeo, getCachedParticleMaterial(smokeMat, initialOpacity));
       s.frustumCulled = true;
       s.castShadow = false;
       s.receiveShadow = false;
@@ -18889,12 +18834,13 @@
       s.position.y += s.userData.vy * dt;
       s.position.x += s.userData.vx * dt;
       s.position.z += s.userData.vz * dt;
-      s.material.opacity = (s.userData.maxOpacity !== undefined ? s.userData.maxOpacity : 0.65) * (1 - t);
+      const maxOp = s.userData.maxOpacity !== undefined ? s.userData.maxOpacity : 0.65;
+      const op = maxOp * (1 - t);
+      s.material = getCachedParticleMaterial(smokeMat, op, s.userData.colorHex);
       const sc = 1 + t * 1.4;
       s.scale.set(sc, sc, sc);
       if (t >= 1) {
         if (s.parent) s.parent.remove(s);
-        s.material.dispose();
         smokeParticles.splice(i, 1);
       }
     }
@@ -18913,11 +18859,11 @@
   // existing drop-in animation.
   const squashAnims = [];
   function spawnDustBurst(x, y, z, count = 14) {
+    const colorHex = 0xcab38a;
     for (let i = 0; i < count; i++) {
       if (smokeParticles.length >= MAX_SMOKE_PARTICLES) break;
-      const d = new THREE.Mesh(smokeGeo, smokeMat.clone());
-      d.material.color.setHex(0xcab38a);
-      d.material.opacity = 0.95;
+      const initialOpacity = 0.95;
+      const d = new THREE.Mesh(smokeGeo, getCachedParticleMaterial(smokeMat, initialOpacity, colorHex));
       const a = (i / count) * Math.PI * 2 + Math.random() * 0.3;
       const r = 0.05 + Math.random() * 0.08;
       d.position.set(x + Math.cos(a) * r, y + 0.04 + Math.random() * 0.03, z + Math.sin(a) * r);
@@ -18928,6 +18874,7 @@
         vy: 0.35 + Math.random() * 0.35,
         vx: Math.cos(a) * (0.85 + Math.random() * 0.5),
         vz: Math.sin(a) * (0.85 + Math.random() * 0.5),
+        colorHex: colorHex
       };
       xrWorldRoot.add(d);
       smokeParticles.push(d);
@@ -19116,7 +19063,7 @@
       const bright = Math.random() < 0.6;
       const opacity = bright ? (0.7 + Math.random() * 0.25) : (0.4 + Math.random() * 0.25);
       const mat = cloneCloudMat(bright ? M.cloud : M.cloudShade, opacity);
-      const mesh = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), mat);
+      const mesh = new THREE.Mesh(getDodecahedronGeometry(r), mat);
       mesh.position.set(
         (Math.random() - 0.5) * 3.2,
         Math.random() * 0.9,
@@ -19535,7 +19482,7 @@
       }
       mesh.setMatrixAt(i, m);
 
-      if (performance.now() - start > budgetMs) break;
+      if (i % 16 === 0 && performance.now() - start > budgetMs) break;
     }
     mesh.instanceMatrix.needsUpdate = true;
   }
@@ -20028,7 +19975,8 @@
 
   function spawnCropDust(x, y, z) {
     if (cropDustParticles.length > 180) return;
-    const p = new THREE.Mesh(cropDustGeo, cropDustMat.clone());
+    const initialOpacity = 0.52;
+    const p = new THREE.Mesh(cropDustGeo, getCachedParticleMaterial(cropDustMat, initialOpacity));
     p.position.set(x + (Math.random() - 0.5) * 0.34, y, z + (Math.random() - 0.5) * 0.52);
     p.scale.setScalar(0.8 + Math.random() * 0.8);
     p.userData = {
@@ -20056,12 +20004,11 @@
       p.position.x += p.userData.vx * dt;
       p.position.y += p.userData.vy * dt;
       p.position.z += p.userData.vz * dt;
-      p.material.opacity = 0.52 * (1 - u);
+      p.material = getCachedParticleMaterial(cropDustMat, 0.52 * (1 - u));
       const s = 1 + u * 3.0;
       p.scale.set(s, s * 0.65, s);
       if (u >= 1) {
         if (p.parent) p.parent.remove(p);
-        p.material.dispose();
         cropDustParticles.splice(i, 1);
       }
     }
@@ -20209,7 +20156,7 @@
     tickWeather(dt);
     updateClouds(dt);
     tickVehicles(dt);
-    if (crowdLayer) crowdLayer.update(dt, camera);
+    if (crowdEnabled && crowdLayer) crowdLayer.update(dt, camera);
     updateCropDuster(dt);
     if (useWindowedHomeRendering()) {
       requestHomeRenderWindowSync();
@@ -24950,6 +24897,139 @@
     window.addEventListener('tinyworld:grid-resized', paintSize);
     // First paint.
     requestMinimapRepaint();
+  })();
+
+  (function wireCrowdPanel() {
+    const panel = document.getElementById('crowd-panel');
+    const toggle = document.getElementById('crowd-panel-toggle');
+    const handle = document.getElementById('crowd-panel-handle');
+    if (!panel) return;
+
+    // --- Collapsibility ---
+    const COLLAPSED_KEY = 'tinyworld:crowd.collapsed';
+
+    function setPanelHidden(hidden) {
+      if (hidden) {
+        panel.classList.add('hidden');
+      } else {
+        panel.classList.remove('hidden');
+      }
+      if (handle) {
+        handle.hidden = !hidden;
+      }
+      try { localStorage.setItem(COLLAPSED_KEY, hidden ? '1' : '0'); } catch (_) {}
+    }
+
+    // Restore collapsed state
+    try {
+      const isCollapsed = localStorage.getItem(COLLAPSED_KEY) === '1';
+      setPanelHidden(isCollapsed);
+    } catch (_) {
+      setPanelHidden(false);
+    }
+
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        setPanelHidden(true);
+      });
+    }
+
+    if (handle) {
+      handle.addEventListener('click', () => {
+        setPanelHidden(false);
+      });
+    }
+
+    // --- Draggability ---
+    const POS_KEY = 'tinyworld:crowd.pos';
+
+    function applyStoredPos() {
+      try {
+        const raw = localStorage.getItem(POS_KEY);
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        if (!Number.isFinite(p.top) || !Number.isFinite(p.left)) return;
+
+        const w = panel.offsetWidth || 248;
+        const h = panel.offsetHeight || 300;
+        const top = Math.max(8, Math.min(window.innerHeight - h - 8, p.top));
+        const left = Math.max(8, Math.min(window.innerWidth - w - 8, p.left));
+
+        panel.style.top = top + 'px';
+        panel.style.left = left + 'px';
+        panel.style.right = 'auto';
+        panel.style.bottom = 'auto';
+
+        if (handle) {
+          const handleH = handle.offsetHeight || 72;
+          const handleTop = Math.max(8, Math.min(window.innerHeight - handleH - 8, top + h / 2));
+          handle.style.top = handleTop + 'px';
+        }
+      } catch (_) {}
+    }
+
+    let drag = null;
+    panel.addEventListener('pointerdown', e => {
+      // Don't drag when interacting with form controls or buttons
+      if (e.target.closest('button, select, input, a, textarea')) return;
+
+      const r = panel.getBoundingClientRect();
+      drag = {
+        startX: e.clientX,
+        startY: e.clientY,
+        topAtStart: r.top,
+        leftAtStart: r.left,
+        moved: false,
+      };
+      try { panel.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+
+    panel.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      panel.classList.add('dragging');
+
+      const w = panel.offsetWidth;
+      const h = panel.offsetHeight;
+      const top = Math.max(8, Math.min(window.innerHeight - h - 8, drag.topAtStart + dy));
+      const left = Math.max(8, Math.min(window.innerWidth - w - 8, drag.leftAtStart + dx));
+
+      panel.style.top = top + 'px';
+      panel.style.left = left + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+
+      if (handle) {
+        const handleH = handle.offsetHeight || 72;
+        const handleTop = Math.max(8, Math.min(window.innerHeight - handleH - 8, top + h / 2));
+        handle.style.top = handleTop + 'px';
+      }
+    });
+
+    function endDrag() {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      panel.classList.remove('dragging');
+      if (moved) {
+        const r = panel.getBoundingClientRect();
+        try {
+          localStorage.setItem(POS_KEY, JSON.stringify({
+            top: Math.round(r.top),
+            left: Math.round(r.left),
+          }));
+        } catch (_) {}
+      }
+    }
+
+    panel.addEventListener('pointerup', endDrag);
+    panel.addEventListener('pointercancel', endDrag);
+    applyStoredPos();
+
+    window.addEventListener('resize', applyStoredPos);
   })();
 
   // -------- view-modes / time-weather / dev-mode popups --------
