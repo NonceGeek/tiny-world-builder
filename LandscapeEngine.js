@@ -491,6 +491,11 @@ class LandscapeEngine {
 
     this.floraMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.floraMatLow = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0 });
+
+    // TinyWorld integration: use a built-in lit material only for the
+    // realistic visible terrain path so Three.js can apply native shadow maps
+    // and scene fog. Low-poly mode intentionally keeps the custom cel shader.
+    this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, fog: true });
   }
 
   _mergeColored(entries) {
@@ -734,7 +739,7 @@ class LandscapeEngine {
   _makeChunk(cx, cz) {
     const group = new THREE.Group();
     const lowPoly = this.styleMode === 'lowpoly';
-    const sandM = lowPoly ? this.sandMatLowPoly : this.sandMat;
+    const sandM = lowPoly ? this.sandMatLowPoly : this.terrainMat;
     const rockM = lowPoly ? this.rockMatLowPoly : this.rockMat;
 
     const geo = new THREE.PlaneGeometry(this.CHUNK_SIZE, this.CHUNK_SIZE, this.CHUNK_RES, this.CHUNK_RES);
@@ -780,6 +785,8 @@ class LandscapeEngine {
 
     const mesh = new THREE.Mesh(geo, sandM);
     mesh.position.set(cxW, 0, czW);
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
     group.add(mesh);
 
     // --- Scatter Instanced Rocks ---
@@ -813,6 +820,8 @@ class LandscapeEngine {
     }
     rocks.count = added;
     rocks.instanceMatrix.needsUpdate = true;
+    rocks.castShadow = true;
+    rocks.receiveShadow = true;
     group.add(rocks);
 
     // --- Scatter Flora Clutter ---
@@ -891,6 +900,10 @@ class LandscapeEngine {
     cacti.instanceMatrix.needsUpdate = true;
     shrubs.instanceMatrix.needsUpdate = true;
     boulders.instanceMatrix.needsUpdate = true;
+    for (const inst of [pines, cacti, shrubs, boulders]) {
+      inst.castShadow = true;
+      inst.receiveShadow = true;
+    }
 
     if (nPine > 0) group.add(pines);
     if (nCactus > 0) group.add(cacti);
@@ -906,7 +919,7 @@ class LandscapeEngine {
   _makeFarChunk(cx, cz) {
     const group = new THREE.Group();
     const lowPoly = this.styleMode === 'lowpoly';
-    const sandM = lowPoly ? this.sandMatLowPoly : this.sandMat;
+    const sandM = lowPoly ? this.sandMatLowPoly : this.terrainMat;
 
     const geo = new THREE.PlaneGeometry(this.FAR_CHUNK_SIZE, this.FAR_CHUNK_SIZE, this.FAR_CHUNK_RES, this.FAR_CHUNK_RES);
     geo.rotateX(-Math.PI / 2);
@@ -945,6 +958,8 @@ class LandscapeEngine {
 
     const mesh = new THREE.Mesh(geo, sandM);
     mesh.position.set(cxW, 0, czW);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
     group.add(mesh);
 
     this.scene.add(group);
@@ -1064,7 +1079,7 @@ class LandscapeEngine {
       new THREE.Plane(new THREE.Vector3( 0, 0,-1), max.z),  // z <= max.z
       new THREE.Plane(new THREE.Vector3( 0, 0, 1), -min.z), // z >= min.z
     ];
-    const builtinMats = [this.rockMat, this.rockMatLowPoly, this.floraMat, this.floraMatLow];
+    const builtinMats = [this.rockMat, this.rockMatLowPoly, this.floraMat, this.floraMatLow, this.terrainMat];
     for (const m of builtinMats) {
       m.clippingPlanes = this._clipPlanes;
     }
@@ -1082,7 +1097,7 @@ class LandscapeEngine {
       m.uniforms.clipEnabled.value = 0.0;
     }
     this._clipPlanes = [];
-    const builtinMats = [this.rockMat, this.rockMatLowPoly, this.floraMat, this.floraMatLow];
+    const builtinMats = [this.rockMat, this.rockMatLowPoly, this.floraMat, this.floraMatLow, this.terrainMat];
     for (const m of builtinMats) {
       m.clippingPlanes = null;
     }
@@ -1224,6 +1239,7 @@ class LandscapeEngine {
 
     this.sandMat.dispose();
     this.sandMatLowPoly.dispose();
+    this.terrainMat.dispose();
     this.rockMat.dispose();
     this.rockMatLowPoly.dispose();
     this.rockGeo.dispose();

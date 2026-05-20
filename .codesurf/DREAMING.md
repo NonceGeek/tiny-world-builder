@@ -74,18 +74,32 @@ This workspace is the **Tiny World Builder** project: a single-file, no-bundler,
 4. `memory_store` mutex held across provider `await` — blocks other requests.
 5. No SSE keep-alive/heartbeat — idle connections time out at load balancer.
 
-Items 1, 2, and 4 are real production risks.
+Items 1, 2, and 4 are real production risks. No Hermes work occurred in recent sessions.
 
 ---
 
 ## Active Automated Workflows (OpenClaw crons)
 
-All running cleanly as of 2026-05-20 with no script errors reported. Keep-Alive runs every 15 min, Urgent Email Alert hourly, Tom Doerr Tweet Tracker ~every 2 h. Tweet tracker fired notifications twice today covering WWDC 2026 AI/MCP and Claude Code topics. OpenClaw agent `mc-gateway-894a3d5b` had repeated connection-refused failures — worth investigating.
+| Cron | ID | Schedule | Health |
+|---|---|---|---|
+| Keep-Alive | `a24c6f0b` | every 15 min | ✅ HEARTBEAT_OK (confirmed 12:21 UTC) |
+| Urgent Email Alert | `4e55bac5` | hourly | ✅ HEARTBEAT_OK (11:30 and 12:30 UTC) — note: consistently shows assistant turn failures before producing output; script itself runs clean |
+| Tom Doerr Tweet Tracker | `cebd05e0` | ~every 2 h | ✅ Fired at ~09:06 and ~12:37 UTC on 2026-05-20; topics included WWDC 2026 AI/MCP and Claude Code; email sent to jason@bouncingfish.com |
+| mc-gateway | `894a3d5b` | heartbeat | ❌ Ongoing "connection refused" failures; multiple assistant turns producing no content; root cause unresolved |
+| Lead C3f78d0c (Ava) | — | heartbeat | ✅ HEARTBEAT_OK across multiple cycles; full config confirmed (BASE_URL, AUTH_TOKEN, BOARD_ID `c3f78d0c`, AGENT_NAME `Ava`, AGENT_ID `9f5f3df9`) |
+
+---
+
+## Feature Interest — Ant Simulation
+
+User expressed interest (2026-05-20) in adding an Ant Simulation to Tiny World Builder. Discussed approach: ants as animated sprites or tiny 3D meshes, random-walk logic, pheromone paths as a terrain layer, colony nests as a new object kind. No plan or skill written yet — open feature thread.
 
 ---
 
 ## Open Threads
 
-- Hermes `src/responses.rs` stub needs replacement with a real gateway handler before any parity release.
-- Streaming handler items 1, 2, 4 should be hardened before production.
-- OpenClaw mc-gateway peer connectivity issue unresolved.
+- **Hermes `src/responses.rs`** stub must be replaced with a real gateway handler before any parity release.
+- **Streaming handler** risks 1, 2, and 4 should be hardened before production.
+- **OpenClaw mc-gateway** (`894a3d5b`) connection-refused failures are ongoing and unresolved.
+- **Ant Simulation** feature discussed but not yet planned or implemented.
+- **Urgent Email Alert** pre-content turn failures are a recurring pattern; worth investigating if cron reliability matters.

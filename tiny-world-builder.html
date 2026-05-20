@@ -5169,8 +5169,9 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, BASE_DPR_CAP) * renderResolutionScale);
   }
 
+  var landscapeGhostBoardsSuppressed = false;
   function ghostBoardsEnabledForGrid() {
-    return !!renderAutoExpand && renderBudgetForGrid(GRID).ghostRadius > 0;
+    return !!renderAutoExpand && !landscapeGhostBoardsSuppressed && renderBudgetForGrid(GRID).ghostRadius > 0;
   }
 
   function clearGhostBoardsOnly() {
@@ -5598,6 +5599,7 @@
     clampTargetToHomeBoard();
     updateCamera();
     if (renderAutoExpand) ensureGhostBoardsAroundTarget();
+    updateLandscapeClipBounds();
     if (typeof requestMinimapRepaint === 'function') requestMinimapRepaint();
   }
   function panCameraByCells(dx, dz) {
@@ -5608,6 +5610,7 @@
     clampTargetToHomeBoard();
     updateCamera();
     if (renderAutoExpand) ensureGhostBoardsAroundTarget();
+    updateLandscapeClipBounds();
     if (typeof requestMinimapRepaint === 'function') requestMinimapRepaint();
   }
   updateCamera();
@@ -13961,7 +13964,11 @@
     if (entry.tile) {
       worldGroup.remove(entry.tile);
       disposeGroup(entry.tile);
+      entry.tile = null;
     }
+    // LandscapeEngine mode uses a hidden logical grass board for x/z
+    // reference only. Do not build discrete base-tile meshes at all.
+    if (landscapeMeshMode) return;
 
     const cell = getWorldCell(x, z);
     const tile = makeTile(cell.terrain, {
@@ -13980,11 +13987,6 @@
     prepareFadeable(tile, { opacity: opacityAtWorldPosition(p.x, p.z), grayscale: isOutsideHomeGrid(x, z) });
     worldGroup.add(tile);
     entry.tile = tile;
-
-    // In landscape mesh mode the engine's continuous terrain replaces the
-    // discrete tile grid visually, but tiles stay in the scene for
-    // hit-testing and position anchoring.
-    if (landscapeMeshMode) tile.visible = false;
 
     if (animate) animateDrop(tile, 2.4, 0.42, delay, easeOutCubic, false);
   }
@@ -14023,6 +14025,13 @@
       worldGroup.remove(entry.object);
       disposeGroup(entry.object);
       entry.object = null;
+    }
+    // Landscape mode only renders central-board objects on the continuous
+    // terrain. Never render out-of-home override/preview objects behind
+    // the island fade.
+    if (landscapeMeshMode && isOutsideHomeGrid(x, z)) {
+      renderCellExtras(x, z);
+      return;
     }
     // Always rebuild extras when the main object is rebuilt — they
     // depend on world[x][z].extras and visually sit alongside.
@@ -14194,6 +14203,7 @@
       disposeGroup(m);
     }
     entry.extras.length = 0;
+    if (landscapeMeshMode && isOutsideHomeGrid(x, z)) return;
     const cell = world[x] && world[x][z];
     if (!cell || !cell.extras || !cell.extras.length) return;
     const p = tilePos(x, z);
@@ -20355,9 +20365,11 @@
     tickVehicles(dt);
     if (crowdEnabled && crowdLayer) crowdLayer.update(dt, camera);
     updateCropDuster(dt);
-    // Stream LandscapeEngine chunks when in landscape mesh mode
+    // Stream LandscapeEngine chunks when in landscape mesh mode. Auto-expand
+    // reveals by moving the clip window, not by building ghost/base boards.
     if (landscapeMeshMode && landscapeMeshEngine) {
       landscapeMeshEngine.update(landscapeMeshFocusPos(), dt);
+      if (renderAutoExpand) updateLandscapeClipBounds();
     }
     if (useWindowedHomeRendering()) {
       requestHomeRenderWindowSync();
@@ -21629,7 +21641,36 @@
     });
 
     landscapeMeshMode = true;
+    landscapeGhostBoardsSuppressed = true;
+    removeLandscapeLegacyMeshes();
     updateLandscapeClipBounds();
+  }
+
+  function removeLandscapeLegacyMeshes() {
+    clearGhostBoardsOnly();
+    for (const key of Object.keys(cellMeshes)) {
+      const [x, z] = key.split(',').map(Number);
+      const entry = cellMeshes[key];
+      if (!entry) continue;
+      if (entry.tile) {
+        worldGroup.remove(entry.tile);
+        disposeGroup(entry.tile);
+        entry.tile = null;
+      }
+      if (isOutsideHomeGrid(x, z)) {
+        if (entry.object) {
+          worldGroup.remove(entry.object);
+          disposeGroup(entry.object);
+        }
+        if (entry.extras) {
+          for (const m of entry.extras) {
+            worldGroup.remove(m);
+            disposeGroup(m);
+          }
+        }
+        delete cellMeshes[key];
+      }
+    }
   }
 
   function disposeLandscapeCutCaps() {
@@ -21690,8 +21731,8 @@
     const step = 25;
     const min = (LANDSCAPE_MESH_OFFSET - 0.5) * step;
     const max = (LANDSCAPE_MESH_OFFSET + GRID - 0.5) * step;
-    const bottomY = -24;
-    const fadeDepth = 34;
+    const holdDepth = 14;
+    const fadeDepth = 58;
     const positions = [];
     const colors = [];
     const alphas = [];
@@ -21705,22 +21746,23 @@
       const wx = side === 'e' ? max : side === 'w' ? min : a;
       const wz = side === 's' ? max : side === 'n' ? min : a;
       const h = landscapeMeshEngine.getHeight(wx, wz);
-      const fadeY = Math.max(bottomY, h - fadeDepth);
+      const holdY = h - holdDepth;
+      const fadeY = h - fadeDepth;
       if (landscapeMeshEngine._strataColor) {
         landscapeMeshEngine._strataColor(h, color);
       } else {
         color.setHex(0x8a6a48);
       }
-      // Three vertical samples: real terrain colour at the slice line,
-      // then a quick opaque colour-fade to the scene background. The lower
-      // face still writes depth, so nothing behind it shows through.
-      positions.push(wx, h, wz, wx, fadeY, wz, wx, bottomY, wz);
+      // Three vertical samples: keep a little real terrain colour under the
+      // cut line, then fade to scene background and stop. No bottom/base
+      // plate is rendered below the fade edge.
+      positions.push(wx, h, wz, wx, holdY, wz, wx, fadeY, wz);
       colors.push(
         color.r, color.g, color.b,
-        fog.r, fog.g, fog.b,
+        color.r, color.g, color.b,
         fog.r, fog.g, fog.b
       );
-      alphas.push(1.0, 0.0, 0.0);
+      alphas.push(1.0, 1.0, 0.0);
     }
 
     for (let i = 0; i < GRID; i++) {
@@ -21805,24 +21847,24 @@
   // vertical cut caps so the board reads as a chunk sliced out of a larger map.
   function updateLandscapeClipBounds() {
     if (!landscapeMeshEngine) return;
-    if (ghostBoardsEnabledForGrid()) {
-      // Infinite terrain — no clipping.
-      landscapeMeshEngine.clearClipBounds();
-      disposeLandscapeCutCaps();
-    } else {
-      // LandscapeEngine shader clipping uses the transformed scene/world
-      // position, not raw engine coordinates. Clip to the visible builder
-      // board edges so 8x8/20x20 landscape boards render as clean cutouts.
-      const pad = 0.001;
-      landscapeMeshEngine.setClipBounds(
-        new THREE.Vector3(-GRID / 2 - pad, -1e6, -GRID / 2 - pad),
-        new THREE.Vector3( GRID / 2 + pad,  1e6,  GRID / 2 + pad)
-      );
-      rebuildLandscapeCutCaps();
-    }
+    // Landscape mode never uses legacy ghost boards. Auto-expand is handled
+    // by moving the LandscapeEngine clip window with the camera target while
+    // the engine streams real terrain chunks underneath.
+    const pad = 0.001;
+    const half = renderAutoExpand ? Math.max(GRID / 2, (renderVisibleSize || GRID) / 2) : GRID / 2;
+    const cx = renderAutoExpand ? target.x : 0;
+    const cz = renderAutoExpand ? target.z : 0;
+    landscapeMeshEngine.setClipBounds(
+      new THREE.Vector3(cx - half - pad, -1e6, cz - half - pad),
+      new THREE.Vector3(cx + half + pad,  1e6, cz + half + pad)
+    );
+    // Do not render synthetic base/cut-cap/fog geometry. Pixel edge mode sees
+    // helper meshes, so landscape mode renders only the actual engine mesh plus
+    // central-board objects placed onto it.
+    disposeLandscapeCutCaps();
   }
 
-  function disposeLandscapeMesh() {
+  function disposeLandscapeMesh(opts) {
     disposeLandscapeCutCaps();
     if (landscapeMeshEngine) {
       landscapeMeshEngine.dispose();
@@ -21833,6 +21875,11 @@
       landscapeMeshGroup = null;
     }
     landscapeMeshMode = false;
+    landscapeGhostBoardsSuppressed = false;
+    if (opts && opts.rebuild && typeof rebuildTerrainRender === 'function') {
+      rebuildTerrainRender();
+      rebuildObjectsRender();
+    }
   }
 
   function initLandscapeEngine(seed, biomeName) {
@@ -22643,7 +22690,7 @@
       const elevation = { ...elevState };
       const procedural = !!(proceduralEl && proceduralEl.checked);
       const landscapeStyle = landscapeStyleEl && landscapeStyleEl.value;
-      const useLandscape = !!(useLandscapeEl && useLandscapeEl.checked) || landscapeStyle === 'landscape';
+      const useLandscape = landscapeStyle === 'landscape';
       const disableAutofill = !!(disableAutofillEl && disableAutofillEl.checked);
       try { localStorage.setItem(GEN_LS.gridSize, String(gridSize)); } catch (_) {}
 
@@ -22657,10 +22704,14 @@
           landscapeMeshStyle = (renderDdEl && renderDdEl.value) || 'lowpoly';
           // landscapeMeshMode is activated after applyState creates the engine instance
         } else if (style === 'lowpoly') {
-          disposeLandscapeMesh();
+          disposeLandscapeMesh({ rebuild: true });
+          useLandscapeEngine = false;
+          landscapeEngineInstance = null;
           renderVoxelTerrain = false;
         } else {
-          disposeLandscapeMesh();
+          disposeLandscapeMesh({ rebuild: true });
+          useLandscapeEngine = false;
+          landscapeEngineInstance = null;
           renderVoxelTerrain = true;
           renderTerrainVoxelResolution = style.split('-')[1];
         }
