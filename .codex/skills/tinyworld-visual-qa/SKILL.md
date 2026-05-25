@@ -22,6 +22,7 @@ Checks:
 - Cloud shadow at 0% / low values should reduce ground shadow strength without hiding visible cloud puffs.
 - Building details should be believable: manor portico columns stay entry-scale, windows have frames/crossbars, and tall buildings do not stretch entry features unrealistically.
 - Toolbar flyouts should sit clear of the toolbar (about 10px), avoid vertical clipping, and reduce empty thumbnail air via camera/frustum framing rather than negative CSS margins inside scrollable flyout containers.
+- The Stamps panel should open as a compact floating canvas panel, stay open while placing items, drag by its header, avoid AI/create/enhance controls, and keep darker thumbnail previews readable.
 - Dialog titles should use the shared Fraunces `.modal-head strong` treatment, with explanatory body copy in `.modal-copy` / `.confirm-copy` and readable darker muted text.
 - Selection preview in the floating agent panel should show useful property chips for the primary selected kind. Supported properties (e.g. tower Top/Body colour, building Shape, Size) should apply immediately through `setCell`; unsupported creative edits can fall back to prompts.
 - Selection preview must render the same object/stamp factory as the world view. Voxel-build/custom objects should not fall back to a generic blue cube.

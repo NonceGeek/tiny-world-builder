@@ -1354,7 +1354,8 @@
   body.vehicle-demo-active #agent-panel,
   body.vehicle-demo-active #agent-panel-handle,
   body.vehicle-demo-active #crowd-panel,
-  body.vehicle-demo-active #crowd-panel-handle {
+  body.vehicle-demo-active #crowd-panel-handle,
+  body.vehicle-demo-active #stamp-builder-panel {
     display: none;
   }
   @keyframes vehicle-demo-pulse {
@@ -2264,7 +2265,8 @@
   body.showcase #agent-panel,
   body.showcase #agent-panel-handle,
   body.showcase #crowd-panel,
-  body.showcase #crowd-panel-handle {
+  body.showcase #crowd-panel-handle,
+  body.showcase #stamp-builder-panel {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.5s ease;
@@ -2535,6 +2537,8 @@
   body.tod-dusk  .topbar-popup,
   body.tod-night .world-menu,
   body.tod-dusk  .world-menu,
+  body.tod-night .stamp-panel,
+  body.tod-dusk  .stamp-panel,
   body.tod-night .modal-card,
   body.tod-dusk  .modal-card {
     --ink: #2a2722;
@@ -3068,53 +3072,131 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
-  #stamp-builder-modal .settings-card {
-    width: min(620px, calc(100vw - 32px));
-    min-height: 0;
+  .stamp-panel {
+    position: fixed;
+    left: 18px;
+    top: 92px;
+    z-index: 48;
+    width: min(350px, calc(100vw - 28px));
+    max-height: min(620px, calc(100vh - 120px));
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(72, 52, 31, 0.18);
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(255, 250, 238, 0.94), rgba(242, 231, 208, 0.88)),
+      rgba(255, 255, 255, 0.84);
+    box-shadow:
+      0 18px 45px rgba(54, 39, 24, 0.18),
+      0 1px 0 rgba(255, 255, 255, 0.78) inset;
+    backdrop-filter: blur(18px) saturate(1.15);
+    -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  }
+  .stamp-panel[hidden] { display: none; }
+  .stamp-panel.dragging {
+    cursor: grabbing;
+    transition: none;
+    user-select: none;
+  }
+  .stamp-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .stamp-panel-title {
+    min-width: 0;
+  }
+  .stamp-panel-title strong {
+    display: block;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 20px;
+    line-height: 1.05;
+    color: var(--ink);
+    letter-spacing: 0;
+  }
+  .stamp-panel-title span {
+    display: block;
+    margin-top: 3px;
+    color: #6b5a44;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  .stamp-panel-close {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(68, 48, 24, 0.08);
+    color: #4d3d2a;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .stamp-panel-close:hover {
+    background: rgba(68, 48, 24, 0.14);
+    color: var(--ink);
+  }
+  .stamp-panel-note {
+    margin: 0;
+    color: #5d513e;
+    font-size: 12px;
+    line-height: 1.35;
   }
   .stamp-builder-tools {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin: 0 0 10px;
+    align-items: center;
   }
   .stamp-builder-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
     gap: 8px;
-    max-height: min(58vh, 430px);
+    max-height: min(430px, calc(100vh - 300px));
     overflow: auto;
-    padding-right: 2px;
+    padding: 2px 4px 2px 0;
+    overscroll-behavior: contain;
   }
   .stamp-card {
-    border: 1px solid rgba(68, 48, 24, 0.12);
+    border: 1px solid rgba(69, 51, 28, 0.18);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.42);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.54), rgba(225, 211, 184, 0.40));
     padding: 7px 7px 8px;
     display: flex;
     flex-direction: column;
     gap: 5px;
-    min-height: 104px;
+    min-height: 106px;
     cursor: pointer;
     transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, transform 0.14s ease;
   }
   .stamp-card:hover {
-    background: rgba(255, 255, 255, 0.64);
-    border-color: rgba(68, 48, 24, 0.20);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(230, 216, 187, 0.48));
+    border-color: rgba(68, 48, 24, 0.28);
     transform: translateY(-1px);
   }
   .stamp-card.selected {
-    background: rgba(255, 247, 218, 0.88);
-    border-color: rgba(178, 128, 36, 0.72);
+    background:
+      linear-gradient(180deg, rgba(255, 241, 188, 0.92), rgba(235, 198, 102, 0.36));
+    border-color: rgba(153, 101, 24, 0.72);
     box-shadow:
-      0 0 0 2px rgba(232, 190, 83, 0.22),
-      0 8px 20px rgba(86, 62, 22, 0.10);
+      0 0 0 2px rgba(190, 128, 28, 0.22),
+      0 10px 22px rgba(86, 62, 22, 0.13);
   }
   .stamp-card canvas {
     width: 72px;
     height: 72px;
     align-self: center;
-    filter: brightness(0.82) contrast(1.16) saturate(0.96);
+    border-radius: 7px;
+    background: radial-gradient(circle at 50% 42%, rgba(255, 244, 211, 0.95), rgba(197, 177, 139, 0.50));
+    filter: brightness(0.70) contrast(1.36) saturate(0.94) drop-shadow(0 4px 4px rgba(54, 39, 24, 0.20));
   }
   .stamp-card strong {
     font-size: 11px;
@@ -3126,32 +3208,6 @@
     justify-content: center;
     text-align: center;
   }
-  .stamp-creative-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
-    align-items: start;
-    margin-bottom: 12px;
-  }
-  .stamp-creative-panel textarea {
-    width: 100%;
-    min-height: 58px;
-    resize: vertical;
-    border: 1px solid rgba(68, 48, 24, 0.15);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.64);
-    color: var(--ink);
-    font: inherit;
-    font-size: 13px;
-    line-height: 1.35;
-    padding: 9px 10px;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
-  }
-  .stamp-creative-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
   .visually-hidden-file {
     position: absolute;
     width: 1px;
@@ -3160,23 +3216,16 @@
     pointer-events: none;
     overflow: hidden;
   }
-  .stamp-image-strip {
-    grid-column: 1 / -1;
+  .stamp-panel-foot {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 42px;
+    justify-content: space-between;
+    gap: 10px;
+    border-top: 1px solid rgba(68, 48, 24, 0.12);
+    padding-top: 10px;
   }
-  .stamp-image-strip img {
-    width: 48px;
-    height: 36px;
-    object-fit: cover;
-    border-radius: 6px;
-    border: 1px solid rgba(68, 48, 24, 0.16);
-    background: rgba(255, 255, 255, 0.5);
-  }
-  .stamp-image-name {
-    color: var(--muted);
+  #stamp-builder-status {
+    color: #5f523f;
     font-size: 12px;
     min-width: 0;
     overflow: hidden;
@@ -3184,6 +3233,16 @@
     white-space: nowrap;
   }
   @media (max-width: 700px) {
+    .stamp-panel {
+      left: 14px;
+      top: 76px;
+      width: min(330px, calc(100vw - 28px));
+      max-height: calc(100vh - 112px);
+    }
+    .stamp-builder-grid {
+      grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+      max-height: calc(100vh - 310px);
+    }
     .settings-layout { grid-template-columns: 1fr; }
     .settings-tabs {
       flex-direction: row;
@@ -3959,7 +4018,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
     </button>
     <input type="file" id="import-file" accept=".json,application/json" hidden />
-    <button class="btn icon" id="stamp-builder" data-tooltip="Stamp builder" aria-label="Open stamp builder">
+    <button class="btn icon" id="stamp-builder" data-tooltip="Stamps" aria-label="Open stamps">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 7 9 5v10l-9-5V7Z"/><path d="m21 7-9 5v10l9-5V7Z"/></svg>
     </button>
     <button class="btn icon" id="generate" data-tooltip="Generate from prompt" aria-label="Generate world from prompt" data-ai-interface hidden>
@@ -4764,23 +4823,25 @@
     </form>
   </div>
 
-  <div id="stamp-builder-modal" class="modal" hidden>
-    <form class="modal-card settings-card" role="dialog" aria-modal="true" aria-labelledby="stamp-builder-title" onsubmit="return false">
-      <div class="modal-head">
-        <strong id="stamp-builder-title">Stamp builder</strong>
-        <button class="modal-close" id="stamp-builder-close" title="Close">×</button>
+  <section id="stamp-builder-panel" class="stamp-panel" role="dialog" aria-modal="false" aria-labelledby="stamp-builder-title" hidden>
+    <div class="stamp-panel-head">
+      <div class="stamp-panel-title">
+        <strong id="stamp-builder-title">Stamps</strong>
+        <span>Pick a stamp, then place it on the board.</span>
       </div>
-      <input id="voxel-build-import-file" type="file" accept=".json,application/json" hidden />
-      <div class="stamp-builder-tools">
-        <button class="btn" id="voxel-build-import" type="button">Import build JSON</button>
-      </div>
-      <div class="stamp-builder-grid" id="stamp-builder-grid"></div>
-      <div class="modal-foot">
-        <span id="stamp-builder-status"></span>
-        <button class="btn" id="stamp-builder-rebuild" type="button">Refresh stamps</button>
-      </div>
-    </form>
-  </div>
+      <button class="stamp-panel-close" id="stamp-builder-close" title="Close" aria-label="Close stamps">×</button>
+    </div>
+    <p class="stamp-panel-note">Voxel builds and board objects stay here while you work, so placement stays one click away.</p>
+    <input id="voxel-build-import-file" type="file" accept=".json,application/json" hidden />
+    <div class="stamp-builder-tools">
+      <button class="btn" id="voxel-build-import" type="button">Import build JSON</button>
+    </div>
+    <div class="stamp-builder-grid" id="stamp-builder-grid"></div>
+    <div class="stamp-panel-foot">
+      <span id="stamp-builder-status"></span>
+      <button class="btn" id="stamp-builder-rebuild" type="button">Refresh stamps</button>
+    </div>
+  </section>
 
   <div id="agent-panel" class="agent-panel" data-ai-interface aria-live="polite">
     <div class="agent-panel-head">
@@ -9313,78 +9374,13 @@
     return composite;
   }
 
-  // Cylindrical stone tower with crenellations + arrow slits + flag. Replaces
-  // a regular house render when isTurretHouse(x, z) is true. floors raises the
+  // Voxel stone keep with crenellations + arrow slits + flag. Replaces a
+  // regular house render when isTurretHouse(x, z) is true. floors raises the
   // tower height the same way a house grows. userData.kind stays 'house' so
   // smoke loop and cluster refresh logic continues to find it; chimneyTops is
   // empty so no smoke spawns.
   function makeTurret(floors = 1) {
-    const g = new THREE.Group();
-    const f = Math.max(1, floors);
-    const wallH = H.WALL_H * f + 0.20;
-    const radius = 0.42;
-    const platRadius = radius + 0.05;
-
-    // Body — slight base flare for stability silhouette
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius, radius * 1.04, wallH, 12),
-      M.castleStone
-    );
-    body.position.y = wallH / 2;
-    g.add(body);
-
-    // Wall walk platform
-    const platform = new THREE.Mesh(
-      new THREE.CylinderGeometry(platRadius, platRadius, 0.06, 12),
-      M.castleStoneD
-    );
-    platform.position.y = wallH + 0.03;
-    g.add(platform);
-
-    // Crenellations (8 merlons)
-    const merlonCount = 8;
-    for (let i = 0; i < merlonCount; i++) {
-      const a = (i / merlonCount) * Math.PI * 2;
-      const merlon = new THREE.Mesh(
-        new THREE.BoxGeometry(0.13, 0.14, 0.10),
-        M.castleStone
-      );
-      merlon.position.set(Math.cos(a) * platRadius, wallH + 0.13, Math.sin(a) * platRadius);
-      merlon.rotation.y = -a;
-      g.add(merlon);
-    }
-
-    // Arrow slits at mid-height (4, offset between the cardinal merlons)
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 8;
-      const slit = new THREE.Mesh(
-        getBoxGeometry(0.04, 0.20, 0.025),
-        M.castleSlit
-      );
-      slit.position.set(Math.cos(a) * (radius + 0.005), wallH * 0.55, Math.sin(a) * (radius + 0.005));
-      slit.rotation.y = -a;
-      g.add(slit);
-    }
-
-    // Door on +z face — keeps the same wood door material as houses for cohesion
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.34, 0.04), M.door);
-    door.position.set(0, 0.17, radius + 0.01);
-    g.add(door);
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.04), M.castleStoneD);
-    lintel.position.set(0, 0.36, radius + 0.01);
-    g.add(lintel);
-
-    // Flag pole + flag at the apex
-    const pole = new THREE.Mesh(getBoxGeometry(0.025, 0.22, 0.025), M.castleStoneD);
-    pole.position.y = wallH + 0.30;
-    g.add(pole);
-    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.02), M.flagRed);
-    flag.position.set(0.09, wallH + 0.36, 0);
-    g.add(flag);
-
-    g.userData = { kind: 'house', chimneyTops: [] };
-    castReceive(g);
-    return g;
+    return makeVoxelTurret(floors, false);
   }
 
   // Modern glass-sided high-rise. Auto-promoted from solo houses with 4+
@@ -11263,36 +11259,76 @@
   function makeVoxelTurret(floors = 1, roofed = false, palette = null) {
     const g = new THREE.Group();
     const f = Math.max(1, Math.min(MAX_FLOORS, floors || 1));
-    const wallH = 0.48 + (f - 1) * 0.34;
+    const wallH = 0.84 + (f - 1) * 0.30;
     const stone = (palette && palette.stone) || (roofed ? M.towerStone : M.castleStone);
     const stoneD = (palette && palette.stoneD) || (roofed ? M.towerStoneD : M.castleStoneD);
     const roof = (palette && palette.roof) || M.towerRoof;
     const roofD = (palette && palette.roofD) || M.towerRoofD;
-    const stack = [[0.58, 0.58], [0.72, 0.42], [0.42, 0.72], [0.58, 0.58]];
-    for (let i = 0; i < f + 1; i++) {
-      const dims = stack[i % stack.length];
-      vbox(g, dims[0], 0.24, dims[1], 0, i * 0.22 + 0.12, 0, i % 2 ? stoneD : stone);
+    const stoneHi = M.step || stone;
+
+    vbox(g, 0.86, 0.10, 0.86, 0, 0.05, 0, stoneD);
+    vbox(g, 0.76, 0.08, 0.76, 0, 0.14, 0, stone);
+
+    const courseH = 0.095;
+    const courseCount = Math.ceil(wallH / courseH);
+    for (let i = 0; i < courseCount; i++) {
+      const h = i === courseCount - 1 ? Math.max(0.065, wallH - i * courseH) : courseH;
+      const y = 0.18 + i * courseH + h * 0.5;
+      const inset = i % 2 ? 0.020 : 0;
+      const mat = i % 3 === 1 ? stoneD : stone;
+      vbox(g, 0.62 + inset, h, 0.62 - inset, 0, y, 0, mat);
     }
-    vbox(g, 0.82, 0.08, 0.82, 0, wallH + 0.04, 0, stoneD);
+
+    for (let i = 0; i < courseCount; i++) {
+      const y = 0.18 + i * courseH + courseH * 0.5;
+      const mat = i % 2 ? stone : stoneD;
+      const size = i % 2 ? 0.115 : 0.095;
+      for (const x of [-0.355, 0.355]) {
+        vbox(g, size, courseH * 0.94, size, x, y,  0.355, mat);
+        vbox(g, size, courseH * 0.94, size, x, y, -0.355, mat);
+      }
+    }
+
+    for (let i = 1; i < courseCount; i += 2) {
+      const y = 0.18 + i * courseH + 0.012;
+      vbox(g, 0.34, 0.018, 0.030, -0.16, y,  0.393, stoneHi);
+      vbox(g, 0.26, 0.018, 0.030,  0.20, y,  0.393, stoneHi);
+      vbox(g, 0.28, 0.018, 0.030,  0.14, y, -0.393, stoneHi);
+      vbox(g, 0.030, 0.018, 0.28,  0.393, y, -0.10, stoneHi);
+      vbox(g, 0.030, 0.018, 0.26, -0.393, y,  0.16, stoneHi);
+    }
+
+    vbox(g, 0.74, 0.065, 0.74, 0, wallH + 0.03, 0, stoneD);
+    vbox(g, 0.86, 0.075, 0.86, 0, wallH + 0.10, 0, stone);
+    vbox(g, 0.74, 0.045, 0.74, 0, wallH + 0.16, 0, stoneD);
+
     if (roofed) {
       for (let i = 0; i < 4; i++) {
         const s = 0.74 - i * 0.14;
-        vbox(g, s, 0.11, s, 0, wallH + 0.10 + i * 0.10, 0, i === 3 ? roofD : roof);
+        vbox(g, s, 0.11, s, 0, wallH + 0.23 + i * 0.10, 0, i === 3 ? roofD : roof);
       }
-      vbox(g, 0.035, 0.26, 0.035, 0, wallH + 0.62, 0, stoneD);
+      vbox(g, 0.035, 0.26, 0.035, 0, wallH + 0.75, 0, stoneD);
     } else {
       for (const x of [-0.30, 0, 0.30]) {
-        vbox(g, 0.11, 0.14, 0.11, x, wallH + 0.15, 0.34, stone);
-        vbox(g, 0.11, 0.14, 0.11, x, wallH + 0.15, -0.34, stone);
-        vbox(g, 0.11, 0.14, 0.11, 0.34, wallH + 0.15, x, stone);
-        vbox(g, 0.11, 0.14, 0.11, -0.34, wallH + 0.15, x, stone);
+        vbox(g, 0.12, 0.16, 0.12, x, wallH + 0.27,  0.36, x === 0 ? stoneD : stone);
+        vbox(g, 0.12, 0.16, 0.12, x, wallH + 0.27, -0.36, x === 0 ? stoneD : stone);
+        vbox(g, 0.12, 0.16, 0.12,  0.36, wallH + 0.27, x, x === 0 ? stoneD : stone);
+        vbox(g, 0.12, 0.16, 0.12, -0.36, wallH + 0.27, x, x === 0 ? stoneD : stone);
       }
-      vbox(g, 0.025, 0.26, 0.025, 0, wallH + 0.34, 0, stoneD);
-      vbox(g, 0.16, 0.09, 0.025, 0.09, wallH + 0.42, 0, M.flagRed);
+      vbox(g, 0.16, 0.12, 0.08, 0, wallH + 0.27, 0.36, M.flagRed);
+      vbox(g, 0.025, 0.34, 0.025, 0.18, wallH + 0.43, 0.26, stoneD);
+      vbox(g, 0.18, 0.10, 0.025, 0.29, wallH + 0.54, 0.26, M.flagRed);
     }
-    voxelDoor(g, 0, 0.34, 'z', 0.34);
-    vbox(g, 0.10, 0.18, 0.030, 0, wallH * 0.58, 0.425, M.castleSlit);
-    vbox(g, 0.030, 0.18, 0.10, 0.425, wallH * 0.52, 0, M.castleSlit);
+    voxelDoor(g, 0, 0.405, 'z', 0.36);
+    vbox(g, 0.31, 0.055, 0.065, 0, 0.41, 0.415, stoneD);
+    vbox(g, 0.055, 0.34, 0.065, -0.17, 0.23, 0.415, stoneD);
+    vbox(g, 0.055, 0.34, 0.065,  0.17, 0.23, 0.415, stoneD);
+
+    vbox(g, 0.13, 0.20, 0.034, 0, wallH * 0.58,  0.414, M.castleSlit);
+    vbox(g, 0.034, 0.20, 0.13, 0.414, wallH * 0.53, 0, M.castleSlit);
+    vbox(g, 0.034, 0.18, 0.12, -0.414, wallH * 0.40, 0, M.castleSlit);
+    if (f > 1) vbox(g, 0.12, 0.18, 0.034, 0.19, wallH * 0.78, -0.414, M.castleSlit);
+
     g.userData = { kind: 'house', chimneyTops: [] };
     castReceive(g);
     return g;
@@ -20694,240 +20730,57 @@
     }, stamp.name + ' enhanced');
   }
 
-  function creativeVoxelStampName(prompt, hasImage) {
-    const text = String(prompt || '').trim().replace(/\s+/g, ' ');
-    if (!text) return hasImage ? 'Image voxel stamp' : 'Voxel stamp';
-    return text.slice(0, 34).replace(/[^\w\s-]/g, '').trim() || 'Voxel stamp';
-  }
-
-  function readImageFileForVoxelReference(file) {
-    return new Promise((resolve, reject) => {
-      if (!file || !/^image\//i.test(file.type || '')) {
-        reject(new Error('Choose an image file'));
-        return;
-      }
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Could not read image'));
-      reader.onload = () => {
-        const img = new Image();
-        img.onerror = () => reject(new Error('Could not decode image'));
-        img.onload = () => {
-          const maxSide = 1536;
-          const scale = Math.min(1, maxSide / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height, 1));
-          const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
-          const h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, w, h);
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.92));
-        };
-        img.src = String(reader.result || '');
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function createCreativeVoxelBuildStamp(prompt, imageDataUrl) {
-    const instructionText = String(prompt || '').trim();
-    if (!instructionText && !imageDataUrl) throw new Error('Add a prompt or choose an image first');
-    const ai = getAIProviderState();
-    const provider = ai.provider || 'openai';
-    const def = AI_DEFAULTS[provider] || AI_DEFAULTS.openai;
-    const allowedMaterials = Object.keys(VOXEL_PART_COLORS);
-    const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname);
-    const useLocalEndpoint = isLocalHost && (provider === 'openai' || !ai.key || imageDataUrl);
-    const model = textModelForGeneration(provider, ai.model);
-    const fallbackName = creativeVoxelStampName(instructionText, !!imageDataUrl);
-    const allowedBounds = { minX: -1.45, maxX: 1.45, minY: 0, maxY: 4.4, minZ: -1.45, maxZ: 1.45 };
-    const payload = {
-      model,
-      reasoningEffort: 'low',
-      reasoningSummary: 'off',
-      textVerbosity: 'low',
-      maxOutputTokens: 16000,
-      allowedMaterials,
-      selectedObject: {
-        id: 'creative-stamp-' + Date.now().toString(36),
-        stamp: 'creative',
-        label: fallbackName,
-        position: [0, 0, 0],
-        rotation: 0,
-        scale: [1, 1, 1],
-      },
-      desiredScale: [1, 1, 1],
-      style: [
-        'Tiny World voxel stamp, readable low-poly diorama asset, semantic custom parts first',
-        'large enough to show small details, no flat placeholder mass, no detached floating decoration',
-        'use the allowed material palette and keep the result inside the selected-tile footprint',
-      ].join(', '),
-      instruction: [
-        'Create a new original voxel stamp from the prompt and optional image reference.',
-        'Prefer semantic customParts over raw cube clouds so roof, body, windows, branches, rocks, crop rows, trim, base, and props remain editable.',
-        'Use layered small parts, trim bands, windows, doors, stems, stones, leaves, supports, rails, and base details when appropriate.',
-        'Keep the asset compact, grounded, centered, and recognizable from the isometric camera.',
-        'Do not copy Japanese garden or pagoda styling unless requested.',
-        instructionText ? 'User prompt: ' + instructionText : 'Use the image as the primary reference.',
-      ].join('\n'),
-      renderFootprint: 1.85,
-      sourceParts: [],
-      sourceCustomParts: [],
-      sourceBounds: null,
-      allowedBounds,
-      imageDataUrl: imageDataUrl || null,
-    };
-    postAiDebugLog({
-      kind: 'creative-stamp-before',
-      instruction: instructionText,
-      imageAttached: !!imageDataUrl,
-      payload,
-    });
-    let result = null;
-    if (useLocalEndpoint) {
-      const r = await fetch('/api/reinterpret-stamp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(Object.assign({}, payload, {
-          model: provider === 'openai' ? model : AI_DEFAULTS.openai.model,
-        })),
-      });
-      const text = await r.text();
-      try { result = text ? JSON.parse(text) : null; } catch (_) {}
-      if (!r.ok || !result || !result.ok) throw new Error((result && result.error) || text.slice(0, 180) || 'AI create failed');
-    } else {
-      if (imageDataUrl) throw new Error('Image references need the local dev server endpoint');
-      if (!ai.key) throw new Error('AI key missing');
-      const schema = customPartsEnhanceSchema(allowedMaterials);
-      const system = [
-        'You generate original geometry for a Three.js voxel stamp builder.',
-        'Return ONLY valid JSON, no markdown.',
-        'The JSON shape must be {"customParts":[...], "notes":"short optional note"}.',
-        'Use customParts with box/cylinder/cone, material, size [x,y,z], pos [x,y,z], scale [1,1,1].',
-        'Create a high-quality Tiny World stamp with semantic editable parts, not a single block or noisy cube cloud.',
-        'Keep all returned parts inside allowedBounds.',
-        'Use only allowed materials. Keep the object grounded and centered.',
-        'Do not introduce Japanese, pagoda, temple, shrine, torii, sakura, or garden styling unless explicitly requested.',
-        '',
-        'Schema:',
-        JSON.stringify(schema),
-      ].join('\n');
-      const raw = provider === 'anthropic'
-        ? await callAnthropic(def.endpoint, ai.key, model, system, JSON.stringify(payload), { name: 'emit_creative_stamp', schema })
-        : provider === 'gemini'
-          ? await callGemini(def.endpoint, ai.key, model, system, JSON.stringify(payload))
-          : await callOpenAI(def.endpoint, ai.key, model, system, JSON.stringify(payload));
-      result = extractJSON(raw);
-      if (!result) throw new Error('AI returned non-JSON');
-    }
-    const customParts = fitCustomPartsToBounds(result.customParts || result.parts || result.response?.customParts, allowedBounds);
-    if (!customParts.length) throw new Error('AI returned no customParts');
-    const stamp = normalizeVoxelBuildStamp({
-      id: 'creative-' + Date.now().toString(36),
-      name: creativeVoxelStampName(result.name || fallbackName, !!imageDataUrl),
-      customParts,
-      footprint: 1.85,
-      custom: true,
-    }, fallbackName);
-    postAiDebugLog({
-      kind: 'creative-stamp-after',
-      instruction: instructionText,
-      imageAttached: !!imageDataUrl,
-      stamp: stamp ? {
-        id: stamp.id,
-        name: stamp.name,
-        footprint: stamp.footprint,
-        customPartCount: stamp.customParts.length,
-        bounds: customPartsBounds(stamp.customParts),
-      } : null,
-    });
-    return stamp;
-  }
-
   (function setupStampBuilder() {
-    const modal = document.getElementById('stamp-builder-modal');
+    const panel = document.getElementById('stamp-builder-panel');
     const openBtn = document.getElementById('stamp-builder');
     const closeBtn = document.getElementById('stamp-builder-close');
     const rebuildBtn = document.getElementById('stamp-builder-rebuild');
-    const createBtn = document.getElementById('voxel-build-create');
-    const promptEl = document.getElementById('voxel-build-prompt');
-    const imageBtn = document.getElementById('voxel-build-image');
-    const imageFile = document.getElementById('voxel-build-image-file');
-    const imageClearBtn = document.getElementById('voxel-build-image-clear');
-    const imageStrip = document.getElementById('voxel-build-image-strip');
-    const imagePreview = document.getElementById('voxel-build-image-preview');
-    const imageName = document.getElementById('voxel-build-image-name');
     const importBtn = document.getElementById('voxel-build-import');
     const importFile = document.getElementById('voxel-build-import-file');
-    const upscaleBtn = document.getElementById('voxel-build-upscale');
-    const enhanceBtn = document.getElementById('voxel-build-enhance');
-    const useSelectedBtn = document.getElementById('voxel-build-use-selected');
-    const enhanceSelectedBtn = document.getElementById('voxel-build-enhance-selected');
     const status = document.getElementById('stamp-builder-status');
-    let creativeImageDataUrl = '';
-    if (!modal || !openBtn || !closeBtn) return;
+    const head = panel && panel.querySelector('.stamp-panel-head');
+    const PANEL_POS_KEY = 'tinyworld:stamp-panel-pos';
+    let panelDrag = null;
+    if (!panel || !openBtn || !closeBtn) return;
+
+    function clampStampPanel(left, top) {
+      const w = panel.offsetWidth || 350;
+      const h = panel.offsetHeight || 420;
+      return {
+        left: Math.max(8, Math.min(window.innerWidth - w - 8, left)),
+        top: Math.max(8, Math.min(window.innerHeight - h - 8, top)),
+      };
+    }
+
+    function applySavedStampPanelPosition() {
+      let pos = null;
+      try { pos = JSON.parse(localStorage.getItem(PANEL_POS_KEY) || 'null'); } catch (_) {}
+      if (!pos || !Number.isFinite(pos.left) || !Number.isFinite(pos.top)) return;
+      const clamped = clampStampPanel(pos.left, pos.top);
+      panel.style.left = clamped.left + 'px';
+      panel.style.top = clamped.top + 'px';
+    }
+
     function open() {
       renderStampBuilderCards();
-      if (status) status.textContent = 'Voxel stamps loaded';
-      openTinyModal(modal, closeBtn);
+      panel.hidden = false;
+      const grid = document.getElementById('stamp-builder-grid');
+      if (grid) grid.scrollTop = 0;
+      applySavedStampPanelPosition();
+      if (status) status.textContent = 'Choose a stamp to place';
+      closeBtn.focus({ preventScroll: true });
     }
-    function close() { closeTinyModal(modal); }
-    openBtn.addEventListener('click', open);
+
+    function close() { panel.hidden = true; }
+
+    openBtn.addEventListener('click', () => {
+      if (panel.hidden) open();
+      else close();
+    });
     closeBtn.addEventListener('click', close);
-    modal.addEventListener('click', e => { if (e.target === modal) close(); });
-    function setCreativeImage(dataUrl, name) {
-      creativeImageDataUrl = dataUrl || '';
-      if (imagePreview) {
-        if (creativeImageDataUrl) imagePreview.src = creativeImageDataUrl;
-        else imagePreview.removeAttribute('src');
-      }
-      if (imageName) imageName.textContent = creativeImageDataUrl ? (name || 'Reference image') : '';
-      if (imageStrip) imageStrip.hidden = !creativeImageDataUrl;
-    }
-    if (imageBtn && imageFile) {
-      imageFile.addEventListener('change', async () => {
-        const file = imageFile.files && imageFile.files[0];
-        imageFile.value = '';
-        if (!file) return;
-        try {
-          if (status) status.textContent = 'Preparing image...';
-          const dataUrl = await readImageFileForVoxelReference(file);
-          setCreativeImage(dataUrl, file.name);
-          if (status) status.textContent = 'Image ready';
-        } catch (err) {
-          setCreativeImage('', '');
-          if (status) status.textContent = 'Image failed: ' + String(err.message || err).slice(0, 100);
-        }
-      });
-    }
-    if (imageClearBtn) {
-      imageClearBtn.addEventListener('click', () => {
-        setCreativeImage('', '');
-        if (status) status.textContent = 'Image cleared';
-      });
-    }
-    if (createBtn) {
-      createBtn.addEventListener('click', async () => {
-        createBtn.disabled = true;
-        if (status) status.textContent = 'Creating voxel stamp...';
-        try {
-          const stamp = await createCreativeVoxelBuildStamp(promptEl ? promptEl.value : '', creativeImageDataUrl);
-          if (!stamp) throw new Error('No stamp returned');
-          VOXEL_BUILD_STAMPS.push(stamp);
-          saveCustomVoxelBuildStamps();
-          selectedVoxelBuildId = stamp.id;
-          renderStampBuilderCards();
-          selectTool({ id: 'voxel-build:' + stamp.id, label: stamp.name, kind: 'voxel-build', voxelBuildId: stamp.id, isVoxelBuild: true });
-          if (status) status.textContent = 'Created ' + stamp.name;
-        } catch (err) {
-          if (status) status.textContent = 'Create failed: ' + String(err.message || err).slice(0, 120);
-        } finally {
-          createBtn.disabled = false;
-        }
-      });
-    }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !panel.hidden) close();
+    });
     if (rebuildBtn) {
       rebuildBtn.addEventListener('click', () => {
         rebuildVoxelStampRender();
@@ -20954,83 +20807,51 @@
         }
       });
     }
-    if (upscaleBtn) {
-      upscaleBtn.addEventListener('click', () => {
-        const source = getVoxelBuildStamp(selectedVoxelBuildId);
-        const stamp = upscaleVoxelBuildStamp(source);
-        if (!stamp) {
-          if (status) status.textContent = 'Select a voxel build first';
-          return;
-        }
-        VOXEL_BUILD_STAMPS.push(stamp);
-        saveCustomVoxelBuildStamps();
-        selectedVoxelBuildId = stamp.id;
-        renderStampBuilderCards();
-        selectTool({ id: 'voxel-build:' + stamp.id, label: stamp.name, kind: 'voxel-build', voxelBuildId: stamp.id, isVoxelBuild: true });
-        if (status) status.textContent = 'Reinterpreted ' + source.name + ' at 2x voxel resolution';
+    if (head) {
+      head.addEventListener('pointerdown', e => {
+        if (e.button !== undefined && e.button !== 0) return;
+        if (e.target.closest('button')) return;
+        const r = panel.getBoundingClientRect();
+        panelDrag = {
+          startX: e.clientX,
+          startY: e.clientY,
+          leftAtStart: r.left,
+          topAtStart: r.top,
+          moved: false,
+        };
+        try { panel.setPointerCapture(e.pointerId); } catch (_) {}
       });
     }
-    if (enhanceBtn) {
-      enhanceBtn.addEventListener('click', async () => {
-        const source = getVoxelBuildStamp(selectedVoxelBuildId);
-        if (!source) {
-          if (status) status.textContent = 'Select a voxel build first';
-          return;
-        }
-        enhanceBtn.disabled = true;
-        if (status) status.textContent = 'Enhancing ' + source.name + '...';
-        try {
-          const stamp = await enhanceVoxelBuildStamp(source);
-          if (!stamp) throw new Error('No enhanced build returned');
-          VOXEL_BUILD_STAMPS.push(stamp);
-          saveCustomVoxelBuildStamps();
-          selectedVoxelBuildId = stamp.id;
-          renderStampBuilderCards();
-          selectTool({ id: 'voxel-build:' + stamp.id, label: stamp.name, kind: 'voxel-build', voxelBuildId: stamp.id, isVoxelBuild: true });
-          if (status) status.textContent = 'AI enhanced ' + source.name;
-        } catch (err) {
-          if (status) status.textContent = 'Enhance failed: ' + String(err.message || err).slice(0, 120);
-        } finally {
-          enhanceBtn.disabled = false;
-        }
-      });
+    panel.addEventListener('pointermove', e => {
+      if (!panelDrag) return;
+      const dx = e.clientX - panelDrag.startX;
+      const dy = e.clientY - panelDrag.startY;
+      if (!panelDrag.moved && Math.hypot(dx, dy) < 4) return;
+      panelDrag.moved = true;
+      panel.classList.add('dragging');
+      const pos = clampStampPanel(panelDrag.leftAtStart + dx, panelDrag.topAtStart + dy);
+      panel.style.left = pos.left + 'px';
+      panel.style.top = pos.top + 'px';
+    });
+    function endPanelDrag() {
+      if (!panelDrag) return;
+      const moved = panelDrag.moved;
+      panelDrag = null;
+      panel.classList.remove('dragging');
+      if (moved) {
+        const r = panel.getBoundingClientRect();
+        try { localStorage.setItem(PANEL_POS_KEY, JSON.stringify({ left: r.left, top: r.top })); } catch (_) {}
+      }
     }
-    if (useSelectedBtn) {
-      useSelectedBtn.addEventListener('click', () => {
-        const target = selectedBoardObjectTarget();
-        const seed = seedVoxelBuildForSelectedObject(target);
-        if (!target || !seed) {
-          if (status) status.textContent = 'Shift-select one object on the board first';
-          return;
-        }
-        let stamp = seed;
-        if (!getVoxelBuildStamp(seed.id)) {
-          stamp = normalizeVoxelBuildStamp(Object.assign({}, seed, {
-            id: seed.id,
-            custom: true,
-          }), seed.name);
-          VOXEL_BUILD_STAMPS.push(stamp);
-          saveCustomVoxelBuildStamps();
-        }
-        selectedVoxelBuildId = stamp.id;
-        renderStampBuilderCards();
-        if (status) status.textContent = 'Selected ' + selectedBoardObjectLabel(target) + ' as AI target';
-      });
-    }
-    if (enhanceSelectedBtn) {
-      enhanceSelectedBtn.addEventListener('click', async () => {
-        enhanceSelectedBtn.disabled = true;
-        if (status) status.textContent = 'Enhancing selected object...';
-        try {
-          const stamp = await enhanceSelectedBoardObject('Enhance the selected object as a richer detailed voxel build.');
-          if (status) status.textContent = 'AI enhanced selected object into ' + stamp.name;
-        } catch (err) {
-          if (status) status.textContent = 'Enhance selected failed: ' + String(err.message || err).slice(0, 120);
-        } finally {
-          enhanceSelectedBtn.disabled = false;
-        }
-      });
-    }
+    panel.addEventListener('pointerup', endPanelDrag);
+    panel.addEventListener('pointercancel', endPanelDrag);
+    window.addEventListener('resize', () => {
+      if (panel.hidden) return;
+      const r = panel.getBoundingClientRect();
+      const pos = clampStampPanel(r.left, r.top);
+      panel.style.left = pos.left + 'px';
+      panel.style.top = pos.top + 'px';
+    });
   })();
 
   // -------- audio --------
