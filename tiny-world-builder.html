@@ -6298,7 +6298,7 @@
     waterFoam: new THREE.MeshLambertMaterial({ color: 0xbbe9ff, transparent: true, opacity: 0.74, side: THREE.FrontSide }),
     waterfall: new THREE.MeshBasicMaterial({ color: 0x28b5f0, transparent: true, opacity: 0.56, depthWrite: true, side: THREE.FrontSide }),
     waterfallHi: new THREE.MeshBasicMaterial({ color: 0x96e7ff, transparent: true, opacity: 0.68, depthWrite: true, side: THREE.FrontSide }),
-    waterfallFoamPuff: new THREE.MeshBasicMaterial({ color: 0xe8fbff, transparent: true, opacity: 0.58, depthWrite: true }),
+    waterfallFoamPuff: new THREE.MeshBasicMaterial({ color: 0xf4fdff, transparent: true, opacity: 0.82, depthWrite: true }),
     waterfallCube: new THREE.MeshBasicMaterial({ color: 0x078bd8, transparent: true, opacity: 0.82, depthWrite: true }),
     shore:     new THREE.MeshLambertMaterial({ color: 0xd8c18a, side: THREE.FrontSide }),
 
@@ -8152,7 +8152,7 @@
     const bottomY = -DIRT_H + 0.045;
     const height = Math.max(0.12, topY - bottomY);
     const half = riserSize * 0.5 + 0.018;
-    const sideSpan = riserSize * 0.86;
+    const sideSpan = riserSize * 0.96;
 
     function sidePosition(dir, across, y, outward = 0.010) {
       if (dir === 'n') return { x: across, y, z: -half - outward };
@@ -8224,10 +8224,11 @@
 
     function placeFoamPuff(dir, across, y, radius, salt, lane = 'fall') {
       const mesh = new THREE.Mesh(getWaterfallFoamGeometry(), M.waterfallFoamPuff);
-      const baseScale = radius * (0.82 + cellRand(x + salt, z - salt, 430) * 0.35);
-      mesh.scale.set(baseScale * 1.15, baseScale * 0.78, baseScale);
+      const laneScale = lane === 'lip' ? 1.42 : (lane === 'splash' ? 1.12 : 1);
+      const baseScale = radius * laneScale * (0.86 + cellRand(x + salt, z - salt, 430) * 0.38);
+      mesh.scale.set(baseScale * (lane === 'lip' ? 1.55 : 1.15), baseScale * (lane === 'lip' ? 0.62 : 0.78), baseScale);
       mesh.userData.noShadow = true;
-      const base = sidePosition(dir, across, y, 0.012 + cellRand(x + salt, z + salt, 431) * 0.026);
+      const base = sidePosition(dir, across, y, (lane === 'lip' ? 0.004 : 0.012) + cellRand(x + salt, z + salt, 431) * (lane === 'lip' ? 0.016 : 0.026));
       mesh.userData.waterfall = {
         kind: 'foam',
         lane,
@@ -8239,7 +8240,7 @@
         phase: cellRand(x * 7 + salt, z * 9 - salt, 450),
         speed: (lane === 'lip' ? 5.2 : lane === 'splash' ? 6.8 : 4.8) + cellRand(x - salt, z + salt, 470) * 3.4,
         drift: 0.045 + cellRand(x + salt, z + salt, 490) * 0.055,
-        acrossDrift: sideSpan * (0.035 + cellRand(x - salt, z - salt, 491) * 0.075),
+        acrossDrift: sideSpan * ((lane === 'lip' ? 0.025 : 0.035) + cellRand(x - salt, z - salt, 491) * (lane === 'lip' ? 0.055 : 0.075)),
         fallHeight: height * (0.72 + cellRand(x + salt, z - salt, 492) * 0.28),
       };
       mesh.renderOrder = 7;
@@ -8250,7 +8251,7 @@
 
     function placeWaterCube(dir, across, y, size, salt) {
       const mesh = new THREE.Mesh(getWaterfallCubeGeometry(), M.waterfallCube);
-      const baseScale = size * (0.82 + cellRand(x - salt, z + salt, 432) * 0.34);
+      const baseScale = size * (0.64 + cellRand(x - salt, z + salt, 432) * 0.24);
       const base = sidePosition(dir, across, y, 0.020 + cellRand(x + salt, z + salt, 433) * 0.035);
       mesh.scale.set(baseScale * 1.08, baseScale * 0.88, baseScale);
       mesh.userData.noShadow = true;
@@ -8298,26 +8299,28 @@
         const length = 0.16 + cellRand(x + i, z + i, 730 + seed) * 0.16;
         placeSurfaceFlow(dir, across, along, width, length, seed + i * 29);
       }
-      const puffCount = 16;
+      const puffCount = 38;
       for (let i = 0; i < puffCount; i++) {
         const r = cellRand(x * 41 + i, z * 43 - i, 520 + seed);
-        const across = (-0.43 + i / (puffCount - 1) * 0.86 + (r - 0.5) * 0.08) * sideSpan;
-        const lane = i % 5 === 0 ? 'lip' : (i % 4 === 0 ? 'splash' : 'fall');
+        const across = (-0.54 + i / (puffCount - 1) * 1.08 + (r - 0.5) * 0.060) * sideSpan;
+        const lane = i % 2 === 0 || i === 1 || i === puffCount - 2 ? 'lip' : (i % 5 === 0 ? 'splash' : 'fall');
         const y = lane === 'lip'
-          ? topY - 0.020 - cellRand(x + i, z - i, 540 + seed) * 0.045
+          ? topY - 0.004 - cellRand(x + i, z - i, 540 + seed) * 0.024
           : lane === 'splash'
             ? bottomY + 0.035 + cellRand(x - i, z + i, 560 + seed) * 0.080
             : topY - height * (0.18 + cellRand(x + i * 3, z + i * 5, 580 + seed) * 0.66);
         const radius = lane === 'splash'
           ? 0.070 + cellRand(x + i, z + i, 590 + seed) * 0.045
-          : 0.040 + cellRand(x - i, z + i, 600 + seed) * 0.045;
+          : lane === 'lip'
+            ? 0.064 + cellRand(x - i, z + i, 600 + seed) * 0.060
+            : 0.042 + cellRand(x - i, z + i, 600 + seed) * 0.045;
         placeFoamPuff(dir, across, y, radius, seed + i * 17, lane);
       }
-      for (let i = 0; i < 18; i++) {
+      for (let i = 0; i < 24; i++) {
         const r = cellRand(x * 59 + i, z * 61 - i, 744 + seed);
-        const across = (-0.43 + i / 17 * 0.86 + (r - 0.5) * 0.13) * sideSpan;
+        const across = (-0.46 + i / 23 * 0.92 + (r - 0.5) * 0.13) * sideSpan;
         const y = topY - height * (0.12 + cellRand(x + i * 5, z + i * 7, 746 + seed) * 0.92);
-        const size = 0.060 + cellRand(x - i, z + i, 748 + seed) * 0.090;
+        const size = 0.038 + cellRand(x - i, z + i, 748 + seed) * 0.058;
         placeWaterCube(dir, across, y, size, seed + i * 31);
       }
     }
