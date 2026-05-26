@@ -326,6 +326,10 @@ class LandscapeEngine {
       uniform float clipEnabled;
       uniform vec3 clipMin;
       uniform vec3 clipMax;
+      uniform float planetDistanceEffect;
+      uniform vec3 planetDistanceColor;
+      uniform float planetDistanceDesaturate;
+      uniform float planetDistanceDim;
 
       varying vec3 vColor;
       varying vec3 vWorldPos;
@@ -413,6 +417,7 @@ class LandscapeEngine {
         float horizon = pow(clamp(1.0 - abs(V.y), 0.0, 1.0), hazeExponent);
         float haze = clamp(fogF * (0.86 + horizon * hazeStrength), 0.0, 1.0);
         vec3 hazeColor = mix(fogColor, skyTint, 0.38 + horizon * 0.22);
+        color = mix(color, hazeColor, haze);
         color = mix(hazeColor, color, edgeFade);
 
         gl_FragColor = vec4(color, 1.0);
@@ -434,6 +439,10 @@ class LandscapeEngine {
       uniform float clipEnabled;
       uniform vec3 clipMin;
       uniform vec3 clipMax;
+      uniform float planetDistanceEffect;
+      uniform vec3 planetDistanceColor;
+      uniform float planetDistanceDesaturate;
+      uniform float planetDistanceDim;
 
       varying vec3 vColor;
       varying vec3 vWorldPos;
@@ -500,6 +509,7 @@ class LandscapeEngine {
         float horizon = pow(clamp(1.0 - abs(V.y), 0.0, 1.0), hazeExponent);
         float haze = clamp(fogF * (0.96 + horizon * (hazeStrength + 0.18)), 0.0, 1.0);
         vec3 hazeColor = mix(fogColor, skyTint, 0.66 + horizon * 0.16);
+        color = mix(color, hazeColor, haze);
         color = mix(hazeColor, color, edgeFade);
 
         gl_FragColor = vec4(color, 1.0);
@@ -587,12 +597,25 @@ class LandscapeEngine {
     // and scene fog. Low-poly mode intentionally keeps the custom cel shader.
     this.terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true, fog: true });
     this.terrainMat.userData = {
-      clipEnabled: { value: 0.0 }
+      clipEnabled: { value: 0.0 },
+      planetFogEnabled: { value: 0.0 },
+      planetFogColor: { value: new THREE.Color(this.currentBiome.fogColor) },
+      planetFogNear: { value: 360 },
+      planetFogFar: { value: 6200 },
+      planetFogStrength: { value: 0.0 },
+      planetHazeExponent: { value: 1.45 }
     };
     this.terrainMat.onBeforeCompile = (shader) => {
+      const planetFog = this._ensurePlanetFogUniforms();
       shader.uniforms.clipMin = { value: this._clipMin };
       shader.uniforms.clipMax = { value: this._clipMax };
       shader.uniforms.clipEnabled = this.terrainMat.userData.clipEnabled;
+      shader.uniforms.planetFogEnabled = planetFog.planetFogEnabled;
+      shader.uniforms.planetFogColor = planetFog.planetFogColor;
+      shader.uniforms.planetFogNear = planetFog.planetFogNear;
+      shader.uniforms.planetFogFar = planetFog.planetFogFar;
+      shader.uniforms.planetFogStrength = planetFog.planetFogStrength;
+      shader.uniforms.planetHazeExponent = planetFog.planetHazeExponent;
       
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
@@ -611,11 +634,26 @@ class LandscapeEngine {
         uniform vec3 clipMin;
         uniform vec3 clipMax;
         uniform float clipEnabled;
+        uniform float planetFogEnabled;
+        uniform vec3 planetFogColor;
+        uniform float planetFogNear;
+        uniform float planetFogFar;
+        uniform float planetFogStrength;
+        uniform float planetHazeExponent;
         varying vec3 vWorldPositionCustom;`
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <fog_fragment>',
         `#include <fog_fragment>
+        if (planetFogEnabled > 0.5) {
+          vec3 planetView = normalize(cameraPosition - vWorldPositionCustom);
+          float planetDist = length(cameraPosition - vWorldPositionCustom);
+          float planetRange = max(1.0, planetFogFar - planetFogNear);
+          float planetFogF = clamp((planetDist - planetFogNear) / planetRange, 0.0, 1.0);
+          float planetHorizon = pow(clamp(1.0 - abs(planetView.y), 0.0, 1.0), planetHazeExponent);
+          float planetFog = clamp(planetFogF * planetFogStrength * (0.76 + planetHorizon * 0.38), 0.0, 1.0);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, planetFogColor, planetFog);
+        }
         if (clipEnabled > 0.5) {
           float dx1 = vWorldPositionCustom.x - clipMin.x;
           float dx2 = clipMax.x - vWorldPositionCustom.x;
@@ -636,6 +674,33 @@ class LandscapeEngine {
         }`
       );
     };
+  }
+
+  _ensurePlanetFogUniforms() {
+    const u = this.terrainMat && this.terrainMat.userData;
+    if (!u) return null;
+    if (!u.planetFogEnabled || typeof u.planetFogEnabled.value === 'undefined') u.planetFogEnabled = { value: 0.0 };
+    if (!u.planetFogColor || !u.planetFogColor.value) u.planetFogColor = { value: new THREE.Color(this.currentBiome ? this.currentBiome.fogColor : 0xc4d8c0) };
+    if (!u.planetFogNear || typeof u.planetFogNear.value === 'undefined') u.planetFogNear = { value: 360 };
+    if (!u.planetFogFar || typeof u.planetFogFar.value === 'undefined') u.planetFogFar = { value: 6200 };
+    if (!u.planetFogStrength || typeof u.planetFogStrength.value === 'undefined') u.planetFogStrength = { value: 0.0 };
+    if (!u.planetHazeExponent || typeof u.planetHazeExponent.value === 'undefined') u.planetHazeExponent = { value: 1.45 };
+    return u;
+  }
+
+  setPlanetFog(opts = {}) {
+    const u = this._ensurePlanetFogUniforms();
+    if (!u) return;
+    const enabled = opts.enabled !== false;
+    u.planetFogEnabled.value = enabled ? 1.0 : 0.0;
+    if (opts.color !== undefined) {
+      if (opts.color && opts.color.isColor) u.planetFogColor.value.copy(opts.color);
+      else u.planetFogColor.value.set(opts.color);
+    }
+    if (Number.isFinite(Number(opts.near))) u.planetFogNear.value = Number(opts.near);
+    if (Number.isFinite(Number(opts.far))) u.planetFogFar.value = Number(opts.far);
+    if (Number.isFinite(Number(opts.strength))) u.planetFogStrength.value = Math.max(0, Number(opts.strength));
+    if (Number.isFinite(Number(opts.exponent))) u.planetHazeExponent.value = Math.max(0.1, Number(opts.exponent));
   }
 
   _mergeColored(entries) {
@@ -1190,6 +1255,11 @@ class LandscapeEngine {
     this.waterMat.uniforms.skyTop.value.setHex(this.currentBiome.skyTop);
     this.waterMat.uniforms.skyBottom.value.setHex(this.currentBiome.skyBottom);
     this.waterMat.uniforms.fogColor.value.setHex(this.currentBiome.fogColor);
+
+    const planetFog = this._ensurePlanetFogUniforms();
+    if (planetFog && planetFog.planetFogColor && planetFog.planetFogColor.value) {
+      planetFog.planetFogColor.value.setHex(this.currentBiome.fogColor);
+    }
 
     if (this.fogColorOut) {
       this.fogColorOut.setHex(this.currentBiome.fogColor);

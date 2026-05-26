@@ -4440,6 +4440,7 @@
           <span style="font-size: 13px; font-weight: 500; color: var(--muted);">Terrain style:</span>
           <select id="gen-landscape-style" style="padding: 4px 8px; border-radius: 8px; font-size: 12px; min-width: 170px;">
             <option value="landscape">Landscape (Flight game)</option>
+            <option value="planet-underlay">Floating islands + planet below</option>
             <option value="lowpoly">Low-poly (Flat panels)</option>
             <option value="voxel-mixed">Voxelized (Mixed detail)</option>
             <option value="voxel-4">Voxelized (4 × 4)</option>
@@ -4463,6 +4464,11 @@
               <option value="lowpoly">Low-poly (Cel)</option>
               <option value="realistic">Realistic</option>
             </select>
+          </div>
+          <div id="gen-planet-drop-control" style="display: none; align-items: center; gap: 8px; flex: 1 1 310px; min-width: 280px;">
+            <span style="font-size: 13px; font-weight: 500; color: var(--muted);">Planet distance:</span>
+            <input id="gen-planet-drop" type="range" min="20" max="300" step="5" value="100" style="width: 140px;" />
+            <span id="gen-planet-drop-value" style="font-size: 12px; font-weight: 700; color: var(--ink); min-width: 136px;">100m below</span>
           </div>
         </div>
       </div>
@@ -5309,6 +5315,13 @@
   let landscapeCutCapsGroup = null;
   let landscapeMeshBiome = 'grassland';  // 'grassland', 'desert', or 'snow'
   let landscapeMeshStyle = 'lowpoly';    // 'realistic' or 'lowpoly'
+  let planetLandscapeGroup = null;
+  let planetLandscapeEngine = null;
+  let planetLandscapeConfig = null;
+  let planetAtmosphereGroup = null;
+  function isPlanetLandscapeActive() {
+    return !!(planetLandscapeGroup && planetLandscapeEngine);
+  }
 
   let renderAutoExpand = localStorage.getItem(RENDER_LS.autoExpand) === '1';
 
@@ -19418,8 +19431,11 @@
       toolId: selectedTool && selectedTool.id,
       useLandscapeEngine,
       landscapeMeshMode,
+      landscapeMeshBiome,
+      landscapeMeshStyle,
       landscapeEngineSeed: landscapeEngineInstance ? landscapeEngineInstance.seed : null,
       landscapeEngineBiome: landscapeEngineInstance ? landscapeEngineInstance.currentBiomeName : null,
+      planetLandscape: serializePlanetLandscapeState(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
@@ -19918,6 +19934,7 @@
     useLandscapeEngine = false;
     landscapeEngineInstance = null;
     disposeLandscapeMesh();
+    disposePlanetLandscape();
     try {
       localStorage.setItem('tinyworld:gen:useLandscape', '0');
       const useLandscapeEl = document.getElementById('gen-use-landscape');
@@ -19975,6 +19992,7 @@
     useLandscapeEngine = false;
     landscapeEngineInstance = null;
     disposeLandscapeMesh();
+    disposePlanetLandscape();
     try {
       localStorage.setItem('tinyworld:gen:useLandscape', '0');
       const useLandscapeEl = document.getElementById('gen-use-landscape');
@@ -23336,6 +23354,12 @@
       landscapeMeshEngine.update(landscapeMeshFocusPos(), dt);
       if (renderAutoExpand || hasUserPanned) updateLandscapeClipBounds();
     }
+    if (isPlanetLandscapeActive()) {
+      planetLandscapeEngine.update(landscapeMeshFocusPos(), dt);
+      updatePlanetAtmosphere(dt);
+    } else if (planetAtmosphereGroup) {
+      updatePlanetAtmosphere(dt);
+    }
     if (useWindowedHomeRendering()) {
       requestHomeRenderWindowSync();
       if (homeRenderQueue.length) processHomeRenderQueue(5);
@@ -23467,6 +23491,91 @@
       "toolId": {
         "type": "string",
         "description": "Optional tool to leave selected after load. Ignored if unknown."
+      },
+      "useLandscapeEngine": {
+        "type": "boolean",
+        "description": "Optional legacy/generated flag for discrete LandscapeEngine-derived worlds."
+      },
+      "landscapeMeshMode": {
+        "type": "boolean",
+        "description": "Optional flag that restores continuous LandscapeEngine terrain in place of home-board tile meshes."
+      },
+      "landscapeMeshBiome": {
+        "type": "string",
+        "enum": [
+          "grassland",
+          "desert",
+          "snow"
+        ],
+        "description": "Optional biome used by continuous LandscapeEngine terrain."
+      },
+      "landscapeMeshStyle": {
+        "type": "string",
+        "enum": [
+          "lowpoly",
+          "realistic"
+        ],
+        "description": "Optional material style used by continuous LandscapeEngine terrain."
+      },
+      "landscapeEngineSeed": {
+        "type": [
+          "number",
+          "string",
+          "null"
+        ],
+        "description": "Optional LandscapeEngine seed for restored continuous or sampled terrain."
+      },
+      "landscapeEngineBiome": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "grassland",
+          "desert",
+          "snow",
+          null
+        ],
+        "description": "Optional LandscapeEngine biome for restored continuous or sampled terrain."
+      },
+      "planetLandscape": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "description": "Optional LandscapeEngine planet surface rendered below the floating home board.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "seed": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "biome": {
+            "type": "string",
+            "enum": [
+              "grassland",
+              "desert",
+              "snow"
+            ]
+          },
+          "styleMode": {
+            "type": "string",
+            "enum": [
+              "lowpoly",
+              "realistic"
+            ]
+          },
+          "drop": {
+            "type": "number",
+            "minimum": 20,
+            "maximum": 300
+          }
+        }
       }
     },
     "$defs": {
@@ -24620,6 +24729,7 @@
 
   function initLandscapeMesh() {
     disposeLandscapeMesh();
+    disposePlanetLandscape();
     if (!window.LandscapeEngine) return;
     if (!landscapeEngineInstance) return;
 
@@ -24648,6 +24758,461 @@
     removeLandscapeLegacyMeshes();
     updateLandscapeClipBounds();
   }
+
+  const PLANET_LANDSCAPE_DROP = 100;
+  const PLANET_LANDSCAPE_DROP_MIN = 20;
+  const PLANET_LANDSCAPE_DROP_MAX = 300;
+  const PLANET_LANDSCAPE_DROP_UI_MAX = 300;
+  const PLANET_LANDSCAPE_NEAR_RADIUS = 2;
+  const PLANET_LANDSCAPE_FAR_RADIUS = 6;
+  const PLANET_LANDSCAPE_FAR_RES = 54;
+  const PLANET_LANDSCAPE_PRIME_TICKS = 12;
+  const PLANET_ATMOSPHERE_RADIUS = 210;
+  const PLANET_ATMOSPHERE_LAYERS = [
+    { y: -18, radius: 0.68, alpha: 0.105, drift: 0.010, noise: 5.5 },
+    { y: -36, radius: 0.90, alpha: 0.135, drift: -0.008, noise: 6.8 },
+    { y: -58, radius: 1.10, alpha: 0.165, drift: 0.006, noise: 7.6 },
+    { y: -82, radius: 1.28, alpha: 0.125, drift: -0.005, noise: 4.8 },
+  ];
+  const PLANET_LANDSCAPE_BIOMES = new Set(['grassland', 'desert', 'snow']);
+  const PLANET_LANDSCAPE_STYLES = new Set(['lowpoly', 'realistic']);
+
+  function normalizePlanetLandscapeBiome(raw, fallback = 'grassland') {
+    const key = String(raw || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    if (PLANET_LANDSCAPE_BIOMES.has(key)) return key;
+    if (key === 'grass' || key === 'green' || key === 'temperate' || key === 'forest') return 'grassland';
+    if (key === 'sand' || key === 'dune' || key === 'dunes' || key === 'arid') return 'desert';
+    if (key === 'ice' || key === 'icy' || key === 'winter' || key === 'snowy' || key === 'arctic') return 'snow';
+    return PLANET_LANDSCAPE_BIOMES.has(fallback) ? fallback : 'grassland';
+  }
+
+  function normalizePlanetLandscapeStyle(raw, fallback = 'lowpoly') {
+    const key = String(raw || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    if (key === 'realistic' || key === 'realism' || key === 'real') return 'realistic';
+    if (key === 'lowpoly' || key === 'cel' || key === 'toon' || key === 'stylized') return 'lowpoly';
+    return PLANET_LANDSCAPE_STYLES.has(fallback) ? fallback : 'lowpoly';
+  }
+
+  function clampPlanetLandscapeDrop(raw, fallback = PLANET_LANDSCAPE_DROP) {
+    const value = Number(raw);
+    const base = Number.isFinite(value) ? value : fallback;
+    return Math.max(PLANET_LANDSCAPE_DROP_MIN, Math.min(PLANET_LANDSCAPE_DROP_MAX, Math.round(base)));
+  }
+
+  function normalizePlanetLandscapeConfig(config) {
+    if (!config || typeof config !== 'object' || config.enabled === false) return null;
+    const biome = normalizePlanetLandscapeBiome(config.biome);
+    const styleMode = normalizePlanetLandscapeStyle(config.styleMode || config.style || config.render);
+    const drop = clampPlanetLandscapeDrop(config.drop);
+    const rawSeed = config.seed;
+    const seed = typeof rawSeed === 'number' && Number.isFinite(rawSeed)
+      ? rawSeed
+      : seedHash(String(rawSeed || 'planet-underlay'));
+    return { enabled: true, seed, biome, styleMode, drop };
+  }
+
+  function serializePlanetLandscapeState() {
+    return planetLandscapeConfig ? { ...planetLandscapeConfig } : null;
+  }
+
+  function planetUnderlayFogColor(engine) {
+    const sky = (scene && scene.background && scene.background.isColor)
+      ? scene.background.clone()
+      : new THREE.Color(0xc7e6fb);
+    const hazeHex = engine && engine.currentBiome ? engine.currentBiome.fogColor : 0xe8e4d2;
+    return new THREE.Color(hazeHex).lerp(sky, 0.26);
+  }
+
+  function configurePlanetLandscapeEngine(engine, config) {
+    if (!engine) return;
+    const drop = config && Number.isFinite(Number(config.drop)) ? Number(config.drop) : PLANET_LANDSCAPE_DROP;
+    const styleMode = normalizePlanetLandscapeStyle(config && (config.styleMode || config.style || config.render));
+    const fogNear = Math.max(95, drop * 1.12);
+    const fogFar = Math.max(fogNear + 245, drop * 3.8);
+    engine.RENDER_RADIUS = PLANET_LANDSCAPE_NEAR_RADIUS;
+    engine.FAR_RADIUS = PLANET_LANDSCAPE_FAR_RADIUS;
+    engine.FAR_CHUNK_RES = PLANET_LANDSCAPE_FAR_RES;
+    for (const mat of [engine.sandMat, engine.sandMatLowPoly, engine.waterMat]) {
+      if (!mat || !mat.uniforms) continue;
+      if (mat.uniforms.fogNear) mat.uniforms.fogNear.value = fogNear;
+      if (mat.uniforms.fogFar) mat.uniforms.fogFar.value = fogFar;
+      if (mat.uniforms.hazeStrength) mat.uniforms.hazeStrength.value = Math.max(mat.uniforms.hazeStrength.value || 0, 1.18);
+    }
+    const planetFogColor = planetUnderlayFogColor(engine);
+    if (typeof engine.setPlanetFog === 'function') {
+      engine.setPlanetFog({
+        enabled: styleMode === 'realistic',
+        color: planetFogColor,
+        near: Math.max(80, fogNear * 0.86),
+        far: fogFar,
+        strength: styleMode === 'realistic' ? 1.18 : 0,
+        exponent: 1.36,
+      });
+    }
+    engine.userData = {
+      ...(engine.userData || {}),
+      planetUnderlay: true,
+      styleMode,
+      fogNear,
+      fogFar,
+      planetFogColor: '#' + planetFogColor.getHexString(),
+      realisticPlanetFog: styleMode === 'realistic',
+    };
+  }
+
+  function planetAtmosphereColors() {
+    const sky = (scene && scene.background && scene.background.isColor)
+      ? scene.background.clone()
+      : new THREE.Color(0xc7e6fb);
+    const hazeHex = planetLandscapeEngine && planetLandscapeEngine.currentBiome
+      ? planetLandscapeEngine.currentBiome.fogColor
+      : 0xe8e4d2;
+    const haze = new THREE.Color(hazeHex).lerp(sky, 0.18);
+    return { sky, haze };
+  }
+
+  function makePlanetAtmosphereMaterial(layer, index) {
+    const colors = planetAtmosphereColors();
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        time: { value: 0 },
+        hazeColor: { value: colors.haze },
+        skyColor: { value: colors.sky },
+        alpha: { value: layer.alpha },
+        noiseScale: { value: layer.noise },
+        seed: { value: index * 19.37 + 3.11 },
+        drift: { value: layer.drift },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWorldPos = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+        uniform float time;
+        uniform vec3 hazeColor;
+        uniform vec3 skyColor;
+        uniform float alpha;
+        uniform float noiseScale;
+        uniform float seed;
+        uniform float drift;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        float hash21(vec2 p) {
+          p = fract(p * vec2(123.34, 456.21));
+          p += dot(p, p + 45.32 + seed);
+          return fract(p.x * p.y);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(
+            mix(hash21(i), hash21(i + vec2(1.0, 0.0)), u.x),
+            mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), u.x),
+            u.y
+          );
+        }
+
+        void main() {
+          vec2 centered = vUv * 2.0 - 1.0;
+          float r = length(centered);
+          float edge = 1.0 - smoothstep(0.52, 1.0, r);
+          float centreSoftness = smoothstep(0.02, 0.34, r);
+          vec2 driftUv = vUv * noiseScale + vec2(time * drift + seed, -time * drift * 0.73);
+          float n = noise(driftUv) * 0.58 + noise(driftUv * 2.17 + seed) * 0.28 + noise(driftUv * 4.6 - seed) * 0.14;
+          float wisps = smoothstep(0.25, 0.86, n);
+          float veil = edge * mix(0.52, 1.0, wisps) * mix(0.92, 1.0, centreSoftness);
+          float horizonLift = smoothstep(-90.0, -18.0, -abs(vWorldPos.y));
+          float a = alpha * veil * (0.70 + horizonLift * 0.30);
+          if (a < 0.004) discard;
+          vec3 col = mix(skyColor, hazeColor, 0.58 + wisps * 0.24);
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+    });
+  }
+
+  function samePlanetLandscapeSource(a, b) {
+    return !!(a && b && a.seed === b.seed && a.biome === b.biome && a.styleMode === b.styleMode);
+  }
+
+  function syncPlanetAtmosphereColors() {
+    if (!planetAtmosphereGroup) return;
+    const colors = planetAtmosphereColors();
+    if (planetLandscapeEngine && planetLandscapeConfig && planetLandscapeConfig.styleMode === 'realistic' && typeof planetLandscapeEngine.setPlanetFog === 'function') {
+      planetLandscapeEngine.setPlanetFog({ enabled: true, color: planetUnderlayFogColor(planetLandscapeEngine) });
+    }
+    planetAtmosphereGroup.traverse(o => {
+      const uniforms = o.material && o.material.uniforms;
+      if (!uniforms) return;
+      if (uniforms.hazeColor) uniforms.hazeColor.value.copy(colors.haze);
+      if (uniforms.skyColor) uniforms.skyColor.value.copy(colors.sky);
+    });
+  }
+
+  function disposePlanetAtmosphere() {
+    if (!planetAtmosphereGroup) return;
+    planetAtmosphereGroup.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+        else o.material.dispose();
+      }
+    });
+    if (planetAtmosphereGroup.parent) planetAtmosphereGroup.parent.remove(planetAtmosphereGroup);
+    planetAtmosphereGroup = null;
+  }
+
+  function syncPlanetAtmosphereLayout(config) {
+    if (!planetAtmosphereGroup) return;
+    const next = normalizePlanetLandscapeConfig(config) || planetLandscapeConfig;
+    if (!next) return;
+    const radiusScale = Math.max(0.46, Math.min(1.42, Math.sqrt(next.drop / PLANET_LANDSCAPE_DROP)));
+    planetAtmosphereGroup.children.forEach((mesh, index) => {
+      const layer = PLANET_ATMOSPHERE_LAYERS[index];
+      if (!layer) return;
+      const layerDepth = Math.max(0.12, Math.min(0.92, Math.abs(layer.y) / PLANET_LANDSCAPE_DROP));
+      const scaledY = -next.drop * layerDepth;
+      mesh.position.y = Math.max(-next.drop + 5, Math.min(-6, scaledY));
+      mesh.scale.set(radiusScale, radiusScale, 1);
+    });
+  }
+
+  function initPlanetAtmosphere(config) {
+    disposePlanetAtmosphere();
+    const next = normalizePlanetLandscapeConfig(config) || planetLandscapeConfig;
+    if (!next) return;
+    planetAtmosphereGroup = new THREE.Group();
+    planetAtmosphereGroup.name = 'planetAtmosphereBetweenLayers';
+    planetAtmosphereGroup.position.set(target.x, 0, target.z);
+    planetAtmosphereGroup.userData.elapsed = 0;
+    PLANET_ATMOSPHERE_LAYERS.forEach((layer, index) => {
+      const size = PLANET_ATMOSPHERE_RADIUS * layer.radius * 2;
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(size, size, 1, 1),
+        makePlanetAtmosphereMaterial(layer, index)
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.renderOrder = 24 + index;
+      mesh.raycast = function () {};
+      mesh.userData.noShadow = true;
+      mesh.userData.planetAtmosphere = true;
+      planetAtmosphereGroup.add(mesh);
+    });
+    syncPlanetAtmosphereLayout(next);
+    worldGroup.add(planetAtmosphereGroup);
+    syncPlanetAtmosphereColors();
+  }
+
+  function updatePlanetAtmosphere(dt) {
+    if (!planetAtmosphereGroup) return;
+    planetAtmosphereGroup.visible = isPlanetLandscapeActive();
+    planetAtmosphereGroup.position.x = target.x;
+    planetAtmosphereGroup.position.z = target.z;
+    planetAtmosphereGroup.userData.elapsed = (planetAtmosphereGroup.userData.elapsed || 0) + dt;
+    const elapsed = planetAtmosphereGroup.userData.elapsed;
+    planetAtmosphereGroup.traverse(o => {
+      const uniforms = o.material && o.material.uniforms;
+      if (uniforms && uniforms.time) uniforms.time.value = elapsed;
+    });
+    if (!planetAtmosphereGroup.userData.lastColorSync || elapsed - planetAtmosphereGroup.userData.lastColorSync > 0.75) {
+      syncPlanetAtmosphereColors();
+      planetAtmosphereGroup.userData.lastColorSync = elapsed;
+    }
+  }
+
+  function disposePlanetLandscape() {
+    disposePlanetAtmosphere();
+    if (planetLandscapeEngine) {
+      planetLandscapeEngine.dispose();
+      planetLandscapeEngine = null;
+    }
+    if (planetLandscapeGroup) {
+      if (planetLandscapeGroup.parent) planetLandscapeGroup.parent.remove(planetLandscapeGroup);
+      planetLandscapeGroup = null;
+    }
+    planetLandscapeConfig = null;
+  }
+
+  function updatePlanetLandscapeDrop(drop) {
+    if (!planetLandscapeConfig || !planetLandscapeGroup || !planetLandscapeEngine) return false;
+    const next = normalizePlanetLandscapeConfig({ ...planetLandscapeConfig, drop });
+    if (!next) return false;
+    planetLandscapeConfig = next;
+    planetLandscapeGroup.position.y = -next.drop;
+    configurePlanetLandscapeEngine(planetLandscapeEngine, next);
+    syncPlanetAtmosphereLayout(next);
+    syncPlanetAtmosphereColors();
+    if (document.body.classList.contains('planet-proof-active')) enablePlanetLandscapeProofChrome(next);
+    return true;
+  }
+
+  function initPlanetLandscape(config) {
+    const next = normalizePlanetLandscapeConfig(config);
+    if (next && isPlanetLandscapeActive() && samePlanetLandscapeSource(planetLandscapeConfig, next)) {
+      return updatePlanetLandscapeDrop(next.drop);
+    }
+    disposePlanetLandscape();
+    if (!next) return false;
+    if (!window.LandscapeEngine) {
+      console.warn('LandscapeEngine.js is not loaded. Planet underlay disabled.');
+      return false;
+    }
+    planetLandscapeConfig = next;
+    planetLandscapeGroup = new THREE.Group();
+    planetLandscapeGroup.name = 'planetLandscapeUnderlay';
+    const s = LANDSCAPE_MESH_SCALE;
+    planetLandscapeGroup.scale.set(s, s, s);
+    planetLandscapeGroup.position.set(
+      -LANDSCAPE_MESH_OFFSET - GRID / 2 + 0.5,
+      -next.drop,
+      -LANDSCAPE_MESH_OFFSET - GRID / 2 + 0.5
+    );
+    worldGroup.add(planetLandscapeGroup);
+    planetLandscapeEngine = new window.LandscapeEngine({
+      scene: planetLandscapeGroup,
+      seed: next.seed,
+      initialBiome: next.biome,
+      styleMode: next.styleMode,
+      airfield: false,
+    });
+    configurePlanetLandscapeEngine(planetLandscapeEngine, next);
+    initPlanetAtmosphere(next);
+    planetLandscapeEngine.clearClipBounds();
+    // Kick enough near/far chunks to establish a broad horizon immediately,
+    // then let the normal frame loop keep streaming around camera movement.
+    for (let i = 0; i < PLANET_LANDSCAPE_PRIME_TICKS; i++) {
+      planetLandscapeEngine.update(landscapeMeshFocusPos(), 0);
+    }
+    if (document.body.classList.contains('planet-proof-active')) enablePlanetLandscapeProofChrome(next);
+    return true;
+  }
+
+  function planetLandscapeStateFromSelection(seed, biome, styleMode, drop = PLANET_LANDSCAPE_DROP) {
+    return normalizePlanetLandscapeConfig({
+      enabled: true,
+      seed,
+      biome,
+      styleMode,
+      drop,
+    });
+  }
+
+  function planetLandscapeDebugInfo() {
+    return {
+      active: isPlanetLandscapeActive(),
+      config: serializePlanetLandscapeState(),
+      chunks: planetLandscapeEngine ? planetLandscapeEngine.chunks.size : 0,
+      farChunks: planetLandscapeEngine ? planetLandscapeEngine.farChunks.size : 0,
+      groupChildren: planetLandscapeGroup ? planetLandscapeGroup.children.length : 0,
+      atmosphereLayers: planetAtmosphereGroup ? planetAtmosphereGroup.children.length : 0,
+      atmosphereVisible: planetAtmosphereGroup ? planetAtmosphereGroup.visible : false,
+      nearRadius: planetLandscapeEngine ? planetLandscapeEngine.RENDER_RADIUS : 0,
+      farRadius: planetLandscapeEngine ? planetLandscapeEngine.FAR_RADIUS : 0,
+      farChunkRes: planetLandscapeEngine ? planetLandscapeEngine.FAR_CHUNK_RES : 0,
+      pendingChunks: planetLandscapeEngine ? planetLandscapeEngine.pendingChunkBuilds.length : 0,
+      pendingFarChunks: planetLandscapeEngine ? planetLandscapeEngine.pendingFarChunkBuilds.length : 0,
+      fogNear: planetLandscapeEngine && planetLandscapeEngine.userData ? planetLandscapeEngine.userData.fogNear : null,
+      fogFar: planetLandscapeEngine && planetLandscapeEngine.userData ? planetLandscapeEngine.userData.fogFar : null,
+      planetFogColor: planetLandscapeEngine && planetLandscapeEngine.userData ? planetLandscapeEngine.userData.planetFogColor : null,
+      realisticPlanetFog: planetLandscapeEngine && planetLandscapeEngine.userData ? planetLandscapeEngine.userData.realisticPlanetFog : false,
+      groupPosition: planetLandscapeGroup ? planetLandscapeGroup.position.toArray() : null,
+      cameraMode,
+      cameraPosition: camera ? camera.position.toArray() : null,
+      target: target ? target.toArray() : null,
+    };
+  }
+
+  function applyPlanetLandscapeProofView(config = {}) {
+    const hasConfig = config && typeof config === 'object' && Object.keys(config).length > 0;
+    const next = planetLandscapeConfig || (hasConfig ? normalizePlanetLandscapeConfig(config) : null) || { drop: PLANET_LANDSCAPE_DROP };
+    if (typeof dismissWelcomeForDemo === 'function') dismissWelcomeForDemo();
+    if (typeof setCameraMode === 'function') setCameraMode('perspective');
+    cameraMode = 'perspective';
+    camera = persCam;
+    viewSize = clampViewSize(Number(config.viewSize) || 38);
+    const nextPolar = Number(config.polar);
+    const nextAzimuth = Number(config.azimuth);
+    polar = Number.isFinite(nextPolar) ? Math.max(MIN_ORBIT_POLAR, Math.min(MAX_ORBIT_POLAR, nextPolar)) : 0.82;
+    azimuth = Number.isFinite(nextAzimuth) ? nextAzimuth : -0.78;
+    const targetY = Number(config.targetY);
+    const targetX = Number(config.targetX);
+    const targetZ = Number(config.targetZ);
+    target.set(
+      Number.isFinite(targetX) ? targetX : 0,
+      Number.isFinite(targetY) ? targetY : -next.drop * 0.42,
+      Number.isFinite(targetZ) ? targetZ : 0
+    );
+    persCam.near = 0.1;
+    persCam.far = Math.max(260, next.drop * 4.8);
+    persCam.fov = 34;
+    persCam.updateProjectionMatrix();
+    updateCamera();
+    return planetLandscapeDebugInfo();
+  }
+
+  function enablePlanetLandscapeProofChrome(config = {}) {
+    const hasConfig = config && typeof config === 'object' && Object.keys(config).length > 0;
+    const next = planetLandscapeConfig || (hasConfig ? normalizePlanetLandscapeConfig(config) : null) || { biome: 'grassland', styleMode: 'lowpoly', drop: PLANET_LANDSCAPE_DROP };
+    document.body.classList.add('planet-proof-active');
+    if (!document.getElementById('planet-proof-style')) {
+      const style = document.createElement('style');
+      style.id = 'planet-proof-style';
+      style.textContent = `
+        body.planet-proof-active > :not(canvas):not(.planet-proof-badge) {
+          visibility: hidden !important;
+          pointer-events: none !important;
+        }
+        body.planet-proof-active canvas {
+          visibility: visible !important;
+        }
+        .planet-proof-badge {
+          position: fixed;
+          left: 24px;
+          bottom: 22px;
+          z-index: 99999;
+          padding: 9px 12px;
+          border-radius: 999px;
+          background: rgba(18, 24, 32, 0.72);
+          color: #fffaf0;
+          font: 700 12px/1.2 Inter, system-ui, sans-serif;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          box-shadow: 0 16px 38px rgba(18, 24, 32, 0.22);
+          backdrop-filter: blur(18px) saturate(150%);
+          -webkit-backdrop-filter: blur(18px) saturate(150%);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    let badge = document.getElementById('planet-proof-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'planet-proof-badge';
+      badge.className = 'planet-proof-badge';
+      document.body.appendChild(badge);
+    }
+    const styleLabel = next.styleMode === 'realistic' ? 'realistic' : 'low-poly';
+    badge.textContent = `Floating city + ${styleLabel} ${next.biome} planet · ${next.drop}m below`;
+  }
+
+  window.__setPlanetLandscapeUnderlay = initPlanetLandscape;
+  window.__setPlanetLandscapeDrop = updatePlanetLandscapeDrop;
+  window.__clearPlanetLandscapeUnderlay = disposePlanetLandscape;
+  window.__planetLandscapeInfo = planetLandscapeDebugInfo;
+  window.__planetLandscapeProofView = applyPlanetLandscapeProofView;
 
   function removeLandscapeLegacyMeshes() {
     clearGhostBoardsOnly();
@@ -25197,6 +25762,7 @@
     biomes: 'tinyworld:gen:biomes.v1',
     elevation: 'tinyworld:gen:elevation.v1',
     disableAutofill: 'tinyworld:gen:disableAutofill',
+    planetDrop: 'tinyworld:gen:planetDrop',
   };
   const GEN_BIOME_DEFAULTS = { grass: 55, forest: 20, water: 10, dirt: 10, settlement: 5 };
   const GEN_ELEV_DEFAULTS  = { plains: 55, hills: 30, mountains: 15 };
@@ -25335,10 +25901,37 @@
     const biomeDdContainer = document.getElementById('gen-landscape-biome-container');
     const biomeDdEl = document.getElementById('gen-landscape-biome');
     const renderDdEl = document.getElementById('gen-landscape-render');
+    const planetDropControl = document.getElementById('gen-planet-drop-control');
+    const planetDropEl = document.getElementById('gen-planet-drop');
+    const planetDropValueEl = document.getElementById('gen-planet-drop-value');
+
+    function selectedPlanetDrop() {
+      const fallback = planetLandscapeConfig && Number.isFinite(Number(planetLandscapeConfig.drop))
+        ? planetLandscapeConfig.drop
+        : PLANET_LANDSCAPE_DROP;
+      return clampPlanetLandscapeDrop(planetDropEl ? planetDropEl.value : fallback, fallback);
+    }
+
+    function planetDropLabel(drop) {
+      const relation = drop < PLANET_LANDSCAPE_DROP
+        ? ' · land higher'
+        : (drop > PLANET_LANDSCAPE_DROP ? ' · land lower' : '');
+      return drop + 'm below' + relation;
+    }
+
+    function syncPlanetDropLabel() {
+      if (!planetDropEl) return;
+      const drop = selectedPlanetDrop();
+      planetDropEl.value = String(Math.min(PLANET_LANDSCAPE_DROP_UI_MAX, drop));
+      if (planetDropValueEl) planetDropValueEl.textContent = planetDropLabel(drop);
+    }
 
     function syncBiomeContainerVisibility() {
       if (!biomeDdContainer || !landscapeStyleEl) return;
-      biomeDdContainer.style.display = landscapeStyleEl.value === 'landscape' ? 'flex' : 'none';
+      const style = landscapeStyleEl.value;
+      biomeDdContainer.style.display = (style === 'landscape' || style === 'planet-underlay') ? 'flex' : 'none';
+      if (planetDropControl) planetDropControl.style.display = style === 'planet-underlay' ? 'flex' : 'none';
+      syncPlanetDropLabel();
     }
 
     if (landscapeStyleEl) {
@@ -25362,6 +25955,27 @@
       renderDdEl.addEventListener('change', () => {
         try { localStorage.setItem('tinyworld:gen:landscapeRender', renderDdEl.value); } catch (_) {}
       });
+    }
+    if (planetDropEl) {
+      planetDropEl.min = String(PLANET_LANDSCAPE_DROP_MIN);
+      planetDropEl.max = String(PLANET_LANDSCAPE_DROP_UI_MAX);
+      planetDropEl.step = '5';
+      const storedDrop = clampPlanetLandscapeDrop(localStorage.getItem(GEN_LS.planetDrop));
+      planetDropEl.value = String(Math.min(PLANET_LANDSCAPE_DROP_UI_MAX, storedDrop));
+      planetDropEl.addEventListener('input', () => {
+        const drop = selectedPlanetDrop();
+        if (planetDropValueEl) planetDropValueEl.textContent = planetDropLabel(drop);
+      });
+      planetDropEl.addEventListener('change', () => {
+        const drop = selectedPlanetDrop();
+        try { localStorage.setItem(GEN_LS.planetDrop, String(drop)); } catch (_) {}
+        syncPlanetDropLabel();
+        if (isPlanetLandscapeActive() && planetLandscapeConfig && landscapeStyleEl && landscapeStyleEl.value === 'planet-underlay') {
+          if (!updatePlanetLandscapeDrop(drop)) initPlanetLandscape({ ...planetLandscapeConfig, drop });
+          saveState();
+        }
+      });
+      syncPlanetDropLabel();
     }
     syncBiomeContainerVisibility();
     const biomeSlidersEl = document.getElementById('gen-biome-sliders');
@@ -25647,13 +26261,19 @@
         gridSizeEl.value = String(coerceGridSize(storedGridSize, GRID));
       }
       if (landscapeStyleEl) {
-        if (landscapeMeshMode) {
+        if (isPlanetLandscapeActive()) {
+          landscapeStyleEl.value = 'planet-underlay';
+          if (renderDdEl && planetLandscapeConfig) renderDdEl.value = planetLandscapeConfig.styleMode || 'lowpoly';
+          if (planetDropEl && planetLandscapeConfig) planetDropEl.value = String(Math.min(PLANET_LANDSCAPE_DROP_UI_MAX, clampPlanetLandscapeDrop(planetLandscapeConfig.drop)));
+        } else if (landscapeMeshMode) {
           landscapeStyleEl.value = 'landscape';
+          if (renderDdEl) renderDdEl.value = landscapeMeshStyle || 'lowpoly';
         } else if (!renderVoxelTerrain) {
           landscapeStyleEl.value = 'lowpoly';
         } else {
           landscapeStyleEl.value = 'voxel-' + renderTerrainVoxelResolution;
         }
+        syncBiomeContainerVisibility();
       }
       setStatus('');
       openTinyModal(modal, promptEl);
@@ -25698,22 +26318,37 @@
       const elevation = { ...elevState };
       const procedural = !!(proceduralEl && proceduralEl.checked);
       const landscapeStyle = landscapeStyleEl && landscapeStyleEl.value;
+      const wantsPlanetLandscape = landscapeStyle === 'planet-underlay';
+      const planetBiome = (biomeDdEl && biomeDdEl.value) || 'grassland';
+      const planetStyleMode = (renderDdEl && renderDdEl.value) || 'lowpoly';
+      const planetDrop = selectedPlanetDrop();
       const useLandscapeEl = document.getElementById('gen-use-landscape');
-      const useLandscape = (landscapeStyle === 'landscape') || (useLandscapeEl && useLandscapeEl.checked);
+      const useLandscape = (landscapeStyle === 'landscape') || (!wantsPlanetLandscape && useLandscapeEl && useLandscapeEl.checked);
       const disableAutofill = !!(disableAutofillEl && disableAutofillEl.checked);
       try { localStorage.setItem(GEN_LS.gridSize, String(gridSize)); } catch (_) {}
+      try { localStorage.setItem(GEN_LS.planetDrop, String(planetDrop)); } catch (_) {}
 
       // Apply the selected terrain style to the global settings and persist them
       if (landscapeStyleEl) {
         const style = landscapeStyleEl.value;
         if (style === 'landscape') {
+          disposePlanetLandscape();
           renderVoxelTerrain = false;
           landscapeMeshMode = true;
           // Store biome/render choices for initLandscapeMesh
-          landscapeMeshBiome = (biomeDdEl && biomeDdEl.value) || 'grassland';
-          landscapeMeshStyle = (renderDdEl && renderDdEl.value) || 'lowpoly';
+          landscapeMeshBiome = planetBiome;
+          landscapeMeshStyle = planetStyleMode;
           // landscapeMeshMode is activated after applyState creates the engine instance
+        } else if (style === 'planet-underlay') {
+          disposeLandscapeMesh({ rebuild: true });
+          useLandscapeEngine = false;
+          landscapeEngineInstance = null;
+          landscapeMeshMode = false;
+          landscapeMeshBiome = planetBiome;
+          landscapeMeshStyle = planetStyleMode;
+          renderVoxelTerrain = false;
         } else if (style === 'lowpoly') {
+          disposePlanetLandscape();
           disposeLandscapeMesh({ rebuild: true });
           if (!useLandscape) {
             useLandscapeEngine = false;
@@ -25721,6 +26356,7 @@
           }
           renderVoxelTerrain = false;
         } else {
+          disposePlanetLandscape();
           disposeLandscapeMesh({ rebuild: true });
           if (!useLandscape) {
             useLandscapeEngine = false;
@@ -25744,6 +26380,9 @@
           const data = useLandscape
             ? generateLandscapeWorld({ seed: effectiveSeed, biomes, elevation, gridSize })
             : generateProceduralWorld({ seed: effectiveSeed, biomes, elevation, gridSize });
+          if (wantsPlanetLandscape) {
+            data.planetLandscape = planetLandscapeStateFromSelection(effectiveSeed, planetBiome, planetStyleMode, planetDrop);
+          }
           const err = (typeof validateWorld === 'function') ? validateWorld(data) : null;
           if (err) throw new Error('procedural schema: ' + err);
           if (typeof applyState === 'function' && !applyState(data, { sliced: true })) {
@@ -25754,7 +26393,8 @@
             initLandscapeMesh();
             rebuildTerrainRender();
           }
-          setStatus('done · seed: ' + effectiveSeed, '');
+          if (wantsPlanetLandscape && typeof setCameraMode === 'function') setCameraMode('perspective');
+          setStatus('done · seed: ' + effectiveSeed + (wantsPlanetLandscape ? ' · planet ' + planetDrop + 'm below' : ''), '');
         } catch (err) {
           console.error('procedural generate failed:', err);
           setStatus(String(err.message || err).slice(0, 140), 'error');
@@ -25823,6 +26463,10 @@
         hidePlanOverlay();
         progress.say('Generating validated world JSON with ' + model + '…');
         const data = await generateWorld(provider, model, key, decoratedPrompt, gridSize);
+        if (wantsPlanetLandscape) {
+          data.planetLandscape = planetLandscapeStateFromSelection(effectiveSeed, planetBiome, planetStyleMode, planetDrop);
+          progress.say('Adding ' + planetBiome + ' LandscapeEngine planet underlay ' + planetDrop + 'm below the floating board…');
+        }
         const receivedCells = data && Array.isArray(data.cells) ? data.cells.length : 0;
         progress.say('Received JSON with ' + receivedCells + ' cells. Switching back to perspective and slicing the build into terrain, then objects.');
         hidePlanOverlay();
@@ -25851,8 +26495,8 @@
           initLandscapeMesh();
           rebuildTerrainRender();
         }
-        setStatus('done · seed: ' + effectiveSeed, '');
-        progress.done('Building completed.');
+        setStatus('done · seed: ' + effectiveSeed + (wantsPlanetLandscape ? ' · planet ' + planetDrop + 'm below' : ''), '');
+        progress.done(wantsPlanetLandscape ? 'Building completed with planet underlay.' : 'Building completed.');
       } catch (err) {
         console.error('generate failed:', err);
         hidePlanOverlay();
@@ -27202,6 +27846,7 @@
           landscapeMeshStyle,
           landscapeEngineSeed: landscapeEngineInstance ? landscapeEngineInstance.seed : null,
           landscapeEngineBiome: landscapeEngineInstance ? landscapeEngineInstance.currentBiomeName : null,
+          planetLandscape: serializePlanetLandscapeState(),
         }));
       } catch (_) {}
     }, 200);
@@ -27222,8 +27867,12 @@
     if (data.v !== 1 && data.v !== 2 && data.v !== 3 && data.v !== 4) return false;
     hasUserPanned = false;
     if (vehicleFleet.size) clearVehicleRuntime();
+    const pendingPlanetLandscape = !data.useLandscapeEngine
+      ? normalizePlanetLandscapeConfig(data.planetLandscape)
+      : null;
 
     if (data.useLandscapeEngine) {
+      disposePlanetLandscape();
       useLandscapeEngine = true;
       initLandscapeEngine(data.landscapeEngineSeed || '', data.landscapeEngineBiome || 'grassland');
     } else {
@@ -27234,6 +27883,8 @@
 
     // Defer landscape mesh init — we need cells painted first so
     // rebuildTerrainRender can hide them.
+    if (PLANET_LANDSCAPE_BIOMES.has(data.landscapeMeshBiome)) landscapeMeshBiome = data.landscapeMeshBiome;
+    if (data.landscapeMeshStyle) landscapeMeshStyle = normalizePlanetLandscapeStyle(data.landscapeMeshStyle, landscapeMeshStyle);
     const shouldRestoreLandscapeMesh = !!(data.landscapeMeshMode && landscapeEngineInstance);
     if (!shouldRestoreLandscapeMesh) {
       disposeLandscapeMesh();
@@ -27248,6 +27899,11 @@
       // The cell loop below repaints every tile, so skip the rebuild
       // step inside setHomeGridSize and just dispose old meshes.
       setHomeGridSize(restoredGridSize, { skipRebuild: true });
+    }
+    if (pendingPlanetLandscape) {
+      initPlanetLandscape(pendingPlanetLandscape);
+    } else {
+      disposePlanetLandscape();
     }
     suppressSave = true;
     const overrides = new Map();
@@ -29965,6 +30621,42 @@
     });
 
     window.__openCommandPalette = open;
+  })();
+
+  (function bootPlanetLandscapeQuery() {
+    const params = new URLSearchParams(window.location.search || '');
+    if (!params.has('planet')) return;
+    const planetRaw = params.get('planet') || '';
+    const planetKey = String(planetRaw).trim().toLowerCase().replace(/[\s_-]+/g, '');
+    const planetStyleKey = planetKey === 'realistic' || planetKey === 'realism' || planetKey === 'real' || planetKey === 'lowpoly' || planetKey === 'cel' || planetKey === 'toon';
+    const planetFlagKey = planetKey === '1' || planetKey === 'true' || planetKey === 'yes' || planetKey === 'on' || planetKey === 'underlay' || planetKey === 'below';
+    const explicitBiome = params.get('planetBiome') || params.get('biome') || params.get('environment') || '';
+    const biomeRaw = explicitBiome || (planetStyleKey || planetFlagKey ? 'grassland' : planetRaw) || 'grassland';
+    let styleRaw = params.get('planetStyle') || params.get('planetRender') || params.get('render') || '';
+    if (!styleRaw && planetStyleKey) styleRaw = planetRaw;
+    if (!styleRaw) styleRaw = 'lowpoly';
+    const seedRaw = params.get('seed') || params.get('planetSeed') || 'planet-underlay';
+    const dropRaw = params.get('planetDrop') || params.get('planetDistance') || params.get('landDistance') || params.get('drop');
+    const planetDrop = clampPlanetLandscapeDrop(dropRaw);
+    const wantsProof = params.get('planetProof') === '1' || params.get('proof') === 'planet';
+    requestAnimationFrame(() => {
+      const planetState = planetLandscapeStateFromSelection(seedRaw, biomeRaw, styleRaw, planetDrop);
+      initPlanetLandscape(planetState);
+      if (wantsProof) {
+        enablePlanetLandscapeProofChrome(planetState);
+        const proofConfig = {
+          ...planetState,
+          viewSize: params.get('planetView') || 38,
+          polar: params.get('planetPolar') || 0.82,
+          azimuth: params.get('planetAzimuth') || -0.78,
+        };
+        if (params.has('planetTargetY')) proofConfig.targetY = params.get('planetTargetY');
+        applyPlanetLandscapeProofView(proofConfig);
+        setTimeout(() => applyPlanetLandscapeProofView(planetState), 650);
+      } else if (typeof setCameraMode === 'function') {
+        setCameraMode('perspective');
+      }
+    });
   })();
 
   initAuth();

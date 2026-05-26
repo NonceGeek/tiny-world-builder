@@ -27,6 +27,7 @@ Checks:
 - Selection preview in the floating agent panel should show useful property chips for the primary selected kind. Supported properties (e.g. tower Top/Body colour, building Shape, Size) should apply immediately through `setCell`; unsupported creative edits can fall back to prompts.
 - Selection preview must render the same object/stamp factory as the world view. Voxel-build/custom objects should not fall back to a generic blue cube.
 - Selection colour controls should offer a broad palette for supported object parts, not just 3-4 legacy swatches.
+- Planet-underlay visual proof should use deterministic proof URLs such as `http://localhost:3000/tiny-world-builder?planet=desert&planetStyle=lowpoly&planetDrop=60&seed=skytest&planetProof=1` and `http://localhost:3000/tiny-world-builder?planet=desert&planetStyle=realistic&planetDrop=60&seed=skytest&planetProof=1`: they hide non-canvas chrome, dismiss the welcome modal, widen the perspective camera, apply the underlay horizon haze and between-layer atmosphere sheets, and leave a small proof badge. Prefer this over judging one-shot screenshots where normal UI panels or default camera framing obscure the underlay.
 
 Useful browser probes:
 

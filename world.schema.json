@@ -30,6 +30,45 @@
     "toolId": {
       "type": "string",
       "description": "Optional tool to leave selected after load. Ignored if unknown."
+    },
+    "useLandscapeEngine": {
+      "type": "boolean",
+      "description": "Optional legacy/generated flag for discrete LandscapeEngine-derived worlds."
+    },
+    "landscapeMeshMode": {
+      "type": "boolean",
+      "description": "Optional flag that restores continuous LandscapeEngine terrain in place of home-board tile meshes."
+    },
+    "landscapeMeshBiome": {
+      "type": "string",
+      "enum": ["grassland", "desert", "snow"],
+      "description": "Optional biome used by continuous LandscapeEngine terrain."
+    },
+    "landscapeMeshStyle": {
+      "type": "string",
+      "enum": ["lowpoly", "realistic"],
+      "description": "Optional material style used by continuous LandscapeEngine terrain."
+    },
+    "landscapeEngineSeed": {
+      "type": ["number", "string", "null"],
+      "description": "Optional LandscapeEngine seed for restored continuous or sampled terrain."
+    },
+    "landscapeEngineBiome": {
+      "type": ["string", "null"],
+      "enum": ["grassland", "desert", "snow", null],
+      "description": "Optional LandscapeEngine biome for restored continuous or sampled terrain."
+    },
+    "planetLandscape": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional LandscapeEngine planet surface rendered below the floating home board.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "seed": { "type": ["number", "string"] },
+        "biome": { "type": "string", "enum": ["grassland", "desert", "snow"] },
+        "styleMode": { "type": "string", "enum": ["lowpoly", "realistic"] },
+        "drop": { "type": "number", "minimum": 20, "maximum": 300 }
+      }
     }
   },
   "$defs": {
