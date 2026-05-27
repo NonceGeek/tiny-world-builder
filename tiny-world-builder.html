@@ -23827,6 +23827,14 @@
     }));
   }
 
+  function centerSelectedBoardObjectOffset() {
+    return updateSelectedBoardObjects(() => ({
+      offsetX: 0,
+      offsetY: 0,
+      offsetZ: 0,
+    }));
+  }
+
   function resetSelectedBoardObjectTransform() {
     return updateSelectedBoardObjects(target => {
       const appearance = Object.assign({}, normalizeAppearance(target.cell.appearance) || {});
@@ -30664,6 +30672,7 @@
         else if (value === 'y+') moveSelectedBoardObject(0, step, 0);
         else if (value === 'z-') moveSelectedBoardObject(0, 0, -step);
         else if (value === 'z+') moveSelectedBoardObject(0, 0, step);
+        else if (value === 'center') centerSelectedBoardObjectOffset();
         return;
       }
       if (rowKey === 'objectTransformReset') {
@@ -30910,6 +30919,7 @@
             { label: 'Y+', value: 'y+' },
             { label: 'Z-', value: 'z-' },
             { label: 'Z+', value: 'z+' },
+            { label: 'Center', value: 'center' },
           ] },
           { key: 'objectTransformReset', label: 'Reset', options: [
             { label: 'Transform', value: 'transform' },
