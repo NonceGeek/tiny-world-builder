@@ -1,12 +1,12 @@
 # CodeSurf Workspace Memory — tinyworld
 
-_Generated: 2026-05-26 (sixth pass)_
+_Generated: 2026-05-27 (seventh pass)_
 
 ---
 
 ## Overview
 
-Tiny World Builder is a single-file, no-bundler 3-D isometric world editor built on Three.js r128. The runtime is `tiny-world-builder.html` (inline CSS + JS, ~29k LoC). `LandscapeEngine.js` handles procedural underlay terrain; it has been refactored into `engine/landscape/` mixin modules (geometries, noise, shaders, water, chunks). Deployment is static: `publish.sh` → `dist/`.
+Tiny World Builder is a single-file, no-bundler 3-D isometric world editor built on Three.js r128. The runtime is `tiny-world-builder.html` (inline CSS + JS, currently ~32.5k lines / ~1.3 MB). `LandscapeEngine.js` handles procedural underlay terrain; refactored into `engine/landscape/` mixin modules. Deployment is static: `publish.sh` → `dist/`. `npm test` runs ESLint + HTMLHint static checks; all pass after recent sessions.
 
 ---
 
@@ -17,51 +17,57 @@ Tiny World Builder is a single-file, no-bundler 3-D isometric world editor built
 - All mutations via `setCell(x, z, opts)`; sparse-safe reads via `getWorldCell()` / `ensureWorldCell()`
 - Never write to `world[x][z]` directly outside init
 
-**Planet underlay** (commits 373c4d7 → b3fccae, committed and clean)
-- Separate `planetLandscapeEngine` instance; treated as decorative backdrop — no shadows, no pointer picks
-- `BACKDROP_MODE`, `CHUNK_BUILD_BUDGET_NEAR/FAR` in `LandscapeEngine.js` and `engine/landscape/chunks.js`
-- Warmup drain via `setTimeout` to avoid clipped horizons on first load
-- `setPlanetFog()` defensively ensures uniform holders before mutating
-- `tickPlanetLandscapeStream()` replaces direct `planetLandscapeEngine.update()` call
-- `world.schema.json` now includes `planetLandscape` serialisation fields
-- `models/Building_1.glb` added to `models/`
+**Planet underlay** (committed and clean)
+- Separate `planetLandscapeEngine` instance; decorative backdrop — no shadows, no pointer picks
+- `tickPlanetLandscapeStream()` drives updates; `setPlanetFog()` defensively guards uniform holders
+- `world.schema.json` includes `planetLandscape` serialisation fields
 
-**Water flow system** (commit 8936613, committed and clean)
+**Water flow system** (committed and clean)
 - `waterTextureFlowStates`, `applyFlowingWaterUVs`, `waterFlowMaterial`, `tickWaterTextureFlow()`
-- `waterFlow` field on cells (default `'auto'`); persisted in import/export/patching; editable via UI for selected water tiles
-- Render resolution scale min lowered to 0.25; backdrop/vignette/mist ranges and tilt blur increased
+- `waterFlow` field on cells (default `'auto'`); persisted; UI-editable per tile
 
 **Ghost world generation**
-- Deterministic, seeded (`ghostHash` / `cellRand`), connection-aware across board edges
-- Cached in `ghostBoardCells` keyed by `'bx,bz'`; panning away and back reproduces identical content
-- Full SKILL.md exists — not yet in AGENTS.md routing
+- Deterministic seeded (`ghostHash` / `cellRand`), connection-aware across board edges
+- Cached in `ghostBoardCells`; reproduced identically on pan-back
 
-**Engine landscape modules** (`engine/landscape/`)
-- `geometries.js`, `noise.js`, `shaders.js`, `water.js`, `chunks.js`
-- `chunks.js` skips full staging and shadow-map participation for underlay meshes
+**Weather system** (added 2026-05-27)
+- `currentWeather` — `'sunny'` / `'cloudy'` / `'rain'` / `'storm'`; serialised
+- `WEATHER_CONFIG`, `applyWeatherConfig()`, rain particles (capped 2000), lightning bolt + flash
+- Toolbar shortcut `W`
 
-**`world.schema.json`** — tracks serialisable world state shape including `planetLandscape` block
+**Day/night cycle** (added 2026-05-27)
+- `timeOfDay` (0–1), keyframe config covering sun/moon position, lights, fog, stars
+- `sunMesh`, `moonMesh`, `starField` (2000 stars) in scene
+- Toolbar shortcut `T`; long-press cycles 1×/5×/20× speed
+
+**Dynamic shadows** (added 2026-05-27, default off)
+- `dynamicShadows` setting; moves `dirLight.position` with sun/moon; sets `shadowMap.needsUpdate`
+- ~2–4ms extra per frame at 48×48
+
+**NPC / Character system** (added 2026-05-27)
+- `CHARACTERS` registry, `worldNPCs` array, A\* pathfinding, NPC schedules, relationships graph, Claude API dialog, memory compression at 20-message cap, GLTF model support with capsule fallback
+- 12 pre-built fantasy village characters shipped
+- Toolbar shortcut `N`; fully serialised with save/load
+
+**Stamp Panel** (WIP) — shortcut `M`; missing undo and rotation/flip
+
+**Seasons system** (WIP) — 4 seasons, animated transitions, seasonal particles; directly mutates shared `M.*` materials (fragile)
 
 ---
 
-## Skills Registry
+## Skills Registry (13 on disk, 11 routed)
 
-AGENTS.md routing table verified at 11 entries. Two skill files exist on disk but are not routed:
-
-- **Missing from AGENTS.md:** `tinyworld-ghost-world-gen` (ghost board gen, path/road/river continuity, seeded RNG) and `threejs-primitive-reconstructor` (image-to-Three.js primitive scene generation)
-
----
-
-## Tooling Note
-
-- **Playwright MCP** — confirmed in deferred-tool list (`mcp__plugin_playwright_playwright__*`); browser automation available for `tinyworld-visual-qa` checks
+**Not in AGENTS.md:** `tinyworld-ghost-world-gen`, `threejs-primitive-reconstructor`
 
 ---
 
 ## Open Threads
 
-- Add both missing skills to AGENTS.md routing
-- Confirm `waterFlow` default `'auto'` round-trips safely against pre-existing saves (no schema migration guard observed)
-- Verify which features (minimap, seasons, time-of-day, stamp panel) are fully committed vs. WIP — `1055bab` added Stamp panel but several `WIP` commits followed
-- `PORT-NOTES.md` and `status.MD` exist at repo root — review for tracked decisions before adding new systems
-- `plugins/` directory at repo root — contents and integration pattern not yet documented in skills or memory
+- Add both unrouted skills to AGENTS.md routing
+- Seasons system mutates shared `M.*` materials directly — audit before adding new tinting systems
+- NPC `memorySummary` growth unbounded across many save cycles
+- Rain cap (2000) and lightning bolt geometry are candidates for sprite upgrade
+- Stamp panel missing undo and rotation/flip
+- `plugins/` directory at repo root — not yet documented in skills or memory
+- `PORT-NOTES.md` and `status.MD` at repo root — review before adding new systems
+- Verify `dynamicShadows` round-trips safely on older saves
