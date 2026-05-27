@@ -30802,16 +30802,22 @@
         const appearance = normalizeAppearance(cell.appearance) || {};
         return normalizeMaterialTextureKey(appearance.topTexture || 'default');
       });
-      addRow('Edit', { key: 'selectionAction', label: 'Actions', options: [
-        { label: 'Copy', value: 'copy' },
-        { label: 'Cut', value: 'cut' },
-        { label: 'Delete', value: 'delete' },
-        { label: 'Apply tool', value: 'apply-tool' },
-        { label: 'Paste', value: 'paste' },
-        { label: 'Duplicate', value: 'duplicate' },
-        { label: 'Save template', value: 'save-template' },
-        { label: 'Paste latest', value: 'paste-template' },
-      ] });
+      addRows('Edit', [
+        { key: 'selectionAction', label: 'Tool', options: [
+          { label: 'Apply tool', value: 'apply-tool' },
+          { label: 'Delete', value: 'delete' },
+        ] },
+        { key: 'selectionAction', label: 'Clipboard', options: [
+          { label: 'Copy', value: 'copy' },
+          { label: 'Cut', value: 'cut' },
+          { label: 'Paste', value: 'paste' },
+          { label: 'Duplicate', value: 'duplicate' },
+        ] },
+        { key: 'selectionAction', label: 'Templates', options: [
+          { label: 'Save template', value: 'save-template' },
+          { label: 'Paste latest', value: 'paste-template' },
+        ] },
+      ]);
       addRow('Transform', { key: 'rotate', label: 'Rotate', options: [
         { label: 'Left', value: 'left' },
         { label: 'Right', value: 'right' },
