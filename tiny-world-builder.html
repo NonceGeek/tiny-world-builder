@@ -21094,6 +21094,11 @@
     }
   });
 
+  renderer.domElement.addEventListener('pointerleave', () => {
+    if (pointerDown || activePointers.size) return;
+    setHoverFromCell(null);
+  });
+
   renderer.domElement.addEventListener('pointerup', e => {
     if (generationViewLocked) {
       e.preventDefault();
@@ -21458,6 +21463,21 @@
     return pasteClipboardAtTarget(hoverWorldTarget(true), { animate: true, impactDust: true });
   }
 
+  function selectedPasteFallbackTarget() {
+    const sel = window.__tinyworldSelection;
+    const coords = sel && sel.worldCoords ? sel.worldCoords() : [];
+    if (!coords.length) return null;
+    return {
+      x: Math.min(...coords.map(c => c.x)),
+      z: Math.min(...coords.map(c => c.z)),
+      userEdited: coords.some(c => isOutsideHomeGrid(c.x, c.z)),
+    };
+  }
+
+  function pasteClipboardAtActiveTarget() {
+    return pasteHoveredCellIntent() || pasteClipboardAtTarget(selectedPasteFallbackTarget(), { animate: true, impactDust: true });
+  }
+
   function duplicateActiveCellIntent() {
     const selectedTargets = selectedClipboardTargets(true);
     if (!selectedTargets.length) {
@@ -21518,7 +21538,7 @@
       return;
     }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && comboKey === 'v') {
-      if (pasteHoveredCellIntent()) e.preventDefault();
+      if (pasteClipboardAtActiveTarget()) e.preventDefault();
       return;
     }
     // Never swallow OS-level keystrokes like Cmd+R (reload), Ctrl+R, Cmd+F, etc.
@@ -21551,7 +21571,7 @@
       if (duplicateActiveCellIntent()) e.preventDefault();
     }
     else if (k === 'l') {
-      if (loadLatestTemplateToClipboard()) e.preventDefault();
+      if (loadLatestTemplateToClipboard() && pasteClipboardAtActiveTarget()) e.preventDefault();
     }
     else if (k === 'p' || k === 'i') togglePerspective();
     else if (k === 'r') { adjustHoverTerrainHeight(+1); }
@@ -29737,21 +29757,13 @@
 
     function applySelectionProperty(rowKey, value) {
       if (rowKey === 'selectionAction') {
-        const coords = selectedWorldCoords();
-        const fallbackTarget = coords.length
-          ? {
-            x: Math.min(...coords.map(c => c.x)),
-            z: Math.min(...coords.map(c => c.z)),
-            userEdited: coords.some(c => isOutsideHomeGrid(c.x, c.z)),
-          }
-          : null;
         if (value === 'copy') copyActiveCellIntent();
         else if (value === 'cut') cutActiveCellIntent();
-        else if (value === 'paste') pasteHoveredCellIntent() || pasteClipboardAtTarget(fallbackTarget);
+        else if (value === 'paste') pasteClipboardAtActiveTarget();
         else if (value === 'duplicate') duplicateActiveCellIntent();
         else if (value === 'save-template') saveActiveSelectionTemplate();
         else if (value === 'paste-template' && loadLatestTemplateToClipboard()) {
-          pasteHoveredCellIntent() || pasteClipboardAtTarget(fallbackTarget);
+          pasteClipboardAtActiveTarget();
         }
         renderSelection();
         return;
