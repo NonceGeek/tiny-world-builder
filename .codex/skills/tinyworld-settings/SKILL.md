@@ -12,6 +12,7 @@ Keep settings changes compatible with the existing static single-file app:
 - `selectSettingsTab(name)` must guard unknown names and update all tab and panel state together: `.active`, `aria-selected`, tab `tabIndex`, panel `.active`, and panel `hidden`.
 - Settings tabs should remain real `role="tab"` buttons inside a `role="tablist"` and support click plus Arrow/Home/End keyboard navigation.
 - Panels should be `role="tabpanel"` with stable IDs and `aria-labelledby` pointing at the matching tab.
+- Settings search should be a thin UI layer over the existing tab/panel wiring: never rename controls for search, keep hidden rows reversible when the query clears, and route automatic tab changes through `selectSettingsTab()`.
 
 Organization guidance:
 
@@ -22,4 +23,4 @@ Organization guidance:
 Validation:
 
 - Run the inline script syntax check, `npm test`, and `npm run build`.
-- Browser-check Settings opens, every tab can be selected, only one panel is visible, Arrow/Home/End navigation works, command-palette-style tab clicks still work, and the console has no app errors.
+- Browser-check Settings opens, every tab can be selected, only one panel is visible, search routes to matching sections and clears cleanly, Arrow/Home/End navigation works, command-palette-style tab clicks still work, and the console has no app errors.
