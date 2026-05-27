@@ -3266,11 +3266,64 @@
     gap: 8px;
     flex-wrap: wrap;
   }
+  .stamp-category-strip {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 31px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 0 2px 3px 0;
+    margin: -1px 0 0;
+    scrollbar-width: thin;
+  }
+  .stamp-category-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid rgba(72, 52, 31, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.42);
+    color: #675942;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.62) inset;
+  }
+  .stamp-category-btn:hover {
+    background: rgba(255, 255, 255, 0.68);
+    color: var(--ink);
+  }
+  .stamp-category-btn.active {
+    border-color: rgba(153, 101, 24, 0.52);
+    background: rgba(255, 239, 191, 0.72);
+    color: var(--ink);
+  }
+  .stamp-category-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+    color: #806334;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+  }
   .stamp-builder-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
     gap: 10px;
-    max-height: min(392px, calc(100vh - 390px));
+    max-height: min(392px, calc(100vh - 424px));
     overflow: auto;
     padding: 2px 5px 2px 0;
     overscroll-behavior: contain;
@@ -3416,7 +3469,7 @@
     }
     .stamp-builder-grid {
       grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-      max-height: calc(100vh - 430px);
+      max-height: calc(100vh - 464px);
     }
     .stamp-model-range { grid-template-columns: 58px minmax(0, 1fr) 42px; }
     .settings-layout { grid-template-columns: 1fr; }
@@ -5094,6 +5147,7 @@
         <button class="btn" id="model-stamp-reset-default" type="button">Reset model</button>
       </div>
     </div>
+    <div class="stamp-category-strip" id="stamp-builder-categories" role="tablist" aria-label="Stamp categories"></div>
     <div class="stamp-builder-grid" id="stamp-builder-grid"></div>
     <div class="stamp-panel-foot">
       <span id="stamp-builder-status"></span>
@@ -15302,6 +15356,14 @@
     });
     return out;
   }
+  function replaceSelectionWithWorldCoords(coords) {
+    selectedCells.clear();
+    (coords || []).forEach(({ x, z }) => {
+      if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      selectedCells.add(makeKey(0, 0, Math.round(x), Math.round(z)));
+    });
+    notifySelectionChanged();
+  }
   function materializeSelectedCells() {
     if (!selectedCells.size) return [];
     const nextKeys = new Set();
@@ -15360,6 +15422,7 @@
     rotate: rotateSelectedCells,
     materialize: materializeSelectedCells,
     worldCoords: selectedSelectionWorldCoords,
+    replaceWorldCoords: replaceSelectionWithWorldCoords,
     containsWorldCoord(x, z) {
       return selectedSelectionWorldCoords().some(c => c.x === x && c.z === z);
     },
@@ -18184,7 +18247,8 @@
       const side = normalizeFenceSide(extra.fenceSide);
       const existingIdx = cell.extras.findIndex(e => e.kind === 'fence' && normalizeFenceSide(e.fenceSide) === side);
       if (existingIdx >= 0) {
-        cell.extras[existingIdx].floors = Math.min((cell.extras[existingIdx].floors || 1) + 1, MAX_FLOORS);
+        const requestedFloors = Math.max(1, Math.min(MAX_FLOORS, extra.floors || 1));
+        cell.extras[existingIdx].floors = Math.min(Math.max((cell.extras[existingIdx].floors || 1) + 1, requestedFloors), MAX_FLOORS);
         // Animate just the one that changed — existing siblings stay put.
         renderCellExtras(x, z, { animateFrom: existingIdx });
         refreshVehiclesForWorldObstacleChange(x, z);
@@ -18634,7 +18698,8 @@
     else if (kind === 'fence') {
       const v = tool.activeVariant;
       const side = (v && v.fenceSide && v.fenceSide !== 'auto') ? v.fenceSide : 'n';
-      mesh = makeFence(normalizeFenceSide(side), 1);
+      const level = Math.max(1, Math.min(MAX_FLOORS, (v && v.floors) || 1));
+      mesh = makeFence(normalizeFenceSide(side), level);
     } else if (kind === 'house') {
       const v = tool.activeVariant;
       const bt = v && v.buildingType;
@@ -19265,6 +19330,8 @@
     { id: 'fence',  label: 'Fence',  kind: 'fence', color: '#8a5a3b', shortcut: '7', group: 'build',
       variants: [
         { id: 'edge',    label: 'Edge',      fenceSide: 'auto',     hint: 'nearest clicked edge' },
+        { id: 'wall',    label: 'Wall',      fenceSide: 'auto', floors: 4, hint: 'stone wall on nearest clicked edge' },
+        { id: 'boundary', label: 'Boundary', fenceSide: 'auto', floors: 5, hint: 'steel boundary on nearest clicked edge' },
         { id: 'north',   label: 'North',     fenceSide: 'n',        hint: 'north tile edge' },
         { id: 'east',    label: 'East',      fenceSide: 'e',        hint: 'east tile edge' },
         { id: 'south',   label: 'South',     fenceSide: 's',        hint: 'south tile edge' },
@@ -19461,7 +19528,11 @@
     if (k === 'bush')      return makeVoxelCropKind('bush');
     if (k === 'cow')       return makeVoxelAnimal('cow');
     if (k === 'sheep')     return makeVoxelAnimal('sheep');
-    if (k === 'fence')     return makeVoxelFence('n', 1);
+    if (k === 'fence') {
+      const v = tool.activeVariant;
+      const level = Math.max(1, Math.min(MAX_FLOORS, (v && v.floors) || 1));
+      return makeVoxelFence('n', level);
+    }
     if (k === 'house') {
       const v = tool.activeVariant;
       const bType = v && v.buildingType;
@@ -19645,6 +19716,23 @@
 
   let voxelStampRefreshTimer = 0;
   let selectedVoxelBuildId = VOXEL_BUILD_STAMPS[0] && VOXEL_BUILD_STAMPS[0].id;
+  const STAMP_BUILDER_CATEGORY_DEFS = [
+    { id: 'all', label: 'All' },
+    { id: 'models', label: 'Models' },
+    { id: 'voxel', label: 'Voxel' },
+    { id: 'build', label: 'Build' },
+    { id: 'infra', label: 'Infra' },
+    { id: 'plants', label: 'Plants' },
+    { id: 'farm', label: 'Farm' },
+    { id: 'life', label: 'Life' },
+    { id: 'terrain', label: 'Terrain' },
+    { id: 'vehicles', label: 'Vehicles' },
+    { id: 'detected', label: 'Detected' },
+    { id: 'other', label: 'Other' },
+  ];
+  const STAMP_BUILDER_CATEGORY_IDS = new Set(STAMP_BUILDER_CATEGORY_DEFS.map(c => c.id));
+  let activeStampBuilderCategory = 'all';
+
   function rebuildVoxelStampRender() {
     for (const key in cellMeshes) {
       const parts = key.split(',');
@@ -19673,7 +19761,120 @@
     return input ? String(input.value || '').trim().toLowerCase() : '';
   }
 
-  function stampBuilderTools() {
+  function stampBuilderCategoryDef(id) {
+    return STAMP_BUILDER_CATEGORY_DEFS.find(c => c.id === id) || STAMP_BUILDER_CATEGORY_DEFS[0];
+  }
+
+  function stampBuilderCategoryLabel(id) {
+    return stampBuilderCategoryDef(id).label;
+  }
+
+  function normalizeStampBuilderCategory(id) {
+    return STAMP_BUILDER_CATEGORY_IDS.has(id) ? id : 'all';
+  }
+
+  function stampBuilderSemanticCategories(text) {
+    const value = String(text || '').toLowerCase();
+    const cats = new Set();
+    const rules = [
+      ['vehicles', /(^|[^a-z0-9])(plane|aircraft|airplane|stunt|crop[-_ ]?duster|jet|boat|boats|voxelboats?|ship|ships|vessel|car|cars|truck|trucks|train|trains|vehicle|vehicles|bus|buses|bike|bikes)(?=[^a-z0-9]|$)/],
+      ['farm', /(^|[^a-z0-9])(crop|farm|corn|wheat|pumpkin|carrot|sunflower|field|barn)(?=[^a-z0-9]|$)/],
+      ['build', /(^|[^a-z0-9])(building|buildings|city|house|tower|cottage|villa|skyscraper|castle|turret|manor|pagoda|temple|gate|machiya|hut|cabin)(?=[^a-z0-9]|$)/],
+      ['infra', /(^|[^a-z0-9])(fence|bridge|road|rail|path|street|wall|boundary|dock|pier)(?=[^a-z0-9]|$)/],
+      ['plants', /(^|[^a-z0-9])(tree|plant|flower|bush|tuft|grass|garden|bamboo|cherry|shrub|forest|leaf|leaves)(?=[^a-z0-9]|$)/],
+      ['life', /(^|[^a-z0-9])(cow|sheep|animal|person|people|human|crowd|character|horse)(?=[^a-z0-9]|$)/],
+      ['terrain', /(^|[^a-z0-9])(rock|stone|terrain|mountain|outcrop|sand|snow|water|lava|dirt)(?=[^a-z0-9]|$)/],
+    ];
+    for (const [id, pattern] of rules) {
+      if (pattern.test(value)) cats.add(id);
+    }
+    return cats;
+  }
+
+  function stampBuilderCategoryList(categories, fallback) {
+    const out = [];
+    for (const id of categories || []) {
+      if (id !== 'all' && STAMP_BUILDER_CATEGORY_IDS.has(id) && !out.includes(id)) out.push(id);
+    }
+    if (!out.length && fallback) out.push(fallback);
+    return out;
+  }
+
+  function stampBuilderCategoriesForBuiltIn(tool) {
+    const categories = new Set();
+    const baseTool = tool && tool.baseTool ? tool.baseTool : tool;
+    const group = baseTool && groupForTool(baseTool);
+    if (group && STAMP_BUILDER_CATEGORY_IDS.has(group.id)) categories.add(group.id);
+    const variant = tool && tool.activeVariant;
+    const text = [
+      tool && tool.label,
+      tool && tool.id,
+      tool && tool.kind,
+      variant && variant.label,
+      variant && variant.hint,
+    ].filter(Boolean).join(' ');
+    stampBuilderSemanticCategories(text).forEach(id => categories.add(id));
+    return stampBuilderCategoryList(categories, 'other');
+  }
+
+  function stampBuilderCategoriesForVoxelStamp(stamp) {
+    const categories = new Set(['voxel']);
+    const text = [stamp && stamp.name, stamp && stamp.id].filter(Boolean).join(' ');
+    stampBuilderSemanticCategories(text).forEach(id => categories.add(id));
+    return stampBuilderCategoryList(categories, 'voxel');
+  }
+
+  function stampBuilderCategoriesForModelAsset(asset) {
+    const categories = new Set(['models']);
+    if (asset && asset.supported === false) categories.add('detected');
+    const sidecars = [];
+    const rawSidecars = asset && asset.sidecars;
+    if (rawSidecars && Array.isArray(rawSidecars.textures)) sidecars.push(...rawSidecars.textures);
+    if (rawSidecars && Array.isArray(rawSidecars.mtl)) sidecars.push(...rawSidecars.mtl);
+    const text = [
+      asset && asset.label,
+      asset && asset.id,
+      asset && asset.path,
+      asset && asset.url,
+      asset && asset.format,
+      sidecars.map(item => [item.name, item.path, item.format].filter(Boolean).join(' ')).join(' '),
+    ].filter(Boolean).join(' ');
+    stampBuilderSemanticCategories(text).forEach(id => categories.add(id));
+    return stampBuilderCategoryList(categories, 'models');
+  }
+
+  function stampBuilderToolSearchText(tool) {
+    const variant = tool && tool.activeVariant;
+    const asset = tool && (tool.modelAsset || getModelStamp(tool.modelStampId));
+    const stamp = tool && (tool.voxelStamp || getVoxelBuildStamp(tool.voxelBuildId));
+    const categories = (tool && tool.stampCategories ? tool.stampCategories : [])
+      .map(id => stampBuilderCategoryLabel(id))
+      .join(' ');
+    return [
+      tool && tool.label,
+      tool && tool.id,
+      tool && tool.kind,
+      categories,
+      variant && variant.label,
+      variant && variant.hint,
+      asset && asset.format,
+      asset && asset.path,
+      asset && asset.url,
+      stamp && stamp.name,
+      stamp && stamp.id,
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function stampBuilderToolMatchesSearch(tool, q) {
+    return !q || stampBuilderToolSearchText(tool).includes(q);
+  }
+
+  function stampBuilderToolMatchesCategory(tool, category) {
+    if (category === 'all') return true;
+    return !!(tool && tool.stampCategories && tool.stampCategories.includes(category));
+  }
+
+  function stampBuilderAllTools() {
     const tools = [];
     for (const asset of MODEL_STAMP_ASSETS) {
       tools.push({
@@ -19685,6 +19886,7 @@
         isModelStamp: true,
         supported: asset.supported,
         color: '#8aa4b8',
+        stampCategories: stampBuilderCategoriesForModelAsset(asset),
       });
     }
     for (const stamp of VOXEL_BUILD_STAMPS) {
@@ -19693,7 +19895,9 @@
         label: stamp.name,
         kind: 'voxel-build',
         voxelBuildId: stamp.id,
+        voxelStamp: stamp,
         isVoxelBuild: true,
+        stampCategories: stampBuilderCategoriesForVoxelStamp(stamp),
       });
     }
     const ids = ['house', 'tree', 'rock', 'bridge', 'fence', 'crop', 'corn', 'wheat', 'pumpkin', 'carrot', 'sunflower', 'flower', 'bush', 'cow', 'sheep'];
@@ -19702,24 +19906,76 @@
       if (!tool) continue;
       if (tool.variants && tool.variants.length) {
         for (const variant of tool.variants) {
-          tools.push(Object.assign({}, tool, {
+          const stampTool = Object.assign({}, tool, {
             id: tool.id + ':' + variant.id,
             label: variant.label,
             activeVariant: variant,
             baseTool: tool,
             isBuiltInStamp: true,
-          }));
+          });
+          stampTool.stampCategories = stampBuilderCategoriesForBuiltIn(stampTool);
+          tools.push(stampTool);
         }
       } else {
-        tools.push(Object.assign({}, tool, { isBuiltInStamp: true }));
+        const stampTool = Object.assign({}, tool, { isBuiltInStamp: true });
+        stampTool.stampCategories = stampBuilderCategoriesForBuiltIn(stampTool);
+        tools.push(stampTool);
       }
     }
+    return tools;
+  }
+
+  function stampBuilderTools(sourceTools) {
+    const tools = Array.isArray(sourceTools) ? sourceTools : stampBuilderAllTools();
     const q = stampBuilderSearchQuery();
-    if (!q) return tools;
+    const category = normalizeStampBuilderCategory(activeStampBuilderCategory);
+    if (category !== activeStampBuilderCategory) activeStampBuilderCategory = category;
     return tools.filter(tool => {
-      const bits = [tool.label, tool.id, tool.kind, tool.modelAsset && tool.modelAsset.format, tool.modelAsset && tool.modelAsset.path].filter(Boolean).join(' ').toLowerCase();
-      return bits.includes(q);
+      return stampBuilderToolMatchesCategory(tool, category) && stampBuilderToolMatchesSearch(tool, q);
     });
+  }
+
+  function renderStampBuilderCategoryStrip(sourceTools) {
+    const strip = document.getElementById('stamp-builder-categories');
+    if (!strip) return;
+    const tools = Array.isArray(sourceTools) ? sourceTools : stampBuilderAllTools();
+    const q = stampBuilderSearchQuery();
+    const counts = { all: 0 };
+    for (const tool of tools) {
+      if (!stampBuilderToolMatchesSearch(tool, q)) continue;
+      counts.all++;
+      for (const id of tool.stampCategories || []) {
+        counts[id] = (counts[id] || 0) + 1;
+      }
+    }
+    const active = normalizeStampBuilderCategory(activeStampBuilderCategory);
+    activeStampBuilderCategory = active;
+    strip.innerHTML = '';
+    for (const def of STAMP_BUILDER_CATEGORY_DEFS) {
+      const count = counts[def.id] || 0;
+      if (def.id !== 'all' && !count && def.id !== active) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'stamp-category-btn' + (def.id === active ? ' active' : '');
+      btn.dataset.category = def.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', def.id === active ? 'true' : 'false');
+      btn.setAttribute('aria-pressed', def.id === active ? 'true' : 'false');
+      btn.textContent = def.label;
+      const countEl = document.createElement('span');
+      countEl.className = 'stamp-category-count';
+      countEl.textContent = String(count);
+      btn.appendChild(countEl);
+      btn.addEventListener('click', () => {
+        activeStampBuilderCategory = def.id;
+        renderStampBuilderCards();
+        const status = document.getElementById('stamp-builder-status');
+        const shown = stampBuilderTools().length;
+        const scope = def.id === 'all' ? '' : ' in ' + def.label.toLowerCase();
+        if (status) status.textContent = 'Showing ' + shown + ' stamp' + (shown === 1 ? '' : 's') + scope;
+      });
+      strip.appendChild(btn);
+    }
   }
 
   function renderStampBuilderThumb(tool, canvas) {
@@ -19824,14 +20080,26 @@
     if (!grid) return;
     grid.innerHTML = '';
     updateStampBuilderSummary();
-    const tools = stampBuilderTools();
+    const allTools = stampBuilderAllTools();
+    renderStampBuilderCategoryStrip(allTools);
+    const tools = stampBuilderTools(allTools);
+    const status = document.getElementById('stamp-builder-status');
+    if (status) {
+      const q = stampBuilderSearchQuery();
+      const category = normalizeStampBuilderCategory(activeStampBuilderCategory);
+      const scope = category === 'all' ? '' : ' in ' + stampBuilderCategoryLabel(category).toLowerCase();
+      const matchText = q ? ' matching "' + q + '"' : '';
+      status.textContent = 'Showing ' + tools.length + ' stamp' + (tools.length === 1 ? '' : 's') + scope + matchText;
+    }
     const selectedKey = currentStampBuilderSelectionKey();
     if (!tools.length) {
       const empty = document.createElement('div');
       empty.className = 'stamp-builder-empty';
       empty.textContent = stampBuilderSearchQuery()
         ? 'No stamps match that search.'
-        : 'No stamps yet. Drop GLB/OBJ files into models/ or import a voxel build JSON.';
+        : activeStampBuilderCategory !== 'all'
+          ? 'No stamps in this category yet.'
+          : 'No stamps yet. Drop GLB/OBJ files into models/ or import a voxel build JSON.';
       grid.appendChild(empty);
       return;
     }
@@ -20187,6 +20455,12 @@
     return d[0].side;
   }
 
+  function fenceLevelFromSelectedTool() {
+    const variant = selectedTool && selectedTool.activeVariant;
+    const level = variant && Number.isFinite(variant.floors) ? variant.floors : 1;
+    return Math.max(1, Math.min(MAX_FLOORS, level || 1));
+  }
+
   // -------- click → place / erase --------
   // Remove the ghost board's mesh for a given local cell so a freshly
   // materialised home cellMesh doesn't render on top of the original
@@ -20195,7 +20469,7 @@
     rebuildGhostBoard(boardX, boardZ);
   }
 
-  function applyToolToCell(cell) {
+  function applyToolToCell(cell, opts = {}) {
     if (cell.boardX || cell.boardZ) {
       // Skip if the currently selected tool would no-op (e.g. auto mode
       // without an API key) — otherwise we'd materialise + remove the
@@ -20227,7 +20501,7 @@
         if (_entry.tile)   { _entry.tile.userData.revealed = true;   setElementOpacity(_entry.tile, 1, true); }
         if (_entry.object) { _entry.object.userData.revealed = true; setElementOpacity(_entry.object, 1, true); }
       }
-      applyTool(x, z);
+      applyTool(x, z, opts);
       // After setCell ran inside applyTool, re-stamp the override flag
       // AND re-force revealed/visible on whatever the latest mesh is.
       if (world[x] && world[x][z]) world[x][z].userEdited = true;
@@ -20237,7 +20511,7 @@
         if (_entry2.object) { _entry2.object.userData.revealed = true; setElementOpacity(_entry2.object, 1, true); }
       }
     } else {
-      applyTool(cell.x, cell.z);
+      applyTool(cell.x, cell.z, opts);
     }
   }
 
@@ -20251,7 +20525,7 @@
     return t;
   }
 
-  function applyTool(x, z) {
+  function applyTool(x, z, opts = {}) {
     if (selectedTool.auto) {
       if (!getAIProviderState().key) return; // Can't auto-place without API key
       applyAutoTool(x, z);
@@ -20263,39 +20537,28 @@
 
     // --- Bulk apply to active selection (Shift+select + tool) ---
     const sel = window.__tinyworldSelection;
-    if (sel && sel.cells.size > 0) {
-      const selectedCoords = sel.worldCoords ? sel.worldCoords() : [];
+    if (!opts.skipSelectionBulk && sel && sel.cells.size > 0) {
+      const selectedCoords = sel.materialize
+        ? sel.materialize()
+        : (sel.worldCoords ? sel.worldCoords() : []);
       if (selectedCoords.some(c => c.x === x && c.z === z)) {
-        // Apply current tool to every selected cell
-        if (selectedTool.terrain) {
-          selectedCoords.forEach(({ x: sx, z: sz }) => {
-            setCell(sx, sz, { terrain: selectedTool.terrain });
-          });
-        } else if (selectedTool.kind) {
-          selectedCoords.forEach(({ x: sx, z: sz }) => {
-            const current = getWorldCell(sx, sz);
-            const terrainForKind = selectedTool.terrainOverride || current.terrain || 'grass';
-            if (selectedTool.kind === 'model-stamp' && selectedTool.modelStampId) {
-              const cfg = getModelStampSettings(selectedTool.modelStampId);
-              setCell(sx, sz, {
-                kind: 'model-stamp',
-                terrain: terrainForKind === 'water' || terrainForKind === 'lava' ? 'grass' : terrainForKind,
-                floors: 1,
-                rotationY: cfg.rotationY,
-                offsetY: cfg.offsetY,
-                appearance: { modelStampId: selectedTool.modelStampId, objectScale: cfg.objectScale },
-              });
-            } else {
-              setCell(sx, sz, { kind: selectedTool.kind, terrain: terrainForKind });
-            }
-          });
-        } else if (selectedTool.erase) {
-          selectedCoords.forEach(({ x: sx, z: sz }) => {
-            const current = getWorldCell(sx, sz);
-            setCell(sx, sz, { terrain: current.terrain, kind: null });
-          });
-        }
+        const ghostTransform = {
+          rotation: ghostRotation,
+          offsetX: ghostOffsetX,
+          offsetZ: ghostOffsetZ,
+        };
+        selectedCoords.forEach(({ x: sx, z: sz }) => {
+          ghostRotation = ghostTransform.rotation;
+          ghostOffsetX = ghostTransform.offsetX;
+          ghostOffsetZ = ghostTransform.offsetZ;
+          applyTool(sx, sz, { skipSelectionBulk: true });
+        });
+        ghostRotation = ghostTransform.rotation;
+        ghostOffsetX = ghostTransform.offsetX;
+        ghostOffsetZ = ghostTransform.offsetZ;
+        resetGhostTransform();
         // Keep selection active for rapid multi-tool use on the area
+        notifySelectionChanged();
         return;
       }
     }
@@ -20375,9 +20638,15 @@
     }
     if (selectedTool.kind === 'fence') {
       const side = fenceSideFromHover(currentHover);
+      const baseLevel = fenceLevelFromSelectedTool();
       // Same-side fence on a fence cell → level it up in place.
       if (cell.kind === 'fence' && normalizeFenceSide(cell.fenceSide) === side) {
-        const newLevel = Math.min((cell.floors || 1) + 1, MAX_FLOORS);
+        if (opts.drawing) {
+          if ((cell.floors || 1) >= baseLevel) return;
+          setCell(x, z, { terrain: cell.terrain, terrainFloors: terrainLevelForCell(cell), kind: 'fence', floors: baseLevel, fenceSide: side });
+          return;
+        }
+        const newLevel = Math.min(Math.max((cell.floors || 1) + 1, baseLevel), MAX_FLOORS);
         if (newLevel === (cell.floors || 1)) return;
         setCell(x, z, { terrain: cell.terrain, terrainFloors: terrainLevelForCell(cell), kind: 'fence', floors: newLevel, fenceSide: side });
         return;
@@ -20385,21 +20654,22 @@
       // Different-side fence on a fence cell → add the new side as an
       // extra so multiple fence sides co-exist on the same tile.
       if (cell.kind === 'fence') {
-        addCellExtra(x, z, { kind: 'fence', fenceSide: side });
+        addCellExtra(x, z, { kind: 'fence', fenceSide: side, floors: baseLevel });
         return;
       }
       // Different main occupant → fence co-exists alongside it.
       if (cell.kind && cell.kind !== 'fence') {
-        addCellExtra(x, z, { kind: 'fence', fenceSide: side });
+        addCellExtra(x, z, { kind: 'fence', fenceSide: side, floors: baseLevel });
         return;
       }
       // Empty cell → fence becomes the main kind.
       const gt2 = consumeGhostTransform();
-      setCell(x, z, { terrain: cell.terrain, terrainFloors: terrainLevelForCell(cell), kind: 'fence', floors: 1, fenceSide: side, rotationY: gt2.rotationY, offsetX: gt2.offsetX, offsetZ: gt2.offsetZ });
+      setCell(x, z, { terrain: cell.terrain, terrainFloors: terrainLevelForCell(cell), kind: 'fence', floors: baseLevel, fenceSide: side, rotationY: gt2.rotationY, offsetX: gt2.offsetX, offsetZ: gt2.offsetZ });
       return;
     }
     if (selectedTool.kind) {
       if (cell.kind === selectedTool.kind) {
+        if (opts.drawing) return;
         // Bridges have only 4 visual styles (wood → covered → stone → arch),
         // so cap their stacking there instead of running up to MAX_FLOORS.
         const stackMax = selectedTool.kind === 'bridge' ? 4 : MAX_FLOORS;
@@ -20447,7 +20717,9 @@
       const sameTerrain = selectedTool.terrain === cell.terrain;
       const nextTerrainFloors = nextKind
         ? terrainLevelForCell(cell)
-        : (sameTerrain ? Math.min(terrainLevelForCell(cell) + 1, MAX_FLOORS) : 1);
+        : (sameTerrain
+          ? (opts.drawing ? terrainLevelForCell(cell) : Math.min(terrainLevelForCell(cell) + 1, MAX_FLOORS))
+          : 1);
       setCell(x, z, {
         terrain: selectedTool.terrain,
         terrainFloors: nextTerrainFloors,
@@ -20488,8 +20760,10 @@
   let pointerDown = null;     // {x, y}
   let lastPointer = null;
   let didDrag = false;
-  let dragMode = null;        // 'orbit' | 'pan' | 'pinch' | 'select-area'
+  let dragMode = null;        // 'orbit' | 'pan' | 'pinch' | 'select-area' | 'draw'
   let selectionDragAnchor = null;
+  const drawVisitedCells = new Set();
+  let drawLastWorldCoord = null;
   let spaceDown = false;
   const DRAG_THRESHOLD = 5;
   const activePointers = new Map(); // pointerId -> {x, y, type}
@@ -20506,6 +20780,8 @@
     lastPointer = null;
     didDrag = false;
     dragMode = null;
+    drawVisitedCells.clear();
+    drawLastWorldCoord = null;
     spaceDown = false;
     pinchPrevDist = 0;
     pinchPrevMid = null;
@@ -20515,8 +20791,7 @@
     updateGhostPlacement();
   }
 
-  function updateHoverAt(x, y) {
-    const cell = pickTile(x, y);
+  function setHoverFromCell(cell) {
     if (cell) {
       hoverMesh.position.set(cell.worldX, hoverHeightForCell(cell), cell.worldZ);
       hoverMesh.visible = true;
@@ -20526,6 +20801,81 @@
       currentHover = null;
     }
     updateGhostPlacement();
+  }
+
+  function updateHoverAt(x, y) {
+    setHoverFromCell(pickTile(x, y));
+  }
+
+  function isDrawablePlacementTool(tool) {
+    return !!(tool && !tool.auto && !tool.select && (
+      tool.erase ||
+      tool.terrain ||
+      tool.kind === 'fence' ||
+      tool.kind === 'bridge'
+    ));
+  }
+
+  function drawKeyForHit(hit) {
+    if (!hit) return '';
+    const bx = hit.boardX || 0;
+    const bz = hit.boardZ || 0;
+    return (hit.x + bx * GRID) + ',' + (hit.z + bz * GRID);
+  }
+
+  function drawWorldCoordForHit(hit) {
+    if (!hit) return null;
+    const bx = hit.boardX || 0;
+    const bz = hit.boardZ || 0;
+    return { x: hit.x + bx * GRID, z: hit.z + bz * GRID };
+  }
+
+  function drawHitFromWorldCoord(x, z, sourceHit) {
+    const boardX = floorDiv(x, GRID);
+    const boardZ = floorDiv(z, GRID);
+    const lx = positiveMod(x, GRID);
+    const lz = positiveMod(z, GRID);
+    const p = (boardX || boardZ) ? ghostCellPos(boardX, boardZ, lx, lz) : tilePos(lx, lz);
+    return {
+      x: lx,
+      z: lz,
+      boardX,
+      boardZ,
+      worldX: p.x,
+      worldZ: p.z,
+      localX: sourceHit && Number.isFinite(sourceHit.localX) ? sourceHit.localX : 0,
+      localZ: sourceHit && Number.isFinite(sourceHit.localZ) ? sourceHit.localZ : 0,
+    };
+  }
+
+  function applyDrawToolToSingleHit(hit) {
+    if (!hit) return false;
+    const key = drawKeyForHit(hit);
+    if (!key || drawVisitedCells.has(key)) return false;
+    drawVisitedCells.add(key);
+    setHoverFromCell(hit);
+    applyToolToCell(hit, { skipSelectionBulk: true, drawing: true });
+    return true;
+  }
+
+  function applyDrawToolToHit(hit) {
+    const coord = drawWorldCoordForHit(hit);
+    if (!coord) return false;
+    let changed = false;
+    if (drawLastWorldCoord) {
+      const dx = coord.x - drawLastWorldCoord.x;
+      const dz = coord.z - drawLastWorldCoord.z;
+      const steps = Math.max(Math.abs(dx), Math.abs(dz));
+      for (let i = 1; i <= steps; i++) {
+        const x = Math.round(drawLastWorldCoord.x + dx * (i / steps));
+        const z = Math.round(drawLastWorldCoord.z + dz * (i / steps));
+        changed = applyDrawToolToSingleHit(drawHitFromWorldCoord(x, z, hit)) || changed;
+      }
+    } else {
+      changed = applyDrawToolToSingleHit(hit);
+    }
+    drawLastWorldCoord = coord;
+    return changed;
   }
 
   renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
@@ -20552,7 +20902,8 @@
       return;
     }
 
-    dragMode = (e.button === 2 || spaceDown) ? 'pan' : 'orbit';
+    const wantsDraw = e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && isDrawablePlacementTool(selectedTool);
+    dragMode = wantsDraw ? 'draw' : ((e.button === 2 || spaceDown) ? 'pan' : 'orbit');
     // Rectangle drag (Shift+drag):
     //   - With Select tool → normal area selection
     //   - With any other tool → live preview rectangle; on release we fill the area with the current tool
@@ -20567,9 +20918,16 @@
     pointerDown = { x: e.clientX, y: e.clientY };
     lastPointer = { x: e.clientX, y: e.clientY };
     didDrag = false;
+    drawVisitedCells.clear();
+    drawLastWorldCoord = null;
     // Touch devices don't have hover before contact, so prime currentHover
     // at the press location so a quick tap can place a tile.
-    if (e.pointerType !== 'mouse') updateHoverAt(e.clientX, e.clientY);
+    if (dragMode === 'draw') {
+      const hit = pickTile(e.clientX, e.clientY);
+      didDrag = !!applyDrawToolToHit(hit);
+    } else if (e.pointerType !== 'mouse') {
+      updateHoverAt(e.clientX, e.clientY);
+    }
     renderer.domElement.classList.add('dragging');
   });
 
@@ -20615,6 +20973,8 @@
         const ddy = e.clientY - lastPointer.y;
         if (dragMode === 'pan') {
           panCameraByPixels(ddx, ddy);
+        } else if (dragMode === 'draw') {
+          applyDrawToolToHit(pickTile(e.clientX, e.clientY));
         } else if (dragMode === 'select-area') {
           // Extend the marquee rectangle to the cell under the cursor.
           const hit = pickTile(e.clientX, e.clientY);
@@ -20629,7 +20989,7 @@
           updateCamera();
         }
         // While dragging on touch, hide the hover marker so it doesn't lag.
-        if (e.pointerType !== 'mouse') {
+        if (e.pointerType !== 'mouse' && dragMode !== 'draw') {
           hoverMesh.visible = false;
           currentHover = null;
         }
@@ -20667,7 +21027,7 @@
       return;
     }
 
-    if (pointerDown && !didDrag && currentHover && dragMode !== 'pan' && dragMode !== 'select-area') {
+    if (pointerDown && !didDrag && currentHover && dragMode !== 'pan' && dragMode !== 'select-area' && dragMode !== 'draw') {
       // Plain click on the select tool is a no-op; the user must hold
       // shift to engage selection (shift+click for one cell, shift+drag
       // for a marquee). Other tools apply as usual.
@@ -20680,10 +21040,9 @@
       const sel = window.__tinyworldSelection;
       if (sel && sel.cells.size > 0) {
         // Trigger the bulk path inside applyTool by calling it on any selected cell
-        const firstKey = sel.cells.values().next().value;
-        if (firstKey) {
-          const [fx, fz] = firstKey.split(',').map(Number);
-          applyTool(fx, fz);   // will hit the selection bulk logic
+        const firstCoord = sel.worldCoords && sel.worldCoords()[0];
+        if (firstCoord) {
+          applyTool(firstCoord.x, firstCoord.z);   // will hit the selection bulk logic
         }
         clearSelection();
       }
@@ -20696,6 +21055,8 @@
       lastPointer = null;
       dragMode = null;
       selectionDragAnchor = null;
+      drawVisitedCells.clear();
+      drawLastWorldCoord = null;
       // Touch devices: clear the hover marker after a tap so it doesn't linger.
       if (e.pointerType !== 'mouse') {
         hoverMesh.visible = false;
@@ -20719,6 +21080,8 @@
       dragMode = null;
       pinchPrevDist = 0;
       pinchPrevMid = null;
+      drawVisitedCells.clear();
+      drawLastWorldCoord = null;
     }
   });
 
@@ -20798,25 +21161,32 @@
     return target.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   }
 
+  const ASSET_TEMPLATES_LS = 'tinyworld:asset-templates.v1';
+  let assetClipboard = null;
   let copiedHoverCell = null;
-  function hoverWorldTarget(materializeGhost) {
-    if (!currentHover) return null;
-    const bx = currentHover.boardX || 0;
-    const bz = currentHover.boardZ || 0;
-    const x = currentHover.x + bx * GRID;
-    const z = currentHover.z + bz * GRID;
+  function worldTargetFromHit(hit, materializeGhost) {
+    if (!hit) return null;
+    const bx = hit.boardX || 0;
+    const bz = hit.boardZ || 0;
+    const x = hit.x + bx * GRID;
+    const z = hit.z + bz * GRID;
     if ((bx || bz) && materializeGhost) {
       const ghostCells = makeGhostWorld(bx, bz);
-      const ghostCell = ghostCells[currentHover.x][currentHover.z];
+      const ghostCell = ghostCells[hit.x][hit.z];
       if (!world[x]) world[x] = [];
       if (!world[x][z]) world[x][z] = { ...ghostCell, userEdited: true };
-      removeGhostCellMesh(bx, bz, currentHover.x, currentHover.z);
+      removeGhostCellMesh(bx, bz, hit.x, hit.z);
     }
     const cell = (bx || bz) && !materializeGhost
-      ? makeGhostWorld(bx, bz)[currentHover.x][currentHover.z]
+      ? makeGhostWorld(bx, bz)[hit.x][hit.z]
       : getWorldCell(x, z);
     return { x, z, cell, userEdited: !!(bx || bz) };
   }
+
+  function hoverWorldTarget(materializeGhost) {
+    return worldTargetFromHit(currentHover, materializeGhost);
+  }
+
   function cloneCellIntent(cell) {
     if (!cell) return null;
     return {
@@ -20829,34 +21199,214 @@
       extras: cloneExtras(cell.extras),
       rotationY: cell.rotationY || 0,
       offsetX: cell.offsetX || 0,
+      offsetY: cell.offsetY || 0,
       offsetZ: cell.offsetZ || 0,
       appearance: normalizeAppearance(cell.appearance),
+      waterFlow: normalizeWaterFlow(cell.waterFlow),
     };
   }
-  function copyHoveredCellIntent() {
-    const target = hoverWorldTarget(false);
-    if (!target || !target.cell) return false;
-    copiedHoverCell = cloneCellIntent(target.cell);
-    return !!copiedHoverCell;
+
+  function normalizeClipboardCells(cells) {
+    return (Array.isArray(cells) ? cells : [])
+      .map(item => {
+        const dx = Number(item && item.dx);
+        const dz = Number(item && item.dz);
+        const cell = cloneCellIntent(item && item.cell);
+        if (!Number.isFinite(dx) || !Number.isFinite(dz) || !cell) return null;
+        return { dx: Math.round(dx), dz: Math.round(dz), cell };
+      })
+      .filter(Boolean);
   }
-  function pasteHoveredCellIntent() {
-    if (!copiedHoverCell) return false;
-    const target = hoverWorldTarget(true);
-    if (!target) return false;
-    const current = getWorldCell(target.x, target.z);
-    let next = Object.assign({}, copiedHoverCell);
-    if (next.kind) {
-      next.terrain = next.kind === 'bridge' ? 'water'
-        : CROP_KINDS.has(next.kind) ? 'dirt'
-        : (current && current.terrain) || next.terrain || 'grass';
-      next.terrainFloors = terrainLevelForCell(current);
+
+  function makeClipboardPayload(targets) {
+    const valid = (targets || []).filter(t => t && Number.isFinite(t.x) && Number.isFinite(t.z) && t.cell);
+    if (!valid.length) return null;
+    const originX = Math.min(...valid.map(t => t.x));
+    const originZ = Math.min(...valid.map(t => t.z));
+    const cells = valid
+      .sort((a, b) => (a.z - b.z) || (a.x - b.x))
+      .map(t => ({
+        dx: t.x - originX,
+        dz: t.z - originZ,
+        cell: cloneCellIntent(t.cell),
+      }))
+      .filter(t => t.cell);
+    if (!cells.length) return null;
+    return {
+      version: 1,
+      origin: { x: originX, z: originZ },
+      size: {
+        x: Math.max(...cells.map(c => c.dx)) + 1,
+        z: Math.max(...cells.map(c => c.dz)) + 1,
+      },
+      cells,
+    };
+  }
+
+  function selectedClipboardTargets(materialize) {
+    const sel = window.__tinyworldSelection;
+    if (!sel || !sel.cells || !sel.cells.size) return [];
+    if (materialize && sel.materialize) {
+      return sel.materialize().map(({ x, z }) => ({ x, z, cell: getWorldCell(x, z) }));
     }
-    setCell(target.x, target.z, Object.assign({}, next, {
-      userEdited: target.userEdited,
-      animate: true,
-      impactDust: true,
-    }));
+    const targets = [];
+    sel.cells.forEach(key => {
+      const c = parseCellKey(key);
+      const x = c.x + (c.bx || 0) * GRID;
+      const z = c.z + (c.bz || 0) * GRID;
+      targets.push({ x, z, cell: cellForKey(key) || getWorldCell(x, z) });
+    });
+    return targets;
+  }
+
+  function setAssetClipboard(payload) {
+    const cells = normalizeClipboardCells(payload && payload.cells);
+    if (!cells.length) return false;
+    assetClipboard = {
+      version: 1,
+      origin: payload.origin || { x: 0, z: 0 },
+      size: payload.size || {
+        x: Math.max(...cells.map(c => c.dx)) + 1,
+        z: Math.max(...cells.map(c => c.dz)) + 1,
+      },
+      cells,
+    };
+    copiedHoverCell = cells.length === 1 ? cloneCellIntent(cells[0].cell) : null;
     return true;
+  }
+
+  function copyActiveCellIntent() {
+    const selectedTargets = selectedClipboardTargets(false);
+    const payload = selectedTargets.length
+      ? makeClipboardPayload(selectedTargets)
+      : (() => {
+        const target = hoverWorldTarget(false);
+        return target && target.cell ? makeClipboardPayload([target]) : null;
+      })();
+    return !!(payload && setAssetClipboard(payload));
+  }
+
+  function clearCellForCut(x, z) {
+    const cell = getWorldCell(x, z);
+    if (!cell) return;
+    const hadExtras = !!(cell.extras && cell.extras.length);
+    if (cell.kind || (cell.extras && cell.extras.length)) {
+      setCell(x, z, {
+        terrain: cell.terrain,
+        terrainFloors: terrainLevelForCell(cell),
+        kind: null,
+        floors: 1,
+        extras: [],
+        animate: false,
+        impactDust: false,
+      });
+      if (hadExtras && typeof renderCellExtras === 'function') renderCellExtras(x, z);
+    } else {
+      setCell(x, z, {
+        terrain: 'grass',
+        terrainFloors: 1,
+        kind: null,
+        floors: 1,
+        extras: [],
+        animate: false,
+        impactDust: false,
+        forceTile: true,
+      });
+    }
+  }
+
+  function cutActiveCellIntent() {
+    const selectedTargets = selectedClipboardTargets(true);
+    if (selectedTargets.length) {
+      const payload = makeClipboardPayload(selectedTargets);
+      if (!payload || !setAssetClipboard(payload)) return false;
+      selectedTargets.forEach(({ x, z }) => clearCellForCut(x, z));
+      if (window.__tinyworldSelection) window.__tinyworldSelection.clear();
+      return true;
+    }
+    const target = hoverWorldTarget(true);
+    if (!target || !target.cell) return false;
+    const payload = makeClipboardPayload([{ x: target.x, z: target.z, cell: target.cell }]);
+    if (!payload || !setAssetClipboard(payload)) return false;
+    clearCellForCut(target.x, target.z);
+    return true;
+  }
+
+  function pasteClipboardAtTarget(target, opts = {}) {
+    if (!assetClipboard && copiedHoverCell) {
+      setAssetClipboard(makeClipboardPayload([{ x: 0, z: 0, cell: copiedHoverCell }]));
+    }
+    if (!assetClipboard || !assetClipboard.cells || !assetClipboard.cells.length) return false;
+    if (!target) return false;
+    const placed = [];
+    assetClipboard.cells.forEach(item => {
+      const x = target.x + item.dx;
+      const z = target.z + item.dz;
+      const next = cloneCellIntent(item.cell);
+      if (!next) return;
+      setCell(x, z, Object.assign({}, next, {
+        userEdited: !!(target.userEdited || isOutsideHomeGrid(x, z)),
+        animate: opts.animate !== false,
+        impactDust: opts.impactDust !== false,
+        forceTile: true,
+      }));
+      placed.push({ x, z });
+    });
+    if (placed.length && window.__tinyworldSelection && window.__tinyworldSelection.replaceWorldCoords) {
+      window.__tinyworldSelection.replaceWorldCoords(placed);
+    }
+    return placed.length > 0;
+  }
+
+  function pasteHoveredCellIntent() {
+    return pasteClipboardAtTarget(hoverWorldTarget(true), { animate: true, impactDust: true });
+  }
+
+  function duplicateActiveCellIntent() {
+    const selectedTargets = selectedClipboardTargets(true);
+    if (!selectedTargets.length) {
+      const target = hoverWorldTarget(false);
+      if (!target || !target.cell) return false;
+      if (!setAssetClipboard(makeClipboardPayload([target]))) return false;
+      return pasteClipboardAtTarget({ x: target.x + 1, z: target.z, userEdited: isOutsideHomeGrid(target.x + 1, target.z) });
+    }
+    const payload = makeClipboardPayload(selectedTargets);
+    if (!payload || !setAssetClipboard(payload)) return false;
+    const maxX = Math.max(...selectedTargets.map(t => t.x));
+    const minZ = Math.min(...selectedTargets.map(t => t.z));
+    return pasteClipboardAtTarget({ x: maxX + 1, z: minZ, userEdited: selectedTargets.some(t => isOutsideHomeGrid(t.x, t.z)) });
+  }
+
+  function loadAssetTemplates() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(ASSET_TEMPLATES_LS) || '[]');
+      return Array.isArray(raw) ? raw : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveAssetTemplates(list) {
+    try { localStorage.setItem(ASSET_TEMPLATES_LS, JSON.stringify((list || []).slice(0, 20))); } catch (_) {}
+  }
+
+  function saveActiveSelectionTemplate() {
+    if (!copyActiveCellIntent() || !assetClipboard) return false;
+    const templates = loadAssetTemplates();
+    templates.unshift({
+      id: 'template-' + Date.now().toString(36),
+      name: 'Template ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now(),
+      clipboard: assetClipboard,
+    });
+    saveAssetTemplates(templates);
+    return true;
+  }
+
+  function loadLatestTemplateToClipboard() {
+    const templates = loadAssetTemplates();
+    const latest = templates[0] && templates[0].clipboard;
+    return !!(latest && setAssetClipboard(latest));
   }
 
   // keyboard shortcuts
@@ -20864,7 +21414,11 @@
     if (shortcutTargetBlocked(e.target)) return;
     const comboKey = e.key.toLowerCase();
     if ((e.metaKey || e.ctrlKey) && !e.altKey && comboKey === 'c') {
-      if (copyHoveredCellIntent()) e.preventDefault();
+      if (copyActiveCellIntent()) e.preventDefault();
+      return;
+    }
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && comboKey === 'x') {
+      if (cutActiveCellIntent()) e.preventDefault();
       return;
     }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && comboKey === 'v') {
@@ -20897,6 +21451,12 @@
       return;
     }
     if (k === 'c') doClear();
+    else if (k === 'd') {
+      if (duplicateActiveCellIntent()) e.preventDefault();
+    }
+    else if (k === 'l') {
+      if (loadLatestTemplateToClipboard()) e.preventDefault();
+    }
     else if (k === 'p' || k === 'i') togglePerspective();
     else if (k === 'r') { adjustHoverTerrainHeight(+1); }
     else if (k === 'f') { adjustHoverTerrainHeight(-1); }
@@ -22304,6 +22864,10 @@
     if (cell.kind === 'voxel-build') {
       const stamp = getVoxelBuildStamp(cell.appearance && cell.appearance.voxelBuildId);
       return stamp ? stamp.name : 'Voxel build';
+    }
+    if (cell.kind === 'model-stamp') {
+      const asset = getModelStamp(cell.appearance && cell.appearance.modelStampId);
+      return asset ? asset.label : 'Model stamp';
     }
     if (cell.kind === 'house') {
       const bt = cell.buildingType || 'cottage';
@@ -28774,6 +29338,7 @@
       const level = cell.floors || 1;
       const voxelRender = makeVoxelRenderForCell(kind, target.x || 0, target.z || 0, cell, level);
       if (voxelRender && !voxelRender.skip && voxelRender.mesh) return voxelRender.mesh;
+      if (kind === 'model-stamp') return makeModelStamp(cell.appearance && cell.appearance.modelStampId, { appearance: cell.appearance });
       if (kind === 'house') return makeHouse(cell.floors || 2, cell.buildingType || 'cottage');
       if (kind === 'tree') return makeTree(level);
       if (kind === 'rock') return makeRock(null, level, target.x || 0, target.z || 0, cell.terrain === 'water');
@@ -28821,7 +29386,12 @@
         // clear preview
         if (previewMesh) {
           if (previewScene) previewScene.remove(previewMesh);
+          disposeGroup(previewMesh);
           previewMesh = null;
+        }
+        if (previewRAF) {
+          cancelAnimationFrame(previewRAF);
+          previewRAF = null;
         }
         const actionsEl = document.getElementById('selection-preview-actions');
         if (actionsEl) actionsEl.innerHTML = '';
@@ -28847,6 +29417,7 @@
       // remove old mesh
       if (previewMesh) {
         previewScene.remove(previewMesh);
+        disposeGroup(previewMesh);
         previewMesh = null;
       }
       // create mesh from kind (reuse factories where possible)
@@ -28872,6 +29443,10 @@
 
     function startPreviewRotate() {
       const tick = () => {
+        if (!previewMesh) {
+          previewRAF = null;
+          return;
+        }
         if (previewMesh) {
           previewMesh.rotation.y = (previewMesh.rotation.y || 0) + 0.012;
         }
@@ -29035,6 +29610,26 @@
     }
 
     function applySelectionProperty(rowKey, value) {
+      if (rowKey === 'selectionAction') {
+        const coords = selectedWorldCoords();
+        const fallbackTarget = coords.length
+          ? {
+            x: Math.min(...coords.map(c => c.x)),
+            z: Math.min(...coords.map(c => c.z)),
+            userEdited: coords.some(c => isOutsideHomeGrid(c.x, c.z)),
+          }
+          : null;
+        if (value === 'copy') copyActiveCellIntent();
+        else if (value === 'cut') cutActiveCellIntent();
+        else if (value === 'paste') pasteHoveredCellIntent() || pasteClipboardAtTarget(fallbackTarget);
+        else if (value === 'duplicate') duplicateActiveCellIntent();
+        else if (value === 'save-template') saveActiveSelectionTemplate();
+        else if (value === 'paste-template' && loadLatestTemplateToClipboard()) {
+          pasteHoveredCellIntent() || pasteClipboardAtTarget(fallbackTarget);
+        }
+        renderSelection();
+        return;
+      }
       if (rowKey === 'rotate') {
         const sel = window.__tinyworldSelection;
         if (sel && sel.rotate) sel.rotate(value === 'left' ? -Math.PI / 2 : Math.PI / 2);
@@ -29171,6 +29766,14 @@
       }
       const primary = entries[0][0];
       const rows = [];
+      rows.push({ key: 'selectionAction', label: 'Edit', options: [
+        { label: 'Copy', value: 'copy' },
+        { label: 'Cut', value: 'cut' },
+        { label: 'Paste', value: 'paste' },
+        { label: 'Duplicate', value: 'duplicate' },
+        { label: 'Save template', value: 'save-template' },
+        { label: 'Paste latest', value: 'paste-template' },
+      ] });
       rows.push({ key: 'rotate', label: 'Rotate', options: [
         { label: 'Left', value: 'left' },
         { label: 'Right', value: 'right' },
@@ -29205,18 +29808,18 @@
           ] },
           { key: 'objectMaterial', label: 'All material', options: SELECTION_MATERIAL_OPTIONS },
           { key: 'objectMaterialScale', label: 'All mat scale', options: [
-            { label: 'Smaller', value: 'up' },
-            { label: 'Larger', value: 'down' },
+            { label: 'Smaller', value: 'down' },
+            { label: 'Larger', value: 'up' },
           ] },
           { key: 'bodyMaterial', label: 'Body material', options: SELECTION_MATERIAL_OPTIONS },
           { key: 'bodyMaterialScale', label: 'Body mat scale', options: [
-            { label: 'Smaller', value: 'up' },
-            { label: 'Larger', value: 'down' },
+            { label: 'Smaller', value: 'down' },
+            { label: 'Larger', value: 'up' },
           ] },
           { key: 'topMaterial', label: 'Top material', options: SELECTION_MATERIAL_OPTIONS },
           { key: 'topMaterialScale', label: 'Top mat scale', options: [
-            { label: 'Smaller', value: 'up' },
-            { label: 'Larger', value: 'down' },
+            { label: 'Smaller', value: 'down' },
+            { label: 'Larger', value: 'up' },
           ] },
         );
         if (selectedTargets.some(t => t.cell && t.cell.kind !== 'voxel-build')) {
