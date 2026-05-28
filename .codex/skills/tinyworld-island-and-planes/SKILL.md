@@ -81,6 +81,27 @@ travelling along the X axis). Banner messages come from `BANNER_MESSAGES`.
 
 - "Front" side of island = +Z. North/South/East/West correspond to ±X / ±Z;
   do not assume Y-up screen coordinates.
+- The `new-island` tool creates an editable duplicate island board, not a
+  cell object. It keeps its own logical board coordinates so normal tools keep
+  using `setCell()`, while the island group handles X/Y/Z positioning and Y
+  rotation through the gizmo. Do not expose scale for island-board transforms.
+- New editable islands must seed their logical board with grass cells through
+  `setCell()` so the starting surface is visible and immediately replaceable
+  by normal terrain/object tools.
+- Duplicate island undersides use static voxel lift engines ported from
+  `voxel_lift_engine.html`: propellers face downward and the thrust/plume/glow
+  system remains off. Do not register these with `islandRocketFlames` or
+  `islandRocketEngines`.
+- Duplicate island lift engines are island attachments, not board cells.
+  Persist their `engines` state on the island record, stamp engine meshes with
+  `editableIslandEngineId` for raycast selection, and tick their propellers from
+  the central animation loop.
+- Number duplicate-island engine slots around the island. Slots 1 and 3 spin
+  clockwise; slots 2 and 4 spin anticlockwise, so diagonal props match while
+  adjacent props counter-rotate.
+- Duplicate island bases should reuse the home-island greeble layers:
+  `addIslandUtilityUnderside()` for underside pipes/cables/boxes and
+  `addIslandEdgeDressing()` for grassy/dirt/rock edge chunks.
 - Any new edge dressing must be added inside `addIslandEdgeDressing()` (per
   the existing per-edge loop with `cellRand` noise) so it stays consistent
   across all four sides.

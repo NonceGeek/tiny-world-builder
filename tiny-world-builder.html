@@ -8858,21 +8858,21 @@
       M.pumpkin, M.carrotBody, M.sunflowerPetal, M_PLANT.petalRed,
       M_PLANT.petalYellow, M_PLANT.petalPurple, M_PLANT.petalWhite,
       M_PLANT.bushBerry, M_ANIMAL.cowSpot, M_ANIMAL.cowMuzzle,
-      M_ANIMAL.sheepFace,
+      M_ANIMAL.sheepFace, M.grass, M.grassHi,
     ]);
     const topDark = new Set([
       M.roofBlueD, M.manorRoofD, M.towerRoofD, M.castleRoofD, M.leavesDk,
-      M.pumpkinDk, M.sunflowerCenter, M_ANIMAL.hoof,
+      M.pumpkinDk, M.sunflowerCenter, M_ANIMAL.hoof, M.grassEdge,
     ]);
     const bodyBase = new Set([
       M.wallCream, M.manorBrick, M.towerStone, M.castleStone, M.skyBody,
       M.trunk, M.bridgeWood, M.fence, M.rock, M.cropStem, M.cornStalk,
       M.wheatStalk, M.pumpkinStem, M.sunflowerStalk, M_ANIMAL.cowWhite,
-      M_ANIMAL.sheepWool,
+      M_ANIMAL.sheepWool, M.dirtRich, M.islandUnder,
     ]);
     const bodyDark = new Set([
       M.wallTrim, M.manorBrickD, M.towerStoneD, M.castleStoneD,
-      M.bridgeWoodD, M.fenceWire, M.fenceSteel, M.rockDk,
+      M.bridgeWoodD, M.fenceWire, M.fenceSteel, M.rockDk, M.islandUnderD,
     ]);
     function remap(mat) {
       if (!mat) return mat;
@@ -9975,6 +9975,7 @@
     return {
       v: STORAGE_VERSION,
       gridSize: GRID,
+      islands: serializeEditableIslands(),
       cells,
       cameraMode,
       toolId: selectedTool && selectedTool.id,
@@ -9989,7 +9990,12 @@
   }
 
   function worldHistorySignature(snapshot) {
-    try { return JSON.stringify(snapshot && snapshot.cells ? snapshot.cells : []); }
+    try {
+      return JSON.stringify({
+        cells: snapshot && snapshot.cells ? snapshot.cells : [],
+        islands: snapshot && snapshot.islands ? snapshot.islands : [],
+      });
+    }
     catch (_) { return ''; }
   }
 
@@ -12659,6 +12665,8 @@
   let modelStampScanMessage = 'Scanning models…';
   const modelStampAssetCache = new Map();
   const modelStampTextureCache = new Map();
+  const CROWD_MODEL_CHARACTER_RE = /(character|person|people|human|man|woman|girl|boy|child|townie|avatar|npc|rig|skinned|walk|run|hitman|heisenberg)/i;
+  const CROWD_MODEL_NEGATIVE_RE = /(building|house|tower|city|plane|aircraft|airplane|boat|ship|vessel|engine|prop|trap|terrain|tree|rock|vehicle|car|truck)/i;
   const MODEL_STAMP_FALLBACK_PALETTES = {
     building: [0xd7c092, 0xa84f3f, 0x365171, 0x2c3037, 0x7f8c64, 0xf0dec0],
     boat: [0x2f6f8c, 0xa75f3e, 0xf0d7a8, 0x324a5f, 0xe8efe8],
@@ -12678,6 +12686,18 @@
       return stored === '1';
     } catch (_) {
       return false;
+    }
+  }
+
+  function modelStampScanApiEnabled() {
+    if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') return false;
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      if (qs.get('modelApi') === '0' || qs.get('modelStampApi') === '0') return false;
+      const stored = window.localStorage && window.localStorage.getItem('tinyworld:features:model-stamp-api');
+      return stored !== '0';
+    } catch (_) {
+      return true;
     }
   }
 
@@ -12848,7 +12868,7 @@
 
   async function refreshModelStampManifest() {
     const endpoints = [];
-    if (modelStampApiEnabled()) {
+    if (modelStampScanApiEnabled()) {
       endpoints.push('/api/model-stamps?ts=' + Date.now());
     }
     endpoints.push(MODEL_STAMP_MANIFEST_URL + '?ts=' + Date.now());
@@ -12875,6 +12895,7 @@
     }
     updateStampBuilderSummary();
     refreshOpenStampBuilderCards();
+    ensureCrowdModelCharacterAssetsLoading();
     return MODEL_STAMP_ASSETS;
   }
 
@@ -13117,7 +13138,25 @@
   }
 
   function cloneModelStampScene(source) {
+    const sourceNodes = [];
+    source.traverse(node => sourceNodes.push(node));
     const clone = source.clone(true);
+    const cloneNodes = [];
+    clone.traverse(node => cloneNodes.push(node));
+    const cloneBySource = new Map();
+    sourceNodes.forEach((node, index) => {
+      if (cloneNodes[index]) cloneBySource.set(node, cloneNodes[index]);
+    });
+    cloneNodes.forEach((node, index) => {
+      const sourceNode = sourceNodes[index];
+      if (!sourceNode || !sourceNode.isSkinnedMesh || !sourceNode.skeleton || !node.isSkinnedMesh) return;
+      const bones = sourceNode.skeleton.bones.map(bone => cloneBySource.get(bone) || bone);
+      const boneInverses = sourceNode.skeleton.boneInverses.map(inverse => inverse.clone());
+      node.skeleton = new THREE.Skeleton(bones, boneInverses);
+      if (sourceNode.bindMatrix) node.bindMatrix.copy(sourceNode.bindMatrix);
+      if (sourceNode.bindMatrixInverse) node.bindMatrixInverse.copy(sourceNode.bindMatrixInverse);
+      if (node.bind && node.bindMatrix) node.bind(node.skeleton, node.bindMatrix);
+    });
     clone.traverse(node => {
       if (!node.isMesh) return;
       if (node.geometry && node.geometry.clone) node.geometry = node.geometry.clone();
@@ -13164,6 +13203,40 @@
     return g;
   }
 
+  function uniqueModelStampRefs(items) {
+    return Array.from(new Set((items || []).filter(Boolean)));
+  }
+
+  function extractModelStampMapPath(line) {
+    const raw = String(line || '').trim().replace(/^map_kd\s+/i, '').trim();
+    if (!raw) return '';
+    if ((raw[0] === '"' && raw[raw.length - 1] === '"') || (raw[0] === '\'' && raw[raw.length - 1] === '\'')) {
+      return raw.slice(1, -1);
+    }
+    const tokens = raw.split(/\s+/);
+    let i = 0;
+    const optionArity = {
+      '-blendu': 1,
+      '-blendv': 1,
+      '-boost': 1,
+      '-mm': 2,
+      '-o': 3,
+      '-s': 3,
+      '-t': 3,
+      '-texres': 1,
+      '-clamp': 1,
+      '-bm': 1,
+      '-imfchan': 1,
+      '-type': 1,
+    };
+    while (i < tokens.length && tokens[i][0] === '-') {
+      const arity = optionArity[String(tokens[i]).toLowerCase()];
+      if (arity === undefined) break;
+      i += 1 + arity;
+    }
+    return tokens.slice(i).join(' ').trim();
+  }
+
   function parseOBJMaterialLibraries(text) {
     const refs = [];
     for (const line of String(text || '').split(/\r?\n/)) {
@@ -13171,14 +13244,15 @@
       if (!trimmed || trimmed[0] === '#' || !/^mtllib\s+/i.test(trimmed)) continue;
       const rest = trimmed.replace(/^mtllib\s+/i, '').trim();
       if (!rest) continue;
-      rest.split(/\s+/).forEach(ref => { if (ref) refs.push(ref); });
+      refs.push(rest);
     }
-    return Array.from(new Set(refs));
+    return uniqueModelStampRefs(refs);
   }
 
   function parseModelStampMTL(text, asset, baseUrl) {
     const defs = [];
     let current = null;
+    const clampAlpha = value => Math.max(0, Math.min(1, Number(value) || 0));
     function flush() {
       if (current && current.name) defs.push(current);
       current = null;
@@ -13190,18 +13264,20 @@
       const key = parts.shift().toLowerCase();
       if (key === 'newmtl') {
         flush();
-        current = { name: parts.join(' '), color: 0xffffff, opacity: 1, map: null };
+        current = { name: parts.join(' '), color: 0xffffff, opacity: 1, map: null, hasDissolve: false };
       } else if (current && key === 'kd' && parts.length >= 3) {
         const r = Math.max(0, Math.min(1, Number(parts[0]) || 0));
         const g = Math.max(0, Math.min(1, Number(parts[1]) || 0));
         const b = Math.max(0, Math.min(1, Number(parts[2]) || 0));
         current.color = new THREE.Color(r, g, b).getHex();
       } else if (current && key === 'd' && parts.length) {
-        current.opacity = Math.max(0, Math.min(1, Number(parts[0]) || 0));
+        current.opacity = clampAlpha(parts[0]);
+        current.hasDissolve = true;
       } else if (current && key === 'tr' && parts.length) {
-        current.opacity = 1 - Math.max(0, Math.min(1, Number(parts[0]) || 0));
-      } else if (current && key === 'map_kd' && parts.length) {
-        current.map = parts[parts.length - 1];
+        const transparency = clampAlpha(parts[0]);
+        if (!current.hasDissolve) current.opacity = transparency >= 0.999 ? 1 : 1 - transparency;
+      } else if (current && key === 'map_kd') {
+        current.map = extractModelStampMapPath(trimmed);
       }
     }
     flush();
@@ -13335,11 +13411,12 @@
       if (onError) cache.error.push(onError);
       return cache;
     }
-    cache = { state: 'loading', scene: null, errorMessage: '', ready: onReady ? [onReady] : [], error: onError ? [onError] : [] };
+    cache = { state: 'loading', scene: null, animations: [], errorMessage: '', ready: onReady ? [onReady] : [], error: onError ? [onError] : [] };
     modelStampAssetCache.set(asset.id, cache);
-    function finish(scene) {
+    function finish(scene, animations = []) {
       cache.state = 'ready';
       cache.scene = scene;
+      cache.animations = Array.isArray(animations) ? animations : [];
       cache.ready.splice(0).forEach(fn => { try { fn(scene); } catch (_) {} });
       scheduleModelStampRefresh(asset.id);
     }
@@ -13362,7 +13439,7 @@
       loader.load(asset.url, gltf => {
         const scene = gltf.scene || (gltf.scenes && gltf.scenes[0]) || new THREE.Group();
         hydrateModelStampScene(scene, asset, { flipY: false });
-        finish(scene);
+        finish(scene, gltf.animations || []);
       }, undefined, fail);
     } else if (asset.format === 'obj') {
       let objText = '';
@@ -13838,6 +13915,33 @@
     vbox(parent, Math.max(0.30, width * 0.10), layerH * 1.1, Math.max(0.30, depth * 0.10), 0, topY - totalDrop - layerH * 0.55, 0, trimMat, { noGap: true });
   }
 
+  function makeBlankIsland() {
+    const g = new THREE.Group();
+    const width = 2.75;
+    const depth = 2.35;
+    const grassH = 0.16;
+    const dirtH = 0.34;
+    vbox(g, width, grassH, depth, 0, grassH * 0.5, 0, M.grass, { noGap: true });
+    vbox(g, width * 0.96, 0.055, depth + 0.05, 0, grassH + 0.018, 0, M.grassHi, { noGap: true, noBevel: true });
+    vbox(g, width + 0.08, 0.055, 0.10, 0, grassH * 0.72, -depth * 0.5, M.grassEdge, { noGap: true, noBevel: true });
+    vbox(g, width + 0.08, 0.055, 0.10, 0, grassH * 0.72,  depth * 0.5, M.grassEdge, { noGap: true, noBevel: true });
+    vbox(g, 0.10, 0.055, depth + 0.08, -width * 0.5, grassH * 0.72, 0, M.grassEdge, { noGap: true, noBevel: true });
+    vbox(g, 0.10, 0.055, depth + 0.08,  width * 0.5, grassH * 0.72, 0, M.grassEdge, { noGap: true, noBevel: true });
+    vbox(g, width * 0.94, dirtH, depth * 0.94, 0, -dirtH * 0.5, 0, M.dirtRich, { noGap: true });
+    voxelInvertedSteppedRoof(g, width * 0.86, depth * 0.86, -dirtH - 0.02, M.islandUnder, M.islandUnderD);
+    const tuftMat = M.grassHi;
+    for (let i = 0; i < 10; i++) {
+      const side = Math.floor(cellRand(i, 41, 8310) * 4);
+      const along = cellRand(i, 42, 8320) * 2 - 1;
+      const x = side < 2 ? along * width * 0.40 : (side === 2 ? -width * 0.45 : width * 0.45);
+      const z = side < 2 ? (side === 0 ? -depth * 0.45 : depth * 0.45) : along * depth * 0.40;
+      vbox(g, 0.07, 0.10 + cellRand(i, 43, 8330) * 0.08, 0.07, x, grassH + 0.05, z, tuftMat, { noGap: true });
+    }
+    g.userData.kind = 'new-island';
+    castReceive(g);
+    return g;
+  }
+
   const ISLAND_ROCKET_FLAME_SPEED = 3;
   const UNDER_ISLAND_EFFECT_RENDER_ORDER = -24;
   let islandRocketFlames = new Set();
@@ -13926,6 +14030,201 @@
       engine.position.set(x, y, z);
       islandRocketEngines.add(engine);
       parent.add(engine);
+    });
+  }
+
+  const editableIslandEnginePropellers = new Set();
+  const EDITABLE_ISLAND_ENGINE_TYPES = new Set(['lift', 'turbo', 'heavy']);
+
+  function normalizeEditableIslandEngineType(value) {
+    const clean = String(value || '').toLowerCase();
+    return EDITABLE_ISLAND_ENGINE_TYPES.has(clean) ? clean : 'lift';
+  }
+
+  function normalizeEditableIslandEngineState(raw, slot = 0) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    return {
+      id: typeof src.id === 'string' && src.id ? src.id : 'engine-' + slot,
+      slot,
+      type: normalizeEditableIslandEngineType(src.type),
+      level: Math.max(1, Math.min(3, Math.round(Number(src.level) || 1))),
+      installed: src.installed !== false,
+      mesh: null,
+      propeller: null,
+    };
+  }
+
+  function defaultEditableIslandEngineStates(rawEngines = null) {
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const src = Array.isArray(rawEngines) ? rawEngines[i] : null;
+      out.push(normalizeEditableIslandEngineState(src, i));
+    }
+    return out;
+  }
+
+  function makeVoxelLiftEngine(seed = 0, opts = {}) {
+    // Ported from voxel_lift_engine.html. The authored wrapper tips the fan
+    // downward; the blue thrust/plume system is intentionally omitted here.
+    const type = normalizeEditableIslandEngineType(opts.type);
+    const level = Math.max(1, Math.min(3, Math.round(Number(opts.level) || 1)));
+    const slot = Math.max(0, Math.min(3, Math.round(Number(opts.slot) || 0)));
+    const spinDirection = slot % 2 === 0 ? 1 : -1;
+    const root = new THREE.Group();
+    root.name = 'voxel-lift-engine';
+    root.userData.kind = 'voxel-lift-engine';
+    root.userData.engineType = type;
+    root.userData.engineLevel = level;
+    const engine = new THREE.Group();
+    engine.rotation.x = -Math.PI / 2;
+    root.add(engine);
+    const body = new THREE.Group();
+    engine.add(body);
+
+    function sourceCube(parent, x, y, z, sx = 1, sy = 1, sz = 1, mat = M.rock) {
+      return vbox(parent, sx, sy, sz, x, y, z, mat, { noGap: true });
+    }
+    function sourceVox(parent, x, y, z, mat = M.rock, s = 0.34) {
+      return sourceCube(parent, x * s, y * s, z * s, s * 0.96, s * 0.96, s * 0.96, mat);
+    }
+
+    for (let y = -3; y <= 3; y++) {
+      for (let x = -4; x <= 4; x++) {
+        for (let z = -3; z <= 3; z++) {
+          const r = Math.sqrt((x / 4.2) ** 2 + (y / 3.8) ** 2 + (z / 3.3) ** 2);
+          if (r < 1.03 && !(Math.abs(x) > 3 && Math.abs(y) > 2)) {
+            const roll = cellRand(seed + x * 13 + y * 31 + z * 47, GRID, 8820);
+            const mat = roll < 0.18 ? M.rocketSteelD : (roll < 0.38 ? M.rockHi : M.rock);
+            sourceVox(body, x, y, z, mat);
+          }
+        }
+      }
+    }
+
+    for (let x = -2; x <= 2; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -4, M.rocketSteelD);
+    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) sourceVox(body, x, y, -5, M.rocketSteel);
+    sourceVox(body, 0, 0, -6, M.rockHi);
+    sourceVox(body, 0, 0, -7, M.rocketSteelD);
+
+    sourceCube(body, -1.25, 1.95, 0, 0.32, 1.55, 0.32, M.rockHi);
+    sourceCube(body,  1.25, 1.95, 0, 0.32, 1.55, 0.32, M.rockHi);
+    sourceCube(body, 0, 2.78, 0, 3.25, 0.34, 0.58, M.rock);
+    sourceCube(body, 0, 1.45, -0.55, 1.25, 0.32, 0.90, M.bridgeWood);
+    sourceCube(body, 0, 1.78, -0.55, 0.75, 0.26, 0.65, M.bridgeWood);
+
+    sourceCube(body, 0, 0.90, 1.35, 1.10, 0.90, 0.80, M.bridgeWood);
+    sourceCube(body, -1.75, -0.15, 0.40, 0.68, 1.25, 1.05, M.rock);
+    sourceCube(body,  1.75, -0.15, 0.40, 0.68, 1.25, 1.05, M.rock);
+    sourceCube(body, -2.25, -0.35, -0.65, 0.75, 0.95, 0.55, M.bridgeWoodD);
+    sourceCube(body,  2.25, -0.35, -0.65, 0.75, 0.95, 0.55, M.bridgeWoodD);
+    sourceCube(body, -2.25, -0.35, -0.98, 0.28, 0.28, 0.12, M.wallTrim);
+    sourceCube(body,  2.25, -0.35, -0.98, 0.28, 0.28, 0.12, M.wallTrim);
+
+    sourceCube(body, 0, -1.65, 0, 1.60, 0.55, 1.45, M.rocketSteelD);
+    sourceCube(body, 0, -2.05, 0, 1.10, 0.45, 1.00, M.rocketSteel);
+    if (type === 'turbo' || level >= 2) {
+      sourceCube(body, 0, -2.42, 0, 1.34, 0.28, 1.24, M.rocketHeat);
+      sourceCube(body, -1.02, -2.36, 0, 0.18, 0.62, 1.34, M.wallTrim);
+      sourceCube(body, 1.02, -2.36, 0, 0.18, 0.62, 1.34, M.wallTrim);
+    }
+    if (type === 'heavy' || level >= 3) {
+      sourceCube(body, -0.82, -2.72, 0, 0.42, 0.34, 0.95, M.rocketSteelD);
+      sourceCube(body, 0.82, -2.72, 0, 0.42, 0.34, 0.95, M.rocketSteelD);
+      sourceCube(body, 0, -2.92, 0, 1.48, 0.20, 1.34, M.rockHi);
+    }
+
+    const prop = new THREE.Group();
+    prop.name = 'down-facing-propeller';
+    prop.position.set(0, -0.45, -3.22 - (level - 1) * 0.18);
+    prop.userData.isEditableIslandEnginePropeller = true;
+    prop.userData.spinDirection = spinDirection;
+    prop.userData.spinSpeed = spinDirection * ((type === 'heavy' ? 7.5 : type === 'turbo' ? 14 : 10) + level * 2.8);
+    engine.add(prop);
+    const propScale = type === 'heavy' ? 1.18 : type === 'turbo' ? 0.98 : 1;
+    sourceCube(prop, 0, 0, 0, 0.85 * propScale, 0.85 * propScale, 0.45, M.rocketSteel);
+    sourceCube(prop, 0, 0, -0.25, 0.45 * propScale, 0.45 * propScale, 0.36, M.rockHi);
+    function makeBlade(angle) {
+      const blade = new THREE.Group();
+      blade.rotation.z = angle;
+      prop.add(blade);
+      for (let i = 0; i < 9; i++) {
+        const w = (0.42 + i * 0.025) * propScale;
+        sourceCube(blade, 0, (0.58 + i * 0.33) * propScale, 0, w, 0.34 * propScale, 0.28, i % 2 ? M.bridgeWood : M.bridgeWoodD);
+      }
+      sourceCube(blade, 0, 3.65 * propScale, 0, 0.55 * propScale, 0.38 * propScale, 0.31, M.wallTrim);
+      sourceCube(blade, 0, 3.95 * propScale, 0, 0.46 * propScale, 0.32 * propScale, 0.28, M.bridgeWood);
+    }
+    for (let i = 0; i < 4; i++) makeBlade(i * Math.PI / 2 + Math.PI / 4);
+    if (type === 'turbo') {
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4;
+        const ring = sourceCube(prop, Math.cos(a) * 2.98, Math.sin(a) * 2.98, 0.06, 0.32, 0.72, 0.18, M.rocketSteelD);
+        ring.rotation.z = a;
+      }
+    }
+
+    root.userData.propeller = prop;
+    root.scale.setScalar(0.32 + (level - 1) * 0.018 + (type === 'heavy' ? 0.025 : 0));
+    castReceive(root);
+    return root;
+  }
+
+  function stampEditableIslandEngineMesh(mesh, island, engineState) {
+    if (!mesh || !island || !engineState) return;
+    const data = {
+      kind: 'editable-island-engine',
+      editableIslandId: island.id,
+      editableIslandEngineId: engineState.id,
+      editableIslandEngineSlot: engineState.slot,
+    };
+    mesh.traverse(node => {
+      node.userData = Object.assign({}, node.userData || {}, data);
+    });
+  }
+
+  function editableIslandEnginePlacement(slot) {
+    const span = GRID * TILE;
+    const half = span * 0.5;
+    const inset = Math.max(0.95, Math.min(1.55, span * 0.15));
+    const y = -DIRT_H - 0.74;
+    const placements = [
+      [-half + inset, -half + inset],
+      [ half - inset, -half + inset],
+      [ half - inset,  half - inset],
+      [-half + inset,  half - inset],
+    ];
+    const [x, z] = placements[slot] || placements[0];
+    return { x, y, z, rotationY: Math.atan2(x, z) };
+  }
+
+  function buildEditableIslandEngineMesh(island, engineState) {
+    if (!island || !engineState || engineState.installed === false) return null;
+    const placement = editableIslandEnginePlacement(engineState.slot || 0);
+    const engine = makeVoxelLiftEngine(4200 + (engineState.slot || 0) * 137, engineState);
+    engine.position.set(placement.x, placement.y, placement.z);
+    engine.rotation.y = placement.rotationY;
+    stampEditableIslandEngineMesh(engine, island, engineState);
+    engineState.mesh = engine;
+    engineState.propeller = engine.userData.propeller || null;
+    if (engineState.propeller) editableIslandEnginePropellers.add(engineState.propeller);
+    return engine;
+  }
+
+  function addEditableIslandLiftEngines(parent, island) {
+    if (!island) return;
+    island.engines.forEach(engineState => {
+      const engine = buildEditableIslandEngineMesh(island, engineState);
+      if (engine) parent.add(engine);
+    });
+  }
+
+  function tickEditableIslandEngines(dt) {
+    editableIslandEnginePropellers.forEach(prop => {
+      if (!prop || !prop.parent) {
+        editableIslandEnginePropellers.delete(prop);
+        return;
+      }
+      prop.rotation.z += dt * (prop.userData.spinSpeed || 10);
     });
   }
 
@@ -16267,6 +16566,13 @@
   let crowdMode = localStorage.getItem(RENDER_LS.crowdMode) || 'wander';
   let crowdShowArrows = localStorage.getItem(RENDER_LS.crowdShowArrows) !== '0';
   let crowdEnabled = localStorage.getItem(RENDER_LS.crowdEnabled) !== '0';
+  const crowdModelActorGroup = new THREE.Group();
+  crowdModelActorGroup.name = 'crowd-model-actors';
+  worldGroup.add(crowdModelActorGroup);
+  const crowdModelActors = new Map();
+  const crowdModelAssetLoadIds = new Set();
+  let crowdModelActiveAssetId = null;
+  let crowdModelSpritesVisible = true;
 
   function persistCrowdSettings() {
     localStorage.setItem(RENDER_LS.crowdCount, String(crowdCount));
@@ -16302,7 +16608,264 @@
       zoneRadius: crowdZoneRadius,
       showZones: crowdShowZones,
       showArrows: crowdShowArrows,
+      showSprites: crowdModelSpritesVisible,
     };
+  }
+
+  function crowdModelAssetSignature(asset) {
+    return [asset && asset.id, asset && asset.label, asset && asset.path, asset && asset.url].filter(Boolean).join(' ');
+  }
+
+  function isCrowdModelCharacterCandidate(asset) {
+    if (!asset || !asset.supported || !MODEL_STAMP_SUPPORTED_FORMATS.has(asset.format)) return false;
+    const sig = crowdModelAssetSignature(asset);
+    return CROWD_MODEL_CHARACTER_RE.test(sig) && !CROWD_MODEL_NEGATIVE_RE.test(sig);
+  }
+
+  function modelStampSceneHasSkinnedMesh(asset) {
+    const cache = asset && modelStampAssetCache.get(asset.id);
+    if (!cache || cache.state !== 'ready' || !cache.scene) return false;
+    let found = false;
+    cache.scene.traverse(node => {
+      if (node && node.isSkinnedMesh) found = true;
+    });
+    return found;
+  }
+
+  function crowdModelCharacterScore(asset) {
+    const sig = crowdModelAssetSignature(asset);
+    const clips = modelStampAnimationClipsForAsset(asset);
+    let score = String(asset && asset.label || '').length * 0.001;
+    if (asset && (asset.format === 'glb' || asset.format === 'gltf')) score += 30;
+    if (modelStampSceneHasSkinnedMesh(asset)) score += 80;
+    if (clips.length) score += 60;
+    if (/hitman/i.test(sig)) score += 24;
+    if (/heisenberg/i.test(sig)) score += 18;
+    if (/character|person|human|man|woman|rig|skinned/i.test(sig)) score += 10;
+    return score;
+  }
+
+  function crowdModelCharacterCandidates() {
+    return MODEL_STAMP_ASSETS
+      .filter(isCrowdModelCharacterCandidate)
+      .sort((a, b) => crowdModelCharacterScore(b) - crowdModelCharacterScore(a));
+  }
+
+  function modelStampAnimationClipsForAsset(asset) {
+    const cache = asset && modelStampAssetCache.get(asset.id);
+    return cache && cache.state === 'ready' && Array.isArray(cache.animations) ? cache.animations : [];
+  }
+
+  function modelStampHasRiggedCrowdAnimation(asset) {
+    return modelStampSceneHasSkinnedMesh(asset) && modelStampAnimationClipsForAsset(asset).length > 0;
+  }
+
+  function ensureCrowdModelCharacterAssetsLoading() {
+    for (const asset of crowdModelCharacterCandidates()) {
+      if (crowdModelAssetLoadIds.has(asset.id)) continue;
+      crowdModelAssetLoadIds.add(asset.id);
+      loadModelStampAsset(asset, () => {
+        if (crowdEnabled && crowdLayer) {
+          crowdModelActiveAssetId = null;
+          renderScene();
+        }
+      }, err => {
+        console.warn('[crowd-model] failed to load character model', asset.label || asset.id, err);
+      });
+    }
+  }
+
+  function selectCrowdModelCharacterAsset() {
+    const candidates = crowdModelCharacterCandidates();
+    let best = null;
+    let bestScore = -1;
+    for (const asset of candidates) {
+      const cache = modelStampAssetCache.get(asset.id);
+      if (!cache || cache.state !== 'ready' || !cache.scene) continue;
+      if (!modelStampHasRiggedCrowdAnimation(asset)) continue;
+      const score = crowdModelCharacterScore(asset);
+      if (score > bestScore) {
+        best = asset;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  function pickRiggedCharacterAnimationClip(clips, mode) {
+    const list = Array.isArray(clips) ? clips : [];
+    const moveRe = /(walk|run|jog|move|locomotion)/i;
+    const idleRe = /(idle|stand|breath)/i;
+    if (mode === 'idle') return list.find(clip => idleRe.test(clip.name || '')) || null;
+    return list.find(clip => moveRe.test(clip.name || ''))
+      || list.find(clip => !idleRe.test(clip.name || ''))
+      || list[0]
+      || null;
+  }
+
+  function createRiggedCharacterRuntime(root, clips = [], opts = {}) {
+    const moveClip = pickRiggedCharacterAnimationClip(clips, 'move');
+    const idleClip = pickRiggedCharacterAnimationClip(clips, 'idle');
+    const runtime = {
+      root,
+      mixer: null,
+      moveAction: null,
+      idleAction: null,
+      procedural: !moveClip,
+      phase: opts.phase || Math.random() * Math.PI * 2,
+    };
+    if (moveClip || idleClip) {
+      runtime.mixer = new THREE.AnimationMixer(root);
+      if (moveClip) {
+        runtime.moveAction = runtime.mixer.clipAction(moveClip);
+        runtime.moveAction.enabled = true;
+        runtime.moveAction.setEffectiveWeight(1);
+        runtime.moveAction.play();
+      }
+      if (idleClip && idleClip !== moveClip) {
+        runtime.idleAction = runtime.mixer.clipAction(idleClip);
+        runtime.idleAction.enabled = true;
+        runtime.idleAction.setEffectiveWeight(0);
+        runtime.idleAction.play();
+      }
+    }
+    return runtime;
+  }
+
+  function updateRiggedCharacterRuntime(runtime, dt, state = {}) {
+    if (!runtime || !runtime.root) return;
+    const moving = !!state.moving;
+    const speed = Math.max(0, Number(state.speed) || 0);
+    const speedMul = Math.max(0, Number(state.speedMul) || 1);
+    if (runtime.moveAction) {
+      runtime.moveAction.paused = !moving;
+      runtime.moveAction.setEffectiveWeight(moving ? 1 : (runtime.idleAction ? 0 : 1));
+      runtime.moveAction.timeScale = Math.max(0.25, Math.min(2.5, speed * speedMul * 5.5));
+    }
+    if (runtime.idleAction) runtime.idleAction.setEffectiveWeight(moving ? 0 : 1);
+    if (runtime.mixer) runtime.mixer.update(dt || 0);
+    if (runtime.procedural) {
+      const cadence = moving ? Math.max(2.2, Math.min(7.2, speed * speedMul * 18)) : 1.35;
+      runtime.phase += (dt || 0) * cadence;
+      const step = Math.sin(runtime.phase);
+      const bounce = moving ? Math.abs(Math.sin(runtime.phase * 2)) * 0.030 : Math.sin(runtime.phase) * 0.006;
+      const sway = moving ? step * 0.070 : Math.sin(runtime.phase * 0.7) * 0.016;
+      runtime.root.position.y += bounce;
+      runtime.root.rotation.z = sway;
+      runtime.root.rotation.x = moving ? Math.cos(runtime.phase) * 0.035 : 0;
+    } else {
+      runtime.root.rotation.z = 0;
+      runtime.root.rotation.x = 0;
+    }
+  }
+
+  function disposeRiggedCharacterRuntime(runtime) {
+    if (!runtime) return;
+    if (runtime.mixer) runtime.mixer.stopAllAction();
+    runtime.mixer = null;
+    runtime.moveAction = null;
+    runtime.idleAction = null;
+  }
+
+  function setCrowdSpritesVisible(visible) {
+    crowdModelSpritesVisible = !!visible;
+    if (!crowdLayer) return;
+    if (typeof crowdLayer.setSpritesVisible === 'function') {
+      crowdLayer.setSpritesVisible(crowdModelSpritesVisible);
+    } else if (crowdLayer.people && crowdLayer.people.forEach) {
+      crowdLayer.people.forEach(person => {
+        if (person.sprite) person.sprite.visible = crowdModelSpritesVisible;
+      });
+    }
+  }
+
+  function disposeCrowdModelActor(actor) {
+    if (!actor) return;
+    disposeRiggedCharacterRuntime(actor.runtime);
+    if (actor.root && actor.root.parent) actor.root.parent.remove(actor.root);
+    if (actor.root) disposeGroup(actor.root);
+  }
+
+  function clearCrowdModelActors() {
+    crowdModelActors.forEach(disposeCrowdModelActor);
+    crowdModelActors.clear();
+    crowdModelActiveAssetId = null;
+    setCrowdSpritesVisible(true);
+  }
+
+  function makeCrowdModelActor(asset) {
+    const cache = asset && modelStampAssetCache.get(asset.id);
+    if (!cache || cache.state !== 'ready' || !cache.scene) return null;
+    const root = normalizeModelStampObject(cloneModelStampScene(cache.scene), asset);
+    root.name = 'crowd-model-' + asset.id;
+    root.userData.crowdActor = true;
+    root.userData.modelStampId = asset.id;
+    const bounds = new THREE.Box3().setFromObject(root);
+    const size = new THREE.Vector3();
+    bounds.getSize(size);
+    const actor = {
+      root,
+      assetId: asset.id,
+      baseScale: root.scale.x || 1,
+      baseHeight: Math.max(0.001, size.y || 1),
+      runtime: null,
+    };
+    actor.runtime = createRiggedCharacterRuntime(root, modelStampAnimationClipsForAsset(asset));
+    crowdModelActorGroup.add(root);
+    return actor;
+  }
+
+  function updateCrowdModelActor(actor, person, dt) {
+    const pos = tilePos(person.x, person.z);
+    const groundY = crowdTerrainHeightAt(person.x, person.z) + (person.y || 0);
+    const desiredHeight = crowdWorldConfigOverride().doorHeight
+      * crowdWorldConfigOverride().personDoorRatio
+      * crowdScale
+      * (person.scale || 1)
+      * (person.sizeMul || 1);
+    const scale = actor.baseScale * desiredHeight / actor.baseHeight;
+    const moving = !crowdPaused && !!(person.route && person.route.length > 1 && person.speed);
+    actor.root.position.set(pos.x, groundY, pos.z);
+    actor.root.rotation.y = Math.PI * 0.5 - person.heading;
+    actor.root.scale.setScalar(scale);
+    updateRiggedCharacterRuntime(actor.runtime, dt, {
+      moving,
+      speed: person.speed || 0.18,
+      speedMul: person.speedMul || 1,
+    });
+  }
+
+  function updateCrowdModelActors(dt) {
+    ensureCrowdModelCharacterAssetsLoading();
+    const asset = selectCrowdModelCharacterAsset();
+    if (!crowdEnabled || !crowdLayer || !asset) {
+      clearCrowdModelActors();
+      return;
+    }
+    if (crowdModelActiveAssetId !== asset.id) {
+      clearCrowdModelActors();
+      crowdModelActiveAssetId = asset.id;
+    }
+    setCrowdSpritesVisible(false);
+    const people = typeof crowdLayer.getPeople === 'function'
+      ? crowdLayer.getPeople()
+      : Array.from(crowdLayer.people ? crowdLayer.people.values() : []);
+    const liveIds = new Set();
+    for (const person of people) {
+      liveIds.add(person.id);
+      let actor = crowdModelActors.get(person.id);
+      if (!actor || actor.assetId !== asset.id) {
+        disposeCrowdModelActor(actor);
+        actor = makeCrowdModelActor(asset);
+        if (actor) crowdModelActors.set(person.id, actor);
+      }
+      if (actor) updateCrowdModelActor(actor, person, dt);
+    }
+    for (const [id, actor] of crowdModelActors.entries()) {
+      if (liveIds.has(id)) continue;
+      disposeCrowdModelActor(actor);
+      crowdModelActors.delete(id);
+    }
   }
 
   function applyCrowdSettings({ reseed = false } = {}) {
@@ -16367,6 +16930,7 @@
   function seedCrowdPeople() {
     if (!crowdLayer || !crowdLayer.loaded) return;
     crowdLayer.clear();
+    clearCrowdModelActors();
     if (!crowdEnabled) return;
     const pathCells = collectCrowdPathCells();
     const count = Math.min(crowdCount, pathCells.length);
@@ -16403,6 +16967,7 @@
       config: crowdConfigOverride(),
       worldConfig: crowdWorldConfigOverride(),
     });
+    ensureCrowdModelCharacterAssetsLoading();
     crowdLayer.load().then(seedCrowdPeople).catch(err => {
       console.warn('[crowd] failed to load sprites', err);
     });
@@ -16438,13 +17003,14 @@
       if (m.geometry && !(m.userData && m.userData.sharedGeometry)) m.geometry.dispose();
     }
   }
-  function addEdgeStrip(p, y, length, thickness, axis) {
+  function addEdgeStrip(p, y, length, thickness, axis, rotationY = 0) {
     // axis 'x' = aligned along x; 'z' = along z.
     const g = axis === 'x'
       ? new THREE.BoxGeometry(length, 0.02, thickness)
       : new THREE.BoxGeometry(thickness, 0.02, length);
     const m = new THREE.Mesh(g, selectionEdgeMat);
     m.position.set(p.x, y, p.z);
+    if (rotationY) m.rotation.y = rotationY;
     m.renderOrder = 999;
     selectionGroup.add(m);
   }
@@ -16472,6 +17038,7 @@
     scale: new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.92 }),
   };
   let selectedTransformGizmoTarget = null;
+  let selectedTransformGizmoIsland = null;
 
   function makeTransformGizmoHandle(action, mat, parts) {
     const g = new THREE.Group();
@@ -16526,10 +17093,37 @@
   }
   rebuildTransformGizmoGeometry();
 
+  function setTransformGizmoHandleVisible(action, visible) {
+    transformGizmoGroup.children.forEach(child => {
+      if (child && child.userData && child.userData.transformGizmoAction === action) {
+        child.visible = !!visible;
+      }
+    });
+  }
+
   function updateTransformGizmo(target) {
     selectedTransformGizmoTarget = target && target.cell && target.cell.kind ? target : null;
-    if (!selectedTransformGizmoTarget) {
+    selectedTransformGizmoIsland = null;
+    if (typeof selectedEditableIslandEngineTarget === 'function' && selectedEditableIslandEngineTarget()) {
       transformGizmoGroup.visible = false;
+      return;
+    }
+    if (!selectedTransformGizmoTarget) {
+      const island = typeof selectedEditableIsland === 'function' ? selectedEditableIsland() : null;
+      if (!island) {
+        transformGizmoGroup.visible = false;
+        return;
+      }
+      selectedTransformGizmoIsland = island;
+      transformGizmoGroup.position.set(
+        island.positionX || 0,
+        (island.positionY || 0) + TOP_H + 0.72,
+        island.positionZ || 0
+      );
+      const s = Math.max(0.90, Math.min(1.45, viewSize / 9));
+      transformGizmoGroup.scale.setScalar(s);
+      setTransformGizmoHandleVisible('scale', false);
+      transformGizmoGroup.visible = true;
       return;
     }
     const cell = selectedTransformGizmoTarget.cell;
@@ -16542,11 +17136,12 @@
     );
     const s = Math.max(0.72, Math.min(1.25, viewSize / 10));
     transformGizmoGroup.scale.setScalar(s);
+    setTransformGizmoHandleVisible('scale', isObjectScaleEditableCell(cell));
     transformGizmoGroup.visible = true;
   }
 
   function pickTransformGizmo(clientX, clientY) {
-    if (!transformGizmoGroup.visible || !selectedTransformGizmoTarget) return null;
+    if (!transformGizmoGroup.visible || (!selectedTransformGizmoTarget && !selectedTransformGizmoIsland)) return null;
     ndc.x = (clientX / window.innerWidth) * 2 - 1;
     ndc.y = -(clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(ndc, camera);
@@ -16563,6 +17158,18 @@
 
   function applyTransformGizmoDrag(action, dx, dy) {
     const unit = Math.max(0.018, viewSize * 0.0032);
+    if (selectedTransformGizmoIsland) {
+      const island = selectedTransformGizmoIsland;
+      if (action === 'move-x') island.positionX += dx * unit;
+      else if (action === 'move-y') island.positionY += -dy * unit;
+      else if (action === 'move-z') island.positionZ += dx * unit;
+      else if (action === 'rotate-y') island.rotationY += dx * 0.018;
+      else return;
+      applyEditableIslandTransform(island);
+      updateTransformGizmo(null);
+      saveState();
+      return;
+    }
     if (action === 'move-x') moveSelectedBoardObject(dx * unit, 0, 0);
     else if (action === 'move-y') moveSelectedBoardObject(0, -dy * unit, 0);
     else if (action === 'move-z') moveSelectedBoardObject(0, 0, dx * unit);
@@ -16570,6 +17177,7 @@
       const delta = dx * 0.018;
       updateSelectedBoardObjects(target => ({ rotationY: (target.cell.rotationY || 0) + delta }));
     } else if (action === 'scale') {
+      if (!isObjectScaleEditableCell(selectedTransformGizmoTarget && selectedTransformGizmoTarget.cell)) return;
       const amount = Math.max(0.82, Math.min(1.22, 1 - dy * 0.006));
       scaleSelectedBoardObject(amount);
     }
@@ -16610,15 +17218,29 @@
     if (bx === 0 && bz === 0) {
       return getWorldCell(x, z);
     }
+    if (isEditableIslandBoard(bx, bz)) {
+      return getWorldCell(x + bx * GRID, z + bz * GRID);
+    }
     try {
       const ghost = makeGhostWorld(bx, bz);
       return (ghost && ghost[x] && ghost[x][z]) ? ghost[x][z] : null;
     } catch (_) { return null; }
   }
   function terrainSurfaceHeightForCell(bx, bz, x, z, cell) {
+    const island = editableIslandForBoard(bx || 0, bz || 0);
+    if (island) return (island.positionY || 0) + TOP_H + terrainVisualRiseForCell(cell || getWorldCell(x + island.boardX * GRID, z + island.boardZ * GRID));
     if (isLandscapeMeshActive()) return landscapeHeightAtCell(x + (bx || 0) * GRID, z + (bz || 0) * GRID);
     if (cell) return TOP_H + terrainVisualRiseForCell(cell);
     return TOP_H + terrainRiseAt(x, z);
+  }
+
+  function islandSelectionPoint(island, x, z, offsetX = 0, offsetZ = 0) {
+    const p = tilePos(x, z);
+    p.x += offsetX;
+    p.z += offsetZ;
+    island.contentGroup.localToWorld(p);
+    xrWorldRoot.worldToLocal(p);
+    return p;
   }
 
   function rebuildSelectionMeshes() {
@@ -16631,29 +17253,39 @@
       // hidden tile grid still defines x/z cells, but the highlight is
       // projected upward onto the generated landscape height.
       const y = terrainSurfaceHeightForCell(bx, bz, x, z, cell) + 0.05;
-      const p = (bx || bz) ? ghostCellPos(bx, bz, x, z) : tilePos(x, z);
+      const island = isEditableIslandBoard(bx, bz) ? editableIslandForBoard(bx, bz) : null;
+      const p = island ? editableIslandCellDisplayPoint(island, x, z) : ((bx || bz) ? ghostCellPos(bx, bz, x, z) : tilePos(x, z));
+      const selectionRotationY = island ? (island.rotationY || 0) : 0;
       // Translucent fill
       const fill = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.02, 0.96), selectionMat);
       fill.position.set(p.x, y, p.z);
+      if (selectionRotationY) fill.rotation.y = selectionRotationY;
       fill.renderOrder = 998;
       selectionGroup.add(fill);
       // Thick, opaque-feeling tile border made of four edge strips.
       const T = 0.07;          // thickness
       const L = 1.02;          // strip length (slightly past tile edge)
       const yEdge = y + 0.005;
-      addEdgeStrip({ x: p.x, z: p.z - 0.5 }, yEdge, L, T, 'x');
-      addEdgeStrip({ x: p.x, z: p.z + 0.5 }, yEdge, L, T, 'x');
-      addEdgeStrip({ x: p.x - 0.5, z: p.z }, yEdge, L, T, 'z');
-      addEdgeStrip({ x: p.x + 0.5, z: p.z }, yEdge, L, T, 'z');
+      const edgeN = island ? islandSelectionPoint(island, x, z, 0, -0.5) : { x: p.x, z: p.z - 0.5 };
+      const edgeS = island ? islandSelectionPoint(island, x, z, 0, 0.5) : { x: p.x, z: p.z + 0.5 };
+      const edgeW = island ? islandSelectionPoint(island, x, z, -0.5, 0) : { x: p.x - 0.5, z: p.z };
+      const edgeE = island ? islandSelectionPoint(island, x, z, 0.5, 0) : { x: p.x + 0.5, z: p.z };
+      addEdgeStrip(edgeN, yEdge, L, T, 'x', selectionRotationY);
+      addEdgeStrip(edgeS, yEdge, L, T, 'x', selectionRotationY);
+      addEdgeStrip(edgeW, yEdge, L, T, 'z', selectionRotationY);
+      addEdgeStrip(edgeE, yEdge, L, T, 'z', selectionRotationY);
       // Outline the object on this cell (house / tree / rock / fence /
       // bridge / crop). Only home-board cells have entries in cellMeshes;
       // ghost-board outlines are skipped (those meshes live in a
       // per-board group).
-      if (bx === 0 && bz === 0 && cell && cell.kind) {
-        const entry = cellMeshes[x + ',' + z];
+      if (cell && cell.kind && (bx === 0 && bz === 0 || island)) {
+        const entryKey = island ? (x + bx * GRID) + ',' + (z + bz * GRID) : x + ',' + z;
+        const entry = cellMeshes[entryKey];
         if (entry && entry.object) addObjectOutline(entry.object);
       }
     });
+    const engineTarget = typeof selectedEditableIslandEngineTarget === 'function' ? selectedEditableIslandEngineTarget() : null;
+    if (engineTarget && engineTarget.engine && engineTarget.engine.mesh) addObjectOutline(engineTarget.engine.mesh);
   }
   function notifySelectionChanged() {
     rebuildSelectionMeshes();
@@ -16662,8 +17294,9 @@
     }));
   }
   function clearSelection() {
-    if (!selectedCells.size) return;
+    if (!selectedCells.size && !selectedEditableIslandEngineRef) return;
     selectedCells.clear();
+    selectedEditableIslandEngineRef = null;
     notifySelectionChanged();
   }
   function makeKey(bx, bz, x, z) {
@@ -16676,6 +17309,7 @@
     // cell so the user can extend selections off-board with successive
     // shift-clicks.
     if (mode !== 'add') selectedCells.clear();
+    selectedEditableIslandEngineRef = null;
     const ax = aHit.x, az = aHit.z;
     const abx = aHit.boardX || 0, abz = aHit.boardZ || 0;
     const bx = bHit.x, bz = bHit.z;
@@ -16697,6 +17331,7 @@
     notifySelectionChanged();
   }
   function toggleCellSelection(hit) {
+    selectedEditableIslandEngineRef = null;
     const key = makeKey(hit.boardX, hit.boardZ, hit.x, hit.z);
     if (selectedCells.has(key)) selectedCells.delete(key);
     else selectedCells.add(key);
@@ -16712,10 +17347,23 @@
   }
   function replaceSelectionWithWorldCoords(coords) {
     selectedCells.clear();
+    selectedEditableIslandEngineRef = null;
     (coords || []).forEach(({ x, z }) => {
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-      selectedCells.add(makeKey(0, 0, Math.round(x), Math.round(z)));
+      const gx = Math.round(x);
+      const gz = Math.round(z);
+      const bx = floorDiv(gx, GRID);
+      const bz = floorDiv(gz, GRID);
+      selectedCells.add(makeKey(bx, bz, positiveMod(gx, GRID), positiveMod(gz, GRID)));
     });
+    notifySelectionChanged();
+  }
+
+  function selectEditableIslandEngine(engineTarget) {
+    if (!engineTarget || !engineTarget.island || !engineTarget.engine) return;
+    selectedCells.clear();
+    selectedEditableIslandId = engineTarget.island.id;
+    selectedEditableIslandEngineRef = { islandId: engineTarget.island.id, engineId: engineTarget.engine.id };
     notifySelectionChanged();
   }
   function materializeSelectedCells() {
@@ -16726,6 +17374,10 @@
       const gx = c.x + (c.bx || 0) * GRID;
       const gz = c.z + (c.bz || 0) * GRID;
       if (c.bx || c.bz) {
+        if (isEditableIslandBoard(c.bx, c.bz)) {
+          nextKeys.add(makeKey(c.bx, c.bz, c.x, c.z));
+          return;
+        }
         try {
           const ghostCells = makeGhostWorld(c.bx, c.bz);
           const ghostCell = ghostCells[c.x] && ghostCells[c.x][c.z];
@@ -16857,9 +17509,9 @@
   function disposeCellMeshEntry(key) {
     const entry = cellMeshes[key];
     if (!entry) return;
-    if (entry.tile)   { worldGroup.remove(entry.tile);   disposeGroup(entry.tile); }
-    if (entry.object) { worldGroup.remove(entry.object); disposeGroup(entry.object); }
-    if (entry.extras) for (const m of entry.extras) { worldGroup.remove(m); disposeGroup(m); }
+    if (entry.tile)   { if (entry.tile.parent) entry.tile.parent.remove(entry.tile); disposeGroup(entry.tile); }
+    if (entry.object) { if (entry.object.parent) entry.object.parent.remove(entry.object); disposeGroup(entry.object); }
+    if (entry.extras) for (const m of entry.extras) { if (m.parent) m.parent.remove(m); disposeGroup(m); }
     delete cellMeshes[key];
     if (entry.x !== undefined && entry.z !== undefined) {
       if (cellMeshesGrid[entry.x]) {
@@ -17175,6 +17827,7 @@
   }
 
   function shouldRenderCellMesh(x, z) {
+    if (isEditableIslandCell(x, z)) return !!(world[x] && world[x][z]);
     if (x >= 0 && x < GRID && z >= 0 && z < GRID) return isCellInHomeRenderWindow(x, z);
     if (cellMeshes[x + ',' + z]) return true;
     return !!(world[x] && world[x][z] && world[x][z].userEdited);
@@ -17563,6 +18216,318 @@
     p.x += boardX * GRID;
     p.z += boardZ * GRID;
     return p;
+  }
+
+  // -------- editable duplicate islands --------
+  // Duplicate islands keep their own logical board coordinates so every tool
+  // can keep using setCell(), while the island group can be positioned and
+  // rotated independently in 3D.
+  const editableIslands = [];
+  const editableIslandById = new Map();
+  const editableIslandByBoardKey = new Map();
+  let selectedEditableIslandId = null;
+  let selectedEditableIslandEngineRef = null;
+  let editableIslandSerial = 1;
+
+  function editableIslandBoardKey(boardX, boardZ) {
+    return boardX + ',' + boardZ;
+  }
+
+  function editableIslandForBoard(boardX, boardZ) {
+    return editableIslandByBoardKey.get(editableIslandBoardKey(boardX, boardZ)) || null;
+  }
+
+  function editableIslandForWorldCell(x, z) {
+    return editableIslandForBoard(floorDiv(x, GRID), floorDiv(z, GRID));
+  }
+
+  function isEditableIslandBoard(boardX, boardZ) {
+    return !!editableIslandForBoard(boardX, boardZ);
+  }
+
+  function isEditableIslandCell(x, z) {
+    return !!editableIslandForWorldCell(x, z);
+  }
+
+  function localCoordForWorldCell(x, z) {
+    return {
+      boardX: floorDiv(x, GRID),
+      boardZ: floorDiv(z, GRID),
+      x: positiveMod(x, GRID),
+      z: positiveMod(z, GRID),
+    };
+  }
+
+  function selectedEditableIsland() {
+    return selectedEditableIslandId ? editableIslandById.get(selectedEditableIslandId) || null : null;
+  }
+
+  function editableIslandEngineTarget(islandId, engineId) {
+    const island = islandId ? editableIslandById.get(islandId) : null;
+    if (!island || !Array.isArray(island.engines)) return null;
+    const engine = island.engines.find(item => item && item.id === engineId) || null;
+    return engine ? { island, engine } : null;
+  }
+
+  function selectedEditableIslandEngineTarget() {
+    return selectedEditableIslandEngineRef
+      ? editableIslandEngineTarget(selectedEditableIslandEngineRef.islandId, selectedEditableIslandEngineRef.engineId)
+      : null;
+  }
+
+  function makeEditableIslandBase(island) {
+    const g = new THREE.Group();
+    vbox(g, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true });
+    voxelInvertedSteppedRoof(g, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
+    addIslandUtilityUnderside(g);
+    addEditableIslandLiftEngines(g, island);
+    addIslandEdgeDressing(g);
+    prepareHomeBorderForRender(g);
+    return g;
+  }
+
+  function applyEditableIslandTransform(island) {
+    if (!island || !island.group) return;
+    island.group.position.set(island.positionX || 0, island.positionY || 0, island.positionZ || 0);
+    island.group.rotation.set(0, island.rotationY || 0, 0);
+    island.group.updateMatrixWorld(true);
+  }
+
+  function editableIslandCellDisplayPoint(island, localX, localZ) {
+    const p = tilePos(localX, localZ);
+    if (!island || !island.contentGroup) return p;
+    island.contentGroup.localToWorld(p);
+    xrWorldRoot.worldToLocal(p);
+    return p;
+  }
+
+  function cellRenderParentForCell(x, z) {
+    const island = editableIslandForWorldCell(x, z);
+    return island ? island.contentGroup : worldGroup;
+  }
+
+  function cellRenderPositionForCell(x, z) {
+    const island = editableIslandForWorldCell(x, z);
+    if (island) {
+      const c = localCoordForWorldCell(x, z);
+      return tilePos(c.x, c.z);
+    }
+    return tilePos(x, z);
+  }
+
+  function cellDisplayPointForCell(x, z) {
+    const island = editableIslandForWorldCell(x, z);
+    if (island) {
+      const c = localCoordForWorldCell(x, z);
+      return editableIslandCellDisplayPoint(island, c.x, c.z);
+    }
+    return tilePos(x, z);
+  }
+
+  function stampCellUserData(root, x, z) {
+    if (!root || !root.userData) return;
+    const island = editableIslandForWorldCell(x, z);
+    if (island) {
+      const c = localCoordForWorldCell(x, z);
+      root.userData.gx = c.x;
+      root.userData.gz = c.z;
+      root.userData.boardX = island.boardX;
+      root.userData.boardZ = island.boardZ;
+      root.userData.editableIslandId = island.id;
+    } else {
+      root.userData.gx = x;
+      root.userData.gz = z;
+      delete root.userData.boardX;
+      delete root.userData.boardZ;
+      delete root.userData.editableIslandId;
+    }
+  }
+
+  function selectEditableIsland(island) {
+    selectedEditableIslandId = island ? island.id : null;
+    selectedEditableIslandEngineRef = null;
+    updateTransformGizmo(null);
+  }
+
+  function nextEditableIslandBoard() {
+    let boardX = 20 + editableIslandSerial;
+    while (editableIslandForBoard(boardX, 0)) boardX++;
+    return { boardX, boardZ: 0 };
+  }
+
+  function seedEditableIslandBaseGrass(island, opts = {}) {
+    if (!island) return;
+    const wasSuppressSave = suppressSave;
+    suppressSave = true;
+    for (let x = 0; x < GRID; x++) {
+      for (let z = 0; z < GRID; z++) {
+        const gx = island.boardX * GRID + x;
+        const gz = island.boardZ * GRID + z;
+        setCell(gx, gz, {
+          terrain: 'grass',
+          terrainFloors: 1,
+          kind: null,
+          floors: 1,
+          extras: [],
+          userEdited: true,
+          animate: opts.animate === true,
+          impactDust: false,
+          forceTile: true,
+        });
+        if (world[gx] && world[gx][gz]) world[gx][gz].userEdited = true;
+      }
+    }
+    suppressSave = wasSuppressSave;
+  }
+
+  function createEditableIsland(opts = {}) {
+    const board = Number.isInteger(opts.boardX) && Number.isInteger(opts.boardZ)
+      ? { boardX: opts.boardX, boardZ: opts.boardZ }
+      : nextEditableIslandBoard();
+    const serialMatch = typeof opts.id === 'string' ? opts.id.match(/^island-(\d+)$/) : null;
+    let id = (typeof opts.id === 'string' && opts.id) ? opts.id : 'island-' + editableIslandSerial++;
+    if (serialMatch) editableIslandSerial = Math.max(editableIslandSerial, parseInt(serialMatch[1], 10) + 1);
+    if (editableIslandById.has(id)) id = 'island-' + editableIslandSerial++;
+    while (editableIslandForBoard(board.boardX, board.boardZ)) {
+      const fallbackBoard = nextEditableIslandBoard();
+      board.boardX = fallbackBoard.boardX;
+      board.boardZ = fallbackBoard.boardZ;
+      break;
+    }
+    const engines = defaultEditableIslandEngineStates(opts.engines);
+    const island = {
+      id,
+      boardX: board.boardX,
+      boardZ: board.boardZ,
+      group: null,
+      baseGroup: null,
+      contentGroup: null,
+      engines,
+      positionX: Number.isFinite(opts.positionX) ? opts.positionX : GRID + 1 + editableIslands.length * (GRID + 1),
+      positionY: Number.isFinite(opts.positionY) ? opts.positionY : 0,
+      positionZ: Number.isFinite(opts.positionZ) ? opts.positionZ : 0,
+      rotationY: Number.isFinite(opts.rotationY) ? opts.rotationY : 0,
+    };
+    const group = new THREE.Group();
+    const baseGroup = makeEditableIslandBase(island);
+    const contentGroup = new THREE.Group();
+    group.name = id;
+    contentGroup.name = id + '-cells';
+    group.userData = { editableIslandId: id, boardX: board.boardX, boardZ: board.boardZ };
+    contentGroup.userData = { editableIslandId: id, boardX: board.boardX, boardZ: board.boardZ };
+    group.add(baseGroup);
+    group.add(contentGroup);
+    worldGroup.add(group);
+    island.group = group;
+    island.baseGroup = baseGroup;
+    island.contentGroup = contentGroup;
+    editableIslands.push(island);
+    editableIslandById.set(id, island);
+    editableIslandByBoardKey.set(editableIslandBoardKey(board.boardX, board.boardZ), island);
+    destroyGhostBoard(board.boardX, board.boardZ);
+    applyEditableIslandTransform(island);
+
+    seedEditableIslandBaseGrass(island);
+    selectEditableIsland(island);
+    if (!opts.skipSave) saveState();
+    return island;
+  }
+
+  function rebuildEditableIslandEngine(island, engineState) {
+    if (!island || !engineState || !island.baseGroup) return;
+    if (engineState.propeller) editableIslandEnginePropellers.delete(engineState.propeller);
+    if (engineState.mesh && engineState.mesh.parent) engineState.mesh.parent.remove(engineState.mesh);
+    if (engineState.mesh) disposeGroup(engineState.mesh);
+    engineState.mesh = null;
+    engineState.propeller = null;
+    const mesh = buildEditableIslandEngineMesh(island, engineState);
+    if (mesh) island.baseGroup.add(mesh);
+    if (selectedEditableIslandEngineRef && selectedEditableIslandEngineRef.islandId === island.id && selectedEditableIslandEngineRef.engineId === engineState.id) {
+      notifySelectionChanged();
+    }
+  }
+
+  function updateEditableIslandEngine(engineTarget, patch = {}) {
+    if (!engineTarget || !engineTarget.island || !engineTarget.engine) return;
+    const engine = engineTarget.engine;
+    if (patch.type !== undefined) engine.type = normalizeEditableIslandEngineType(patch.type);
+    if (patch.level !== undefined) engine.level = Math.max(1, Math.min(3, Math.round(Number(patch.level) || 1)));
+    if (patch.installed !== undefined) engine.installed = patch.installed !== false;
+    rebuildEditableIslandEngine(engineTarget.island, engine);
+    saveState();
+  }
+
+  function serializeEditableIslands() {
+    return editableIslands.map(island => ({
+      id: island.id,
+      boardX: island.boardX,
+      boardZ: island.boardZ,
+      positionX: island.positionX || 0,
+      positionY: island.positionY || 0,
+      positionZ: island.positionZ || 0,
+      rotationY: island.rotationY || 0,
+      engines: (island.engines || []).map(engine => ({
+        id: engine.id,
+        slot: engine.slot,
+        type: normalizeEditableIslandEngineType(engine.type),
+        level: Math.max(1, Math.min(3, Math.round(Number(engine.level) || 1))),
+        installed: engine.installed !== false,
+      })),
+    }));
+  }
+
+  function nextEditableIslandPosition(anchorHit) {
+    const current = selectedEditableIsland();
+    if (current) {
+      return {
+        positionX: (current.positionX || 0) + GRID + 1,
+        positionY: current.positionY || 0,
+        positionZ: current.positionZ || 0,
+      };
+    }
+    if (anchorHit && anchorHit.editableIslandId && Number.isFinite(anchorHit.worldX) && Number.isFinite(anchorHit.worldZ)) {
+      return {
+        positionX: anchorHit.worldX + GRID + 1,
+        positionY: Number.isFinite(anchorHit.worldY) ? anchorHit.worldY : 0,
+        positionZ: anchorHit.worldZ,
+      };
+    }
+    return { positionX: GRID + 1 + editableIslands.length * (GRID + 1), positionY: 0, positionZ: 0 };
+  }
+
+  function clearEditableIslands() {
+    selectedEditableIslandId = null;
+    selectedEditableIslandEngineRef = null;
+    selectedTransformGizmoIsland = null;
+    if (!selectedTransformGizmoTarget) transformGizmoGroup.visible = false;
+    for (const island of editableIslands) {
+      if (Array.isArray(island.engines)) {
+        island.engines.forEach(engine => {
+          if (engine && engine.propeller) editableIslandEnginePropellers.delete(engine.propeller);
+        });
+      }
+      if (island.group && island.group.parent) island.group.parent.remove(island.group);
+      disposeGroup(island.group);
+      const startX = island.boardX * GRID;
+      const startZ = island.boardZ * GRID;
+      for (let x = startX; x < startX + GRID; x++) {
+        if (!world[x]) continue;
+        for (let z = startZ; z < startZ + GRID; z++) {
+          delete world[x][z];
+          const key = x + ',' + z;
+          const entry = cellMeshes[key];
+          if (entry) {
+            if (entry.tile) disposeGroup(entry.tile);
+            if (entry.object) disposeGroup(entry.object);
+            if (entry.extras) for (const m of entry.extras) disposeGroup(m);
+            delete cellMeshes[key];
+          }
+        }
+      }
+    }
+    editableIslands.length = 0;
+    editableIslandById.clear();
+    editableIslandByBoardKey.clear();
   }
 
   // -------- ghost world generator --------
@@ -18685,20 +19650,21 @@
   function updateHomeBoardFade() {
     for (const key in cellMeshes) {
       const [kx, kz] = key.split(',').map(Number);
+      const editableIsland = isEditableIslandCell(kx, kz);
       const insideHome = !isOutsideHomeGrid(kx, kz);
       const entry = cellMeshes[key];
       if (entry.tile) {
-        const op = insideHome ? opacityAtWorldPosition(entry.tile.position.x, entry.tile.position.z) : revealOpacityFor(entry.tile);
-        setElementOpacity(entry.tile, op, insideHome);
+        const op = editableIsland ? 1 : (insideHome ? opacityAtWorldPosition(entry.tile.position.x, entry.tile.position.z) : revealOpacityFor(entry.tile));
+        setElementOpacity(entry.tile, op, insideHome || editableIsland);
       }
       if (entry.object) {
-        const op = insideHome ? opacityAtWorldPosition(entry.object.position.x, entry.object.position.z) : revealOpacityFor(entry.object);
-        setElementOpacity(entry.object, op, insideHome);
+        const op = editableIsland ? 1 : (insideHome ? opacityAtWorldPosition(entry.object.position.x, entry.object.position.z) : revealOpacityFor(entry.object));
+        setElementOpacity(entry.object, op, insideHome || editableIsland);
       }
       if (entry.extras) {
         for (const extra of entry.extras) {
-          const op = insideHome ? opacityAtWorldPosition(extra.position.x, extra.position.z) : revealOpacityFor(extra);
-          setElementOpacity(extra, op, insideHome);
+          const op = editableIsland ? 1 : (insideHome ? opacityAtWorldPosition(extra.position.x, extra.position.z) : revealOpacityFor(extra));
+          setElementOpacity(extra, op, insideHome || editableIsland);
         }
       }
     }
@@ -19512,7 +20478,7 @@
     const key = x + ',' + z;
     const entry = getOrCreateCellMeshEntry(x, z);
     if (entry.tile) {
-      worldGroup.remove(entry.tile);
+      if (entry.tile.parent) entry.tile.parent.remove(entry.tile);
       disposeGroup(entry.tile);
       entry.tile = null;
     }
@@ -19527,15 +20493,18 @@
       levels: getLevelNeighbors(x, z),
     }, x, z, tileLevelForCell(cell));
 
-    const p = tilePos(x, z);
+    const p = cellRenderPositionForCell(x, z);
+    const display = cellDisplayPointForCell(x, z);
     tile.position.copy(p);
     groundReceiveOnly(tile);
-    tile.userData.gx = x;
-    tile.userData.gz = z;
+    stampCellUserData(tile, x, z);
     tile.userData.fadeRole = 'tile';
     applyWeatherTileEffect(tile);
-    prepareFadeable(tile, { opacity: opacityAtWorldPosition(p.x, p.z), grayscale: isOutsideHomeGrid(x, z) });
-    worldGroup.add(tile);
+    prepareFadeable(tile, {
+      opacity: isEditableIslandCell(x, z) ? 1 : opacityAtWorldPosition(display.x, display.z),
+      grayscale: isOutsideHomeGrid(x, z) && !isEditableIslandCell(x, z),
+    });
+    cellRenderParentForCell(x, z).add(tile);
     entry.tile = tile;
 
     if (animate) animateDrop(tile, 2.4, 0.42, delay, easeOutCubic, false);
@@ -19572,7 +20541,7 @@
     const key = x + ',' + z;
     const entry = getOrCreateCellMeshEntry(x, z);
     if (entry.object) {
-      worldGroup.remove(entry.object);
+      if (entry.object.parent) entry.object.parent.remove(entry.object);
       disposeGroup(entry.object);
       entry.object = null;
     }
@@ -19669,7 +20638,7 @@
         // Position at cluster CENTRE (not the anchor cell), so the visible house
         // spans the run cleanly. Skip gx/gz so pickTile falls through to whichever
         // tile is actually under the cursor.
-        const a = tilePos(cluster.anchorX, cluster.anchorZ);
+        const a = cellRenderPositionForCell(cluster.anchorX, cluster.anchorZ);
         posX = a.x; posZ = a.z;
         if (cluster.orientation === 'x') posX += (cluster.length - 1) * TILE / 2;
         else                              posZ += (cluster.length - 1) * TILE / 2;
@@ -19678,14 +20647,21 @@
         mesh = buildCompositeHouse(cluster.topology, floors);
         // Position at cluster bounding-box centre so wings fall in place.
         const t = cluster.topology;
-        posX = (t.bbox.xMin + t.bbox.xMax) / 2 - GRID / 2 + 0.5;
-        posZ = (t.bbox.zMin + t.bbox.zMax) / 2 - GRID / 2 + 0.5;
+        if (isEditableIslandCell(x, z)) {
+          posX = (positiveMod(t.bbox.xMin, GRID) + positiveMod(t.bbox.xMax, GRID)) / 2 - GRID / 2 + 0.5;
+          posZ = (positiveMod(t.bbox.zMin, GRID) + positiveMod(t.bbox.zMax, GRID)) / 2 - GRID / 2 + 0.5;
+        } else {
+          posX = (t.bbox.xMin + t.bbox.xMax) / 2 - GRID / 2 + 0.5;
+          posZ = (t.bbox.zMin + t.bbox.zMax) / 2 - GRID / 2 + 0.5;
+        }
         setGridUserData = false;
       } else if (cluster.kind === 'square') {
         mesh = buildSquareHouse(floors);
         // Centre the 2x2 mesh between the four cells.
-        posX = (cluster.anchorX + 0.5) - GRID / 2 + 0.5;
-        posZ = (cluster.anchorZ + 0.5) - GRID / 2 + 0.5;
+        const sx = isEditableIslandCell(x, z) ? positiveMod(cluster.anchorX, GRID) : cluster.anchorX;
+        const sz = isEditableIslandCell(x, z) ? positiveMod(cluster.anchorZ, GRID) : cluster.anchorZ;
+        posX = (sx + 0.5) - GRID / 2 + 0.5;
+        posZ = (sz + 0.5) - GRID / 2 + 0.5;
         setGridUserData = false;
       }
       } // close skyscraper-bypass else
@@ -19694,7 +20670,7 @@
     if (!mesh) return;
     if (!voxelRender && kind !== 'house' && kind !== 'fence' && kind !== 'rock') addEnhancementBits(mesh, kind, level);
     if (posX === null) {
-      const p = tilePos(x, z);
+      const p = cellRenderPositionForCell(x, z);
       posX = p.x; posZ = p.z;
     }
     // Uneven natural objects get a random 90° rotation per cell so the
@@ -19731,14 +20707,17 @@
       : TOP_H + terrainRiseAt(x, z);
     mesh.position.set(posX + userOffsetX, objectY + userOffsetY, posZ + userOffsetZ);
     if (setGridUserData) {
-      mesh.userData.gx = x;
-      mesh.userData.gz = z;
+      stampCellUserData(mesh, x, z);
     }
     if (kind === 'house') prepareBuildingWindowLights(mesh, x, z);
     mesh.userData.baseY = objectY + userOffsetY;
     mesh.userData.fadeRole = 'object';
-    prepareFadeable(mesh, { opacity: opacityAtWorldPosition(posX, posZ), grayscale: isOutsideHomeGrid(x, z) });
-    worldGroup.add(mesh);
+    const display = cellDisplayPointForCell(x, z);
+    prepareFadeable(mesh, {
+      opacity: isEditableIslandCell(x, z) ? 1 : opacityAtWorldPosition(display.x, display.z),
+      grayscale: isOutsideHomeGrid(x, z) && !isEditableIslandCell(x, z),
+    });
+    cellRenderParentForCell(x, z).add(mesh);
     entry.object = mesh;
     registerRuntimeObject(mesh);
     if (animate) animateDrop(mesh, 2.0, 0.5, delay, easeOutBack, impactDust);
@@ -19759,14 +20738,14 @@
     if (!entry.extras) entry.extras = [];
     // Dispose any previous extras.
     for (const m of entry.extras) {
-      worldGroup.remove(m);
+      if (m.parent) m.parent.remove(m);
       disposeGroup(m);
     }
     entry.extras.length = 0;
     if (isLandscapeMeshActive() && isOutsideHomeGrid(x, z)) return;
     const cell = world[x] && world[x][z];
     if (!cell || !cell.extras || !cell.extras.length) return;
-    const p = tilePos(x, z);
+    const p = cellRenderPositionForCell(x, z);
     const objectY = isLandscapeMeshActive()
       ? landscapeHeightAtCell(x, z)
       : TOP_H + terrainRiseAt(x, z);
@@ -19790,13 +20769,16 @@
         // Fences keep their full side geometry (they live on the tile edge).
         mesh.position.set(p.x, objectY, p.z);
       }
-      mesh.userData.gx = x;
-      mesh.userData.gz = z;
+      stampCellUserData(mesh, x, z);
       mesh.userData.fadeRole = 'object';
       mesh.userData.baseY = mesh.position.y;
       mesh.userData.extraSlot = i;
-      prepareFadeable(mesh, { opacity: opacityAtWorldPosition(mesh.position.x, mesh.position.z), grayscale: isOutsideHomeGrid(x, z) });
-      worldGroup.add(mesh);
+      const display = cellDisplayPointForCell(x, z);
+      prepareFadeable(mesh, {
+        opacity: isEditableIslandCell(x, z) ? 1 : opacityAtWorldPosition(display.x, display.z),
+        grayscale: isOutsideHomeGrid(x, z) && !isEditableIslandCell(x, z),
+      });
+      cellRenderParentForCell(x, z).add(mesh);
       entry.extras.push(mesh);
       if (i >= animateFrom) animateDrop(mesh, 1.6, 0.42, 0.04 * (i - animateFrom), easeOutBack, false);
     });
@@ -20083,9 +21065,9 @@
     // Wipe any existing meshes + animation state so a Reset re-plays the drop.
     for (const key in cellMeshes) {
       const e = cellMeshes[key];
-      if (e.tile) { worldGroup.remove(e.tile); disposeGroup(e.tile); }
-      if (e.object) { worldGroup.remove(e.object); disposeGroup(e.object); }
-      if (e.extras) for (const m of e.extras) { worldGroup.remove(m); disposeGroup(m); }
+      if (e.tile) { if (e.tile.parent) e.tile.parent.remove(e.tile); disposeGroup(e.tile); }
+      if (e.object) { if (e.object.parent) e.object.parent.remove(e.object); disposeGroup(e.object); }
+      if (e.extras) for (const m of e.extras) { if (m.parent) m.parent.remove(m); disposeGroup(m); }
     }
     for (const k of Object.keys(cellMeshes)) delete cellMeshes[k];
     initCellMeshesGrid();
@@ -20475,6 +21457,25 @@
       if (!n.visible) return null;
       const boardX = n.userData.boardX || 0;
       const boardZ = n.userData.boardZ || 0;
+      const island = n.userData.editableIslandId ? editableIslandById.get(n.userData.editableIslandId) : null;
+      if (island) {
+        const local = h.point.clone();
+        island.contentGroup.worldToLocal(local);
+        const pLocal = tilePos(n.userData.gx, n.userData.gz);
+        const p = editableIslandCellDisplayPoint(island, n.userData.gx, n.userData.gz);
+        return {
+          x: n.userData.gx,
+          z: n.userData.gz,
+          boardX,
+          boardZ,
+          editableIslandId: island.id,
+          worldX: p.x,
+          worldY: p.y,
+          worldZ: p.z,
+          localX: local.x - pLocal.x,
+          localZ: local.z - pLocal.z,
+        };
+      }
       const p = (boardX || boardZ)
         ? ghostCellPos(boardX, boardZ, n.userData.gx, n.userData.gz)
         : tilePos(n.userData.gx, n.userData.gz);
@@ -20488,6 +21489,25 @@
         localX: localHitPoint.x - p.x,
         localZ: localHitPoint.z - p.z,
       };
+    }
+    return null;
+  }
+
+  function resolveRaycastEditableIslandEngine(h) {
+    let n = h && h.object;
+    while (n && !(n.userData && n.userData.editableIslandEngineId)) n = n.parent;
+    if (!n || !n.userData || !n.userData.editableIslandEngineId) return null;
+    return editableIslandEngineTarget(n.userData.editableIslandId, n.userData.editableIslandEngineId);
+  }
+
+  function pickEditableIslandEngine(clientX, clientY) {
+    ndc.x = (clientX / window.innerWidth) * 2 - 1;
+    ndc.y = -(clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects(getPickRaycastRoots(), true);
+    for (const h of hits) {
+      const target = resolveRaycastEditableIslandEngine(h);
+      if (target) return target;
     }
     return null;
   }
@@ -20524,6 +21544,12 @@
   }
 
   function hoverHeightForCell(cell) {
+    if (cell && cell.editableIslandId) {
+      const gx = cell.x + (cell.boardX || 0) * GRID;
+      const gz = cell.z + (cell.boardZ || 0) * GRID;
+      const intent = getWorldCell(gx, gz);
+      return (cell.worldY || 0) + TOP_H + terrainVisualRiseForCell(intent) + 0.02;
+    }
     if (isLandscapeMeshActive()) {
       return landscapeHeightAtCell(
         cell.x + (cell.boardX || 0) * GRID,
@@ -20531,6 +21557,11 @@
       ) + 0.02;
     }
     if (cell.boardX || cell.boardZ) {
+      if (isEditableIslandBoard(cell.boardX, cell.boardZ)) {
+        const gx = cell.x + cell.boardX * GRID;
+        const gz = cell.z + cell.boardZ * GRID;
+        return TOP_H + terrainVisualRiseForCell(getWorldCell(gx, gz)) + 0.02;
+      }
       const cells = makeGhostWorld(cell.boardX, cell.boardZ);
       return TOP_H + terrainVisualRiseForCell(cells[cell.x][cell.z]) + 0.02;
     }
@@ -20539,6 +21570,7 @@
 
   function syncHoverVisibility() {
     if (!currentHover) return;
+    if (currentHover.editableIslandId) return;
     if (opacityAtWorldPosition(currentHover.worldX, currentHover.worldZ) > 0.001) return;
     hoverMesh.visible = false;
     currentHover = null;
@@ -20904,6 +21936,7 @@
     { id: 'lava',   label: 'Lava',   terrain: 'lava',  color: '#e7592b', group: 'terrain' },
     { id: 'sand',   label: 'Sand',   terrain: 'sand',  color: '#e6cc7c', group: 'terrain' },
     { id: 'snow',   label: 'Snow',   terrain: 'snow',  color: '#f2f5fa', group: 'terrain' },
+    { id: 'new-island', label: 'Island', island: true, color: '#73a853', group: 'build' },
     { id: 'house',  label: 'House',  kind: 'house', color: '#3a72c8', shortcut: '5', group: 'build',
       variants: [
         { id: 'auto',       label: 'Auto',      buildingType: null,         hint: 'cluster + auto-promo' },
@@ -20947,7 +21980,7 @@
   const TOOL_GROUPS = [
     { id: 'terrain', label: 'Terrain', toolIds: ['grass', 'path', 'dirt', 'water', 'stone', 'lava', 'sand', 'snow', 'rock'], iconTool: 'grass' },
     { id: 'plants', label: 'Plants', toolIds: ['tree', 'tuft', 'flower', 'bush'], iconTool: 'tree' },
-    { id: 'build', label: 'Build', toolIds: ['house'], iconTool: 'house' },
+    { id: 'build', label: 'Build', toolIds: ['house', 'new-island'], iconTool: 'house' },
     { id: 'infra', label: 'Infra', toolIds: ['fence', 'bridge'], iconTool: 'fence' },
     { id: 'farm', label: 'Farm', toolIds: ['crop', 'corn', 'wheat', 'pumpkin', 'carrot', 'sunflower'], iconTool: 'wheat' },
     { id: 'life', label: 'Life', toolIds: ['cow', 'sheep'], iconTool: 'cow' },
@@ -21098,6 +22131,7 @@
   }
 
   function makeThumbObject(tool) {
+    if (tool.island) return makeBlankIsland();
     const k = tool.kind;
     if (!k) return null;
     if (k === 'voxel-build') return makeVoxelBuildStamp(tool.voxelBuildId);
@@ -21180,6 +22214,8 @@
       } else {
         thumbFrame = { left: -1.36, right: 1.36, top: 1.65, bottom: -0.95, lookAtY: 0.56 };
       }
+    } else if (tool.island) {
+      thumbFrame = { left: -2.15, right: 2.15, top: 1.62, bottom: -1.55, lookAtY: 0.12 };
     }
     const cam = new THREE.OrthographicCamera(
       thumbFrame.left, thumbFrame.right, thumbFrame.top, thumbFrame.bottom, 0.1, 30,
@@ -21819,10 +22855,11 @@
     scene.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
     const stamp = tool.voxelBuildId && getVoxelBuildStamp(tool.voxelBuildId);
     const isModel = tool.kind === 'model-stamp';
-    const top = stamp ? 3.2 : (isModel ? 2.05 : 1.85);
-    const bottom = stamp ? -1.05 : -0.95;
-    const side = stamp ? 2.25 : (isModel ? 1.62 : 1.45);
-    const lookY = stamp ? 1.15 : (isModel ? 0.70 : 0.55);
+    const isBlankIsland = !!tool.island;
+    const top = stamp ? 3.2 : (isModel ? 2.05 : (isBlankIsland ? 1.62 : 1.85));
+    const bottom = stamp ? -1.05 : (isBlankIsland ? -1.55 : -0.95);
+    const side = stamp ? 2.25 : (isModel ? 1.62 : (isBlankIsland ? 2.15 : 1.45));
+    const lookY = stamp ? 1.15 : (isModel ? 0.70 : (isBlankIsland ? 0.12 : 0.55));
     const cam = new THREE.OrthographicCamera(-side, side, top, bottom, 0.1, 30);
     cam.position.set(Math.cos(THUMB_BASE_ANGLE) * 4.4, 3.3 + lookY, Math.sin(THUMB_BASE_ANGLE) * 4.4);
     cam.lookAt(0, lookY, 0);
@@ -22396,7 +23433,20 @@
   }
 
   function applyToolToCell(cell, opts = {}) {
-    if (cell.boardX || cell.boardZ) {
+    const hitIsland = cell && cell.editableIslandId
+      ? editableIslandById.get(cell.editableIslandId)
+      : (cell ? editableIslandForBoard(cell.boardX || 0, cell.boardZ || 0) : null);
+    if (hitIsland) selectedEditableIslandId = hitIsland.id;
+    selectedEditableIslandEngineRef = null;
+    if (selectedTool && selectedTool.island) {
+      if (hitIsland) {
+        selectEditableIsland(hitIsland);
+      } else {
+        createEditableIsland(nextEditableIslandPosition(cell));
+      }
+      return;
+    }
+    if ((cell.boardX || cell.boardZ) && !hitIsland) {
       // Skip if the currently selected tool would no-op (e.g. auto mode
       // without an API key) — otherwise we'd materialise + remove the
       // ghost mesh for a click that produced no replacement, leaving a
@@ -22437,7 +23487,9 @@
         if (_entry2.object) { _entry2.object.userData.revealed = true; setElementOpacity(_entry2.object, 1, true); }
       }
     } else {
-      applyTool(cell.x, cell.z, opts);
+      const boardX = cell.boardX || 0;
+      const boardZ = cell.boardZ || 0;
+      applyTool(cell.x + boardX * GRID, cell.z + boardZ * GRID, opts);
     }
   }
 
@@ -22454,7 +23506,7 @@
   function applySelectedToolToSelection() {
     const sel = window.__tinyworldSelection;
     if (!sel || !sel.cells || !sel.cells.size) return false;
-    if (!selectedTool || selectedTool.select || selectedTool.auto) return false;
+    if (!selectedTool || selectedTool.select || selectedTool.auto || selectedTool.island) return false;
     const selectedCoords = sel.materialize
       ? sel.materialize()
       : (sel.worldCoords ? sel.worldCoords() : []);
@@ -22501,6 +23553,10 @@
   }
 
   function applyTool(x, z, opts = {}) {
+    if (selectedTool.island) {
+      createEditableIsland(nextEditableIslandPosition(currentHover));
+      return;
+    }
     if (selectedTool.auto) {
       if (!getAIProviderState().key) return; // Can't auto-place without API key
       applyAutoTool(x, z);
@@ -22724,7 +23780,7 @@
   let pointerDown = null;     // {x, y}
   let lastPointer = null;
   let didDrag = false;
-  let dragMode = null;        // 'orbit' | 'pan' | 'pinch' | 'select-area' | 'draw' | 'move-selection' | 'transform-gizmo'
+  let dragMode = null;        // 'orbit' | 'pan' | 'pinch' | 'select-area' | 'draw' | 'move-selection' | 'transform-gizmo' | 'engine-select'
   let selectionDragAnchor = null;
   let selectionMoveDragLastCoord = null;
   let transformGizmoDrag = null;
@@ -22829,13 +23885,16 @@
     const boardZ = floorDiv(z, GRID);
     const lx = positiveMod(x, GRID);
     const lz = positiveMod(z, GRID);
-    const p = (boardX || boardZ) ? ghostCellPos(boardX, boardZ, lx, lz) : tilePos(lx, lz);
+    const island = editableIslandForBoard(boardX, boardZ);
+    const p = island ? editableIslandCellDisplayPoint(island, lx, lz) : ((boardX || boardZ) ? ghostCellPos(boardX, boardZ, lx, lz) : tilePos(lx, lz));
     return {
       x: lx,
       z: lz,
       boardX,
       boardZ,
+      editableIslandId: island ? island.id : undefined,
       worldX: p.x,
+      worldY: p.y,
       worldZ: p.z,
       localX: sourceHit && Number.isFinite(sourceHit.localX) ? sourceHit.localX : 0,
       localZ: sourceHit && Number.isFinite(sourceHit.localZ) ? sourceHit.localZ : 0,
@@ -22917,6 +23976,22 @@
       lastPointer = { x: e.clientX, y: e.clientY };
       didDrag = true;
       hoverMesh.visible = false;
+      renderer.domElement.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+
+    const engineHit = e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey
+      ? pickEditableIslandEngine(e.clientX, e.clientY)
+      : null;
+    if (engineHit) {
+      selectEditableIslandEngine(engineHit);
+      dragMode = 'engine-select';
+      pointerDown = { x: e.clientX, y: e.clientY };
+      lastPointer = { x: e.clientX, y: e.clientY };
+      didDrag = false;
+      hoverMesh.visible = false;
+      currentHover = null;
       renderer.domElement.classList.add('dragging');
       e.preventDefault();
       return;
@@ -23032,6 +24107,8 @@
               selectionMoveDragLastCoord = coord;
             }
           }
+        } else if (dragMode === 'engine-select') {
+          // Engine clicks select the attachment; dragging should not orbit.
         } else {
           markCameraMoving();
           // azimuth -= ddx * 0.008;
@@ -23246,6 +24323,11 @@
     const bz = hit.boardZ || 0;
     const x = hit.x + bx * GRID;
     const z = hit.z + bz * GRID;
+    const island = hit.editableIslandId ? editableIslandById.get(hit.editableIslandId) : editableIslandForBoard(bx, bz);
+    if (island) {
+      const cell = getWorldCell(x, z);
+      return { x, z, cell, userEdited: true, editableIslandId: island.id };
+    }
     if ((bx || bz) && materializeGhost) {
       const ghostCells = makeGhostWorld(bx, bz);
       const ghostCell = ghostCells[hit.x][hit.z];
@@ -23718,31 +24800,27 @@
   // machine and re-rendered through whatever the current rules are.
   document.getElementById('export').addEventListener('click', () => {
     const cells = [];
-    for (let x = 0; x < GRID; x++) {
-      if (!world[x]) continue;
-      for (let z = 0; z < GRID; z++) {
-        const c = world[x][z];
-        if (c) {
-          const entry = serializeCell(x, z, c);
-          if (entry) cells.push(entry);
-        }
-      }
-    }
-    // Also export cells outside the 8x8 home board
-    for (let x = -GRID; x < GRID * 2; x++) {
-      if (x >= 0 && x < GRID) continue;
-      if (!world[x]) continue;
-      for (let z = -GRID; z < GRID * 2; z++) {
-        const c = world[x][z];
-        if (c) {
-          const entry = serializeCell(x, z, c);
-          if (entry) cells.push(entry);
-        }
+    for (const xKey of Object.keys(world)) {
+      const x = parseInt(xKey, 10);
+      if (!Number.isFinite(x)) continue;
+      const row = world[xKey];
+      if (!row) continue;
+      const insideHomeX = x >= 0 && x < GRID;
+      for (const zKey of Object.keys(row)) {
+        const z = parseInt(zKey, 10);
+        if (!Number.isFinite(z)) continue;
+        const c = row[zKey];
+        if (!c) continue;
+        const insideHome = insideHomeX && z >= 0 && z < GRID;
+        if (!insideHome && !c.userEdited) continue;
+        const entry = serializeCell(x, z, c);
+        if (entry) cells.push(entry);
       }
     }
     const data = {
       v: STORAGE_VERSION,
       gridSize: GRID,
+      islands: serializeEditableIslands(),
       cells,
       cameraMode,
       toolId: selectedTool && selectedTool.id,
@@ -23793,8 +24871,8 @@
   // schema's terrainFloors range.  No-op if nothing is hovered.
   function adjustHoverTerrainHeight(delta) {
     if (!currentHover) return;
-    const x = currentHover.x;
-    const z = currentHover.z;
+    const x = currentHover.x + (currentHover.boardX || 0) * GRID;
+    const z = currentHover.z + (currentHover.boardZ || 0) * GRID;
     const cell = getWorldCell(x, z);
     const prev = terrainLevelForCell(cell);
     const next = Math.max(1, Math.min(8, prev + (delta > 0 ? 1 : -1)));
@@ -24055,6 +25133,14 @@
     try { localStorage.setItem('tinyworld:home-grid', String(GRID)); } catch (_) {}
     updateUnsavedCopyForGrid();
     if (typeof buildHomeBorder === 'function') buildHomeBorder();
+    for (const island of editableIslands) {
+      if (island.baseGroup) {
+        if (island.baseGroup.parent) island.baseGroup.parent.remove(island.baseGroup);
+        disposeGroup(island.baseGroup);
+      }
+      island.baseGroup = makeEditableIslandBase(island);
+      island.group.add(island.baseGroup);
+    }
 
     // Drop every ghost board — their world positions are anchored to GRID.
     for (const [key, board] of ghostBoards) {
@@ -24070,9 +25156,9 @@
     // world[x][z] which we never throw away.
     for (const key of Object.keys(cellMeshes)) {
       const entry = cellMeshes[key];
-      if (entry.tile)   { worldGroup.remove(entry.tile);   disposeGroup(entry.tile); }
-      if (entry.object) { worldGroup.remove(entry.object); disposeGroup(entry.object); }
-      if (entry.extras) for (const m of entry.extras) { worldGroup.remove(m); disposeGroup(m); }
+      if (entry.tile)   { if (entry.tile.parent) entry.tile.parent.remove(entry.tile); disposeGroup(entry.tile); }
+      if (entry.object) { if (entry.object.parent) entry.object.parent.remove(entry.object); disposeGroup(entry.object); }
+      if (entry.extras) for (const m of entry.extras) { if (m.parent) m.parent.remove(m); disposeGroup(m); }
       delete cellMeshes[key];
     }
     homeRenderQueue = [];
@@ -24225,10 +25311,11 @@
     for (const key of Object.keys(cellMeshes)) {
       const [kx, kz] = key.split(',').map(Number);
       if (kx >= 0 && kx < GRID && kz >= 0 && kz < GRID) continue;
+      if (isEditableIslandCell(kx, kz)) continue;
       const entry = cellMeshes[key];
-      if (entry.tile)   { worldGroup.remove(entry.tile);   disposeGroup(entry.tile); }
-      if (entry.object) { worldGroup.remove(entry.object); disposeGroup(entry.object); }
-      if (entry.extras) for (const m of entry.extras) { worldGroup.remove(m); disposeGroup(m); }
+      if (entry.tile)   { if (entry.tile.parent) entry.tile.parent.remove(entry.tile); disposeGroup(entry.tile); }
+      if (entry.object) { if (entry.object.parent) entry.object.parent.remove(entry.object); disposeGroup(entry.object); }
+      if (entry.extras) for (const m of entry.extras) { if (m.parent) m.parent.remove(m); disposeGroup(m); }
       delete cellMeshes[key];
     }
     for (const xKey of Object.keys(world)) {
@@ -24242,6 +25329,7 @@
         if (!Number.isFinite(z)) continue;
         const inside = insideX && z >= 0 && z < GRID;
         if (inside) continue;
+        if (isEditableIslandCell(x, z)) continue;
         delete row[zKey];
       }
     }
@@ -24269,6 +25357,7 @@
     if (GRID !== HOME_GRID_DEFAULT && typeof setHomeGridSize === 'function') {
       setHomeGridSize(HOME_GRID_DEFAULT, { skipRebuild: true });
     }
+    clearEditableIslands();
     clearGhostWorld();
     loadInitialScene();
     resetCameraDefaults();
@@ -24318,6 +25407,7 @@
 
     if (typeof playSfx === 'function') playSfx('whoosh');
     clearVehicleRuntime();
+    clearEditableIslands();
     if (useWindowedHomeRendering()) {
       resetHomeWorldIntent();
       cropPositions.clear();
@@ -25265,6 +26355,18 @@
     return cell.kind.charAt(0).toUpperCase() + cell.kind.slice(1);
   }
 
+  function isObjectScaleEditableCell(cell) {
+    return !!(cell && cell.kind);
+  }
+
+  function transformLimitsForCell(cell) {
+    return {
+      xz: 0.48,
+      yMin: -0.75,
+      yMax: 2.5,
+    };
+  }
+
   function updateSelectedBoardObject(target, patch) {
     if (!target || !target.cell) return false;
     const cell = getWorldCell(target.x, target.z);
@@ -25293,6 +26395,7 @@
 
   function scaleSelectedBoardObject(amount, axis) {
     return updateSelectedBoardObjects(target => {
+      if (!isObjectScaleEditableCell(target.cell)) return null;
       const appearance = Object.assign({}, normalizeAppearance(target.cell.appearance) || {});
       const key = axis === 'x' ? 'scaleX' : axis === 'y' ? 'scaleY' : axis === 'z' ? 'scaleZ' : 'objectScale';
       if (amount === 'reset') {
@@ -25309,11 +26412,14 @@
   }
 
   function moveSelectedBoardObject(dx = 0, dy = 0, dz = 0) {
-    return updateSelectedBoardObjects(target => ({
-      offsetX: Math.max(-0.48, Math.min(0.48, (target.cell.offsetX || 0) + dx)),
-      offsetY: Math.max(-0.75, Math.min(2.5, (target.cell.offsetY || 0) + dy)),
-      offsetZ: Math.max(-0.48, Math.min(0.48, (target.cell.offsetZ || 0) + dz)),
-    }));
+    return updateSelectedBoardObjects(target => {
+      const limits = transformLimitsForCell(target.cell);
+      return {
+        offsetX: Math.max(-limits.xz, Math.min(limits.xz, (target.cell.offsetX || 0) + dx)),
+        offsetY: Math.max(limits.yMin, Math.min(limits.yMax, (target.cell.offsetY || 0) + dy)),
+        offsetZ: Math.max(-limits.xz, Math.min(limits.xz, (target.cell.offsetZ || 0) + dz)),
+      };
+    });
   }
 
   function centerSelectedBoardObjectOffset() {
@@ -26125,6 +27231,8 @@
       modelRefreshBtn.addEventListener('click', async () => {
         if (status) status.textContent = 'Scanning models/…';
         modelStampAssetCache.clear();
+        crowdModelAssetLoadIds.clear();
+        clearCrowdModelActors();
         await refreshModelStampManifest().catch(() => null);
         renderStampBuilderCards();
         if (status) status.textContent = modelStampScanMessage;
@@ -28779,12 +29887,18 @@
     if (typeof window.__showcaseTick === 'function') window.__showcaseTick(dt);
     tickWeather(dt);
     tickIslandRocketEngines(t, dt);
+    tickEditableIslandEngines(dt);
     tickUndersideDebris(dt);
     updateClouds(dt);
     tickWaterTextureFlow(dt);
     updateWaterfallEffects(t);
     tickVehicles(dt);
-    if (crowdEnabled && crowdLayer) crowdLayer.update(dt, camera);
+    if (crowdEnabled && crowdLayer) {
+      crowdLayer.update(dt, camera);
+      updateCrowdModelActors(dt);
+    } else {
+      clearCrowdModelActors();
+    }
     updateCropDuster(dt);
     if (typeof tickIslandBanners === 'function') tickIslandBanners(cropDusterTime);
     if (typeof tickPositionalAudio === 'function') tickPositionalAudio();
@@ -28916,6 +30030,13 @@
         "description": "Sparse list of non-default cells. The app exports compact tuple cells but also accepts object cells for AI/tooling convenience. Coordinates may include user-edited ghost-board cells outside the home grid.",
         "items": {
           "$ref": "#/$defs/cell"
+        }
+      },
+      "islands": {
+        "type": "array",
+        "description": "Optional editable duplicate island boards. Cells on these islands use world coordinates derived from boardX/boardZ and are saved in cells only when non-default.",
+        "items": {
+          "$ref": "#/$defs/island"
         }
       },
       "cameraMode": {
@@ -29064,6 +30185,78 @@
           "voxel-build",
           "model-stamp"
         ]
+      },
+      "island": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "boardX",
+          "boardZ"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "boardX": {
+            "type": "integer",
+            "minimum": -1024,
+            "maximum": 1024
+          },
+          "boardZ": {
+            "type": "integer",
+            "minimum": -1024,
+            "maximum": 1024
+          },
+          "positionX": {
+            "type": "number"
+          },
+          "positionY": {
+            "type": "number"
+          },
+          "positionZ": {
+            "type": "number"
+          },
+          "rotationY": {
+            "type": "number"
+          },
+          "engines": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "$ref": "#/$defs/islandEngine"
+            }
+          }
+        }
+      },
+      "islandEngine": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "lift",
+              "turbo",
+              "heavy"
+            ]
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "installed": {
+            "type": "boolean"
+          }
+        }
       },
       "buildingType": {
         "type": [
@@ -29696,12 +30889,36 @@
     if (typeof data.v === 'string') data.v = parseInt(data.v, 10);
     if (data.v !== 1 && data.v !== 2 && data.v !== 3 && data.v !== 4) return 'unsupported v: ' + data.v;
     if (!Array.isArray(data.cells)) return 'cells must be an array';
+    if (data.islands !== undefined && !Array.isArray(data.islands)) return 'islands must be an array';
     if (data.cameraMode === 'soft') data.cameraMode = 'perspective';
     const okCameraMode = new Set(['ortho','topdown','perspective','fp']);
     if (data.cameraMode !== undefined && !okCameraMode.has(data.cameraMode)) return 'cameraMode invalid: ' + data.cameraMode;
     if (data.gridSize !== undefined && !isValidGridSize(data.gridSize)) return 'gridSize invalid: ' + data.gridSize;
+    if (Array.isArray(data.islands)) {
+      const islandBoards = new Set();
+      for (let i = 0; i < data.islands.length; i++) {
+        const island = data.islands[i];
+        if (!island || typeof island !== 'object') return 'islands[' + i + '] not object';
+        if (!Number.isInteger(island.boardX) || !Number.isInteger(island.boardZ)) return 'islands[' + i + '] board invalid';
+        if (Math.abs(island.boardX) > 1024 || Math.abs(island.boardZ) > 1024) return 'islands[' + i + '] board out of range';
+        const key = island.boardX + ',' + island.boardZ;
+        if (islandBoards.has(key)) return 'duplicate island board at ' + key;
+        islandBoards.add(key);
+        if (island.engines !== undefined) {
+          if (!Array.isArray(island.engines)) return 'islands[' + i + '] engines invalid';
+          if (island.engines.length > 4) return 'islands[' + i + '] too many engines';
+          for (let j = 0; j < island.engines.length; j++) {
+            const engine = island.engines[j];
+            if (!engine || typeof engine !== 'object') return 'islands[' + i + '].engines[' + j + '] not object';
+            if (engine.type !== undefined && !EDITABLE_ISLAND_ENGINE_TYPES.has(String(engine.type))) return 'islands[' + i + '].engines[' + j + '] type invalid';
+            if (engine.slot !== undefined && (!Number.isInteger(engine.slot) || engine.slot < 0 || engine.slot > 3)) return 'islands[' + i + '].engines[' + j + '] slot invalid';
+            if (engine.level !== undefined && (!Number.isInteger(engine.level) || engine.level < 1 || engine.level > 3)) return 'islands[' + i + '].engines[' + j + '] level invalid';
+          }
+        }
+      }
+    }
     const okTerrain = new Set(['grass','path','dirt','water','stone','lava','sand','snow']);
-    const okKind = new Set([null,'house','tree','fence','rock','bridge','crop','corn','wheat','pumpkin','carrot','sunflower','tuft','flower','bush','cow','sheep','chimney','ripple','shrub','stone','pebble','bridge-rail','voxel-build','model-stamp']);
+    const okKind = new Set([null,'house','tree','fence','rock','bridge','crop','corn','wheat','pumpkin','carrot','sunflower','tuft','flower','bush','cow','sheep','chimney','ripple','shrub','stone','pebble','bridge-rail','voxel-build','model-stamp','blank-island']);
     const okBT = new Set([null,'cottage','manor','tower','turret','skyscraper']);
     const okFenceSide = new Set([null,'n','s','e','w','center-x','center-z']);
     const seen = new Set();
@@ -29716,7 +30933,7 @@
       } else {
         return 'cells[' + i + '] not object';
       }
-      const coordLimit = Math.max(HOME_GRID_MAX * 2, (data.gridSize || GRID) * 2, 64);
+      const coordLimit = 1024;
       if (!Number.isInteger(x) || x < -coordLimit || x > coordLimit) return 'cells[' + i + '].x out of range';
       if (!Number.isInteger(z) || z < -coordLimit || z > coordLimit) return 'cells[' + i + '].z out of range';
       const key = x + ',' + z;
@@ -30849,18 +32066,18 @@
       const entry = cellMeshes[key];
       if (!entry) continue;
       if (entry.tile) {
-        worldGroup.remove(entry.tile);
+        if (entry.tile.parent) entry.tile.parent.remove(entry.tile);
         disposeGroup(entry.tile);
         entry.tile = null;
       }
       if (isOutsideHomeGrid(x, z)) {
         if (entry.object) {
-          worldGroup.remove(entry.object);
+          if (entry.object.parent) entry.object.parent.remove(entry.object);
           disposeGroup(entry.object);
         }
         if (entry.extras) {
           for (const m of entry.extras) {
-            worldGroup.remove(m);
+            if (m.parent) m.parent.remove(m);
             disposeGroup(m);
           }
         }
@@ -32960,7 +34177,98 @@
       });
     }
 
+    function selectedEngineUiTarget() {
+      return typeof selectedEditableIslandEngineTarget === 'function' ? selectedEditableIslandEngineTarget() : null;
+    }
+
+    function applyEditableIslandEngineProperty(rowKey, value) {
+      const target = selectedEngineUiTarget();
+      if (!target) return false;
+      if (typeof pushWorldHistorySnapshot === 'function') pushWorldHistorySnapshot();
+      if (rowKey === 'islandEngineType') {
+        updateEditableIslandEngine(target, { type: value, installed: true });
+      } else if (rowKey === 'islandEngineLevel') {
+        const current = Math.max(1, Math.min(3, Number(target.engine.level) || 1));
+        const next = value === 'down' ? current - 1 : value === 'up' ? current + 1 : Number(value);
+        updateEditableIslandEngine(target, { level: Math.max(1, Math.min(3, Math.round(next || current))), installed: true });
+      } else if (rowKey === 'islandEngineAction') {
+        updateEditableIslandEngine(target, { installed: value !== 'remove' });
+      } else {
+        return false;
+      }
+      renderSelection();
+      return true;
+    }
+
+    function renderEditableIslandEngineProperties(target) {
+      if (!previewProps || !target || !target.engine) return;
+      previewProps.innerHTML = '';
+      const engine = target.engine;
+      const rows = [
+        { key: 'islandEngineType', label: 'Engine', currentValue: normalizeEditableIslandEngineType(engine.type), options: [
+          { label: 'Lift', value: 'lift' },
+          { label: 'Turbo', value: 'turbo' },
+          { label: 'Heavy', value: 'heavy' },
+        ] },
+        { key: 'islandEngineLevel', label: 'Upgrade', currentValue: String(engine.level || 1), options: [
+          { label: '1', value: '1' },
+          { label: '2', value: '2' },
+          { label: '3', value: '3' },
+        ] },
+        { key: 'islandEngineLevel', label: 'Tune', control: 'stepper', options: [
+          { label: 'Down', value: 'down', disabled: (engine.level || 1) <= 1 },
+          { label: 'Up', value: 'up', disabled: (engine.level || 1) >= 3 },
+        ] },
+        { key: 'islandEngineAction', label: 'Mount', options: [
+          { label: 'Restore', value: 'restore', disabled: engine.installed !== false },
+          { label: 'Remove', value: 'remove', disabled: engine.installed === false },
+        ] },
+      ];
+      const section = document.createElement('section');
+      section.className = 'selection-prop-section';
+      section.setAttribute('aria-label', 'Engine properties');
+      const title = document.createElement('button');
+      title.type = 'button';
+      title.className = 'selection-prop-section-title';
+      title.setAttribute('aria-expanded', 'true');
+      title.innerHTML = '<span>Engine</span><span class="selection-prop-section-meta">' + rows.length + ' rows</span>';
+      section.appendChild(title);
+      rows.forEach(row => {
+        const wrap = document.createElement('div');
+        wrap.className = 'selection-prop-row';
+        const label = document.createElement('div');
+        label.className = 'selection-prop-label';
+        label.textContent = row.label;
+        const options = document.createElement('div');
+        options.className = 'selection-prop-options';
+        if (row.control === 'stepper') options.classList.add('control-stepper');
+        row.options.forEach(opt => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'selection-prop-chip' + (row.control === 'stepper' ? ' icon-chip round-chip' : '');
+          chip.dataset.action = String(opt.value);
+          const isActive = row.currentValue !== undefined && String(row.currentValue) === String(opt.value);
+          if (row.currentValue !== undefined) chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+          if (isActive) chip.classList.add('active');
+          if (opt.disabled) chip.disabled = true;
+          chip.title = row.label + ': ' + opt.label;
+          chip.setAttribute('aria-label', chip.title);
+          chip.textContent = row.control === 'stepper' ? (opt.value === 'down' ? '-' : '+') : opt.label;
+          chip.addEventListener('click', e => {
+            e.stopPropagation();
+            if (!opt.disabled) applySelectionProperty(row.key, opt.value);
+          });
+          options.appendChild(chip);
+        });
+        wrap.append(label, options);
+        section.appendChild(wrap);
+      });
+      previewProps.appendChild(section);
+      previewProps.hidden = false;
+    }
+
     function applySelectionProperty(rowKey, value) {
+      if (rowKey.indexOf('islandEngine') === 0 && applyEditableIslandEngineProperty(rowKey, value)) return;
       if (rowKey === 'historyAction') {
         if (value === 'undo') undoWorldEdit();
         else if (value === 'redo') redoWorldEdit();
@@ -33148,6 +34456,7 @@
       const selectedCells = selectionCoords.map(({ x, z }) => getWorldCell(x, z)).filter(Boolean);
       const selectedTargets = selectedBoardObjectTargets();
       const objectCells = selectedTargets.map(target => target.cell).filter(Boolean);
+      const scalableObjectCells = objectCells.filter(isObjectScaleEditableCell);
       const partMaterialCells = objectCells.filter(isSelectionPartMaterialEditableCell);
       const uniformValue = (items, getter) => {
         let hasValue = false;
@@ -33235,27 +34544,32 @@
         { label: 'South', value: 'south' },
       ] });
       if (selectedTargets.length) {
-        addRows('Transform', [
-          { key: 'objectScale', label: 'Scale', control: 'stepper', currentValue: scaleResetValue(objectCells, 'objectScale'), options: [
-            { label: 'Down', value: 'down' },
-            { label: 'Reset', value: 'reset' },
-            { label: 'Up', value: 'up' },
-          ] },
-          { key: 'objectScaleX', label: 'Scale X', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleX'), options: [
-            { label: 'Down', value: 'down' },
-            { label: 'Reset', value: 'reset' },
-            { label: 'Up', value: 'up' },
-          ] },
-          { key: 'objectScaleY', label: 'Scale Y', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleY'), options: [
-            { label: 'Down', value: 'down' },
-            { label: 'Reset', value: 'reset' },
-            { label: 'Up', value: 'up' },
-          ] },
-          { key: 'objectScaleZ', label: 'Scale Z', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleZ'), options: [
-            { label: 'Down', value: 'down' },
-            { label: 'Reset', value: 'reset' },
-            { label: 'Up', value: 'up' },
-          ] },
+        const transformRows = [];
+        if (scalableObjectCells.length === objectCells.length) {
+          transformRows.push(
+            { key: 'objectScale', label: 'Scale', control: 'stepper', currentValue: scaleResetValue(objectCells, 'objectScale'), options: [
+              { label: 'Down', value: 'down' },
+              { label: 'Reset', value: 'reset' },
+              { label: 'Up', value: 'up' },
+            ] },
+            { key: 'objectScaleX', label: 'Scale X', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleX'), options: [
+              { label: 'Down', value: 'down' },
+              { label: 'Reset', value: 'reset' },
+              { label: 'Up', value: 'up' },
+            ] },
+            { key: 'objectScaleY', label: 'Scale Y', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleY'), options: [
+              { label: 'Down', value: 'down' },
+              { label: 'Reset', value: 'reset' },
+              { label: 'Up', value: 'up' },
+            ] },
+            { key: 'objectScaleZ', label: 'Scale Z', control: 'stepper', currentValue: scaleResetValue(objectCells, 'scaleZ'), options: [
+              { label: 'Down', value: 'down' },
+              { label: 'Reset', value: 'reset' },
+              { label: 'Up', value: 'up' },
+            ] },
+          );
+        }
+        transformRows.push(
           { key: 'objectMove', label: 'Nudge', control: 'move', options: [
             { label: 'X-', value: 'x-' },
             { label: 'X+', value: 'x+' },
@@ -33268,7 +34582,8 @@
           { key: 'objectTransformReset', label: 'Reset', control: 'reset', options: [
             { label: 'Transform', value: 'transform' },
           ] },
-        ]);
+        );
+        addRows('Transform', transformRows);
         const appearanceRows = [
           { key: 'objectMaterial', label: 'All material', currentValue: currentObjectMaterial, options: SELECTION_MATERIAL_OPTIONS },
           { key: 'objectMaterialScale', label: 'All mat scale', control: 'stepper', currentValue: scaleResetValue(objectCells, 'materialTextureScale'), options: [
@@ -33511,7 +34826,38 @@
     function renderSelection() {
       const sel = window.__tinyworldSelection;
       const summary = sel && sel.summary();
+      const engineTarget = selectedEngineUiTarget();
       if (!summary) {
+        if (engineTarget) {
+          markAgentActivity();
+          panel.classList.add('has-selection');
+          previewBox.hidden = false;
+          syncAgentTargetChip(null, { cellCount: 1, kinds: { engine: 1 }, terrains: {} });
+          previewCount.textContent = 'Selected: ' + (engineTarget.engine.type || 'lift') + ' engine L' + (engineTarget.engine.level || 1);
+          previewList.innerHTML = '';
+          [
+            ['Island', engineTarget.island.id],
+            ['Slot', String((engineTarget.engine.slot || 0) + 1)],
+            ['Mount', engineTarget.engine.installed === false ? 'removed' : 'installed'],
+          ].forEach(([nameValue, countValue]) => {
+            const li = document.createElement('li');
+            const name = document.createElement('span');
+            name.textContent = nameValue;
+            const count = document.createElement('span');
+            count.className = 'count';
+            count.textContent = countValue;
+            li.append(name, count);
+            previewList.appendChild(li);
+          });
+          renderEditableIslandEngineProperties(engineTarget);
+          updateSelectionPreview(null);
+          updateTransformGizmo(null);
+          if (document.documentElement.classList.contains('ai-disabled')) setSelectionTab('properties');
+          else setSelectionTab('properties');
+          if (panelTitle) panelTitle.textContent = 'Engine';
+          setPanelCollapsed(false, { pin: true });
+          return;
+        }
         panel.classList.remove('has-selection');
         previewBox.hidden = true;
         updateSelectionPreview(null);
@@ -33875,6 +35221,7 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
           v: STORAGE_VERSION,
           gridSize: GRID,
+          islands: serializeEditableIslands(),
           cells,
           cameraMode,
           toolId: selectedTool && selectedTool.id,
@@ -33945,6 +35292,23 @@
       disposePlanetLandscape();
     }
     suppressSave = true;
+    clearEditableIslands();
+    if (Array.isArray(data.islands)) {
+      for (const spec of data.islands) {
+        if (!spec || !Number.isInteger(spec.boardX) || !Number.isInteger(spec.boardZ)) continue;
+        createEditableIsland({
+          id: typeof spec.id === 'string' ? spec.id : undefined,
+          boardX: spec.boardX,
+          boardZ: spec.boardZ,
+          positionX: +spec.positionX || 0,
+          positionY: +spec.positionY || 0,
+          positionZ: +spec.positionZ || 0,
+          rotationY: +spec.rotationY || 0,
+          engines: Array.isArray(spec.engines) ? spec.engines : null,
+          skipSave: true,
+        });
+      }
+    }
     const overrides = new Map();
     for (const entry of data.cells) {
       // Accept either tuple form [x,z,terrain,kind,floors,buildingType,terrainFloors,fenceSide]
@@ -33960,7 +35324,7 @@
         continue;
       }
       if (typeof x !== 'number' || typeof z !== 'number') continue;
-      const normalizedKind = kind || null;
+      const normalizedKind = kind === 'blank-island' ? null : (kind || null);
       const normalizedFloors = floors || 1;
       let normalizedTerrainFloors = terrainFloors || (data.v === 3 ? 1 : (normalizedKind ? 1 : normalizedFloors));
       // Houses-on-stilts guard: any built / man-made / planted kind that
@@ -34027,6 +35391,27 @@
       disposeAllCellMeshes();
       for (const o of overrides.values()) {
         writeWorldIntentCell(o.__x, o.__z, o, !!o.__outOfHome);
+      }
+      for (const o of overrides.values()) {
+        if (!isEditableIslandCell(o.__x, o.__z)) continue;
+        setCell(o.__x, o.__z, {
+          terrain: o.terrain,
+          terrainFloors: o.terrainFloors,
+          kind: o.kind,
+          floors: o.floors,
+          buildingType: o.buildingType,
+          fenceSide: o.fenceSide,
+          extras: o.extras,
+          rotationY: o.rotationY,
+          offsetX: o.offsetX,
+          offsetY: o.offsetY,
+          offsetZ: o.offsetZ,
+          appearance: o.appearance,
+          userEdited: true,
+          animate: false,
+          forceTile: true,
+          impactDust: false,
+        });
       }
       // Bulk direct writes bypassed setCell — rebuild the live indices.
       rebuildCropPositions();

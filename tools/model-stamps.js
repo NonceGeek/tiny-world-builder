@@ -75,6 +75,55 @@ function safeRelativeSidecar(dir, ref) {
   return rel;
 }
 
+function uniqueList(items) {
+  return Array.from(new Set(items.filter(Boolean)));
+}
+
+function resolveSpaceAwareRefs(rawRef, dir, fileByRel, expectedExt) {
+  const refs = [];
+  const directRel = safeRelativeSidecar(dir, rawRef);
+  const directFile = directRel && fileByRel.get(directRel);
+  if (directFile && (!expectedExt || directFile.ext === expectedExt)) {
+    return [directRel];
+  }
+  for (const ref of String(rawRef || '').trim().split(/\s+/)) {
+    const rel = safeRelativeSidecar(dir, ref);
+    const file = rel && fileByRel.get(rel);
+    if (file && (!expectedExt || file.ext === expectedExt)) refs.push(rel);
+  }
+  return uniqueList(refs.length ? refs : [directRel]);
+}
+
+function extractMtlMapPath(line) {
+  let rest = String(line || '').trim().replace(/^map_kd\s+/i, '').trim();
+  if (!rest) return '';
+  if ((rest[0] === '"' && rest[rest.length - 1] === '"') || (rest[0] === '\'' && rest[rest.length - 1] === '\'')) {
+    return rest.slice(1, -1);
+  }
+  const tokens = rest.split(/\s+/);
+  let i = 0;
+  const optionArity = {
+    '-blendu': 1,
+    '-blendv': 1,
+    '-boost': 1,
+    '-mm': 2,
+    '-o': 3,
+    '-s': 3,
+    '-t': 3,
+    '-texres': 1,
+    '-clamp': 1,
+    '-bm': 1,
+    '-imfchan': 1,
+    '-type': 1,
+  };
+  while (i < tokens.length && tokens[i][0] === '-') {
+    const arity = optionArity[tokens[i].toLowerCase()];
+    if (arity === undefined) break;
+    i += 1 + arity;
+  }
+  return tokens.slice(i).join(' ').trim();
+}
+
 function textureRecord(file) {
   return {
     path: file.rel,
@@ -95,11 +144,9 @@ function readObjMaterialLibraries(objPath) {
       if (!trimmed.toLowerCase().startsWith('mtllib ')) continue;
       const rest = trimmed.slice(7).trim();
       if (!rest) continue;
-      for (const ref of rest.split(/\s+/)) {
-        if (ref) refs.push(ref);
-      }
+      refs.push(rest);
     }
-    return Array.from(new Set(refs));
+    return uniqueList(refs);
   } catch (_) {
     return [];
   }
@@ -132,28 +179,35 @@ function objSidecarsFor(file, allFiles, fileByRel) {
   const textures = [];
   const seenTextures = new Set();
   for (const ref of readObjMaterialLibraries(file.full)) {
-    const rel = safeRelativeSidecar(dir, ref);
-    if (!rel) continue;
-    const found = fileByRel.get(rel);
-    if (found && found.ext === '.mtl') {
-      mtl.push({ path: found.rel, url: modelUrl(found.rel), name: found.name, exists: true, size: found.size });
-      try {
-        const mtlText = fs.readFileSync(found.full, 'utf8');
-        for (const line of mtlText.split(/\r?\n/)) {
-          const trimmed = line.trim();
-          if (!/^map_kd\s+/i.test(trimmed)) continue;
-          const texRef = trimmed.split(/\s+/).pop();
-          const texRel = safeRelativeSidecar(path.posix.dirname(found.rel) === '.' ? '' : path.posix.dirname(found.rel), texRef);
-          const texFile = texRel && fileByRel.get(texRel);
-          if (texFile && TEXTURE_EXTENSIONS.has(texFile.ext) && !seenTextures.has(texFile.rel)) {
-            seenTextures.add(texFile.rel);
-            textures.push(textureRecord(texFile));
+    const resolvedRefs = resolveSpaceAwareRefs(ref, dir, fileByRel, '.mtl');
+    if (!resolvedRefs.length) continue;
+    for (const rel of resolvedRefs) {
+      if (!rel) continue;
+      const found = fileByRel.get(rel);
+      if (found && found.ext === '.mtl') {
+        mtl.push({ path: found.rel, url: modelUrl(found.rel), name: found.name, exists: true, size: found.size });
+        try {
+          const mtlText = fs.readFileSync(found.full, 'utf8');
+          for (const line of mtlText.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!/^map_kd\s+/i.test(trimmed)) continue;
+            const texRef = extractMtlMapPath(trimmed);
+            const texDir = path.posix.dirname(found.rel) === '.' ? '' : path.posix.dirname(found.rel);
+            const texRel = resolveSpaceAwareRefs(texRef, texDir, fileByRel).find(candidate => {
+              const candidateFile = candidate && fileByRel.get(candidate);
+              return candidateFile && TEXTURE_EXTENSIONS.has(candidateFile.ext);
+            });
+            const texFile = texRel && fileByRel.get(texRel);
+            if (texFile && TEXTURE_EXTENSIONS.has(texFile.ext) && !seenTextures.has(texFile.rel)) {
+              seenTextures.add(texFile.rel);
+              textures.push(textureRecord(texFile));
+            }
           }
-        }
-      } catch (_) {}
-    } else {
-      mtl.push({ path: rel, url: modelUrl(rel), name: path.posix.basename(rel), exists: false });
-      warnings.push('Missing OBJ material library: ' + path.posix.basename(rel));
+        } catch (_) {}
+      } else {
+        mtl.push({ path: rel, url: modelUrl(rel), name: path.posix.basename(rel), exists: false });
+        warnings.push('Missing OBJ material library: ' + path.posix.basename(rel));
+      }
     }
   }
   if (!mtl.length) warnings.push('OBJ has no material library; using TinyWorld palette fallback');

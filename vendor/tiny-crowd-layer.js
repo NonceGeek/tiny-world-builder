@@ -49,6 +49,7 @@
     zoneRadius: 0.16,
     showZones: true,
     showArrows: true,
+    showSprites: true,
   };
 
   const DEFAULT_CHARACTER_SETS = [
@@ -551,6 +552,7 @@
         worldConfig: this.worldConfig,
         baseSourceHeight: character && character.source.down ? character.source.down.naturalHeight || character.source.down.height : 96,
       };
+      sprite.visible = this.worldConfig.showSprites !== false;
       this.people.set(id, person);
       this.createZone(person);
       this.placePerson(person);
@@ -631,6 +633,7 @@
       const groundY = this.getTerrainHeight(person.x, person.z) + (person.y || 0);
       person.sprite.position.set(pos.x, groundY, pos.z);
       person.sprite.scale.set(height * aspect, height, 1);
+      person.sprite.visible = this.worldConfig.showSprites !== false;
     }
 
     updatePersonView(person, camera) {
@@ -721,6 +724,17 @@
         if (dist <= person.radius + radius) return person;
       }
       return null;
+    }
+
+    getPeople() {
+      return Array.from(this.people.values());
+    }
+
+    setSpritesVisible(visible) {
+      this.worldConfig.showSprites = !!visible;
+      this.people.forEach(person => {
+        if (person.sprite) person.sprite.visible = !!visible;
+      });
     }
 
     firstCharacterName() {

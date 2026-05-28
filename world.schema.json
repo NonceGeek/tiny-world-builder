@@ -22,6 +22,11 @@
       "description": "Sparse list of non-default cells. The app exports compact tuple cells but also accepts object cells for AI/tooling convenience. Coordinates may include user-edited ghost-board cells outside the home grid.",
       "items": { "$ref": "#/$defs/cell" }
     },
+    "islands": {
+      "type": "array",
+      "description": "Optional editable duplicate island boards. Cells on these islands use world coordinates derived from boardX/boardZ and are saved in cells only when non-default.",
+      "items": { "$ref": "#/$defs/island" }
+    },
     "cameraMode": {
       "type": "string",
       "enum": ["ortho", "topdown", "perspective", "fp"],
@@ -81,6 +86,36 @@
     "kind": {
       "type": ["string", "null"],
       "enum": [null, "house", "tree", "fence", "rock", "bridge", "crop", "corn", "wheat", "pumpkin", "carrot", "sunflower", "tuft", "flower", "bush", "cow", "sheep", "voxel-build", "model-stamp"]
+    },
+    "island": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boardX", "boardZ"],
+      "properties": {
+        "id": { "type": "string" },
+        "boardX": { "type": "integer", "minimum": -1024, "maximum": 1024 },
+        "boardZ": { "type": "integer", "minimum": -1024, "maximum": 1024 },
+        "positionX": { "type": "number" },
+        "positionY": { "type": "number" },
+        "positionZ": { "type": "number" },
+        "rotationY": { "type": "number" },
+        "engines": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/islandEngine" }
+        }
+      }
+    },
+    "islandEngine": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "slot": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "type": { "type": "string", "enum": ["lift", "turbo", "heavy"] },
+        "level": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "installed": { "type": "boolean" }
+      }
     },
     "buildingType": {
       "type": ["string", "null"],

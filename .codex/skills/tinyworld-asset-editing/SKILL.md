@@ -58,6 +58,14 @@ Selection properties:
 - Selected-object nudge controls should include a recenter path that clears only `offsetX/Y/Z`, preserving rotation, scale, materials, colours, model IDs, and style.
 - Selected-object material scale controls should offer a reset path that clears only the matching texture-scale key and keeps the chosen texture/material, colours, model IDs, and style intact.
 - The in-scene transform gizmo is constrained to selected object transforms: within-tile X/Z offset, lift, Y rotation, and object scale. It should update the same cell fields as the Properties panel and stay undoable as a single drag batch.
+- Duplicate islands are board-level transforms, not selected object
+  transforms. The `new-island` tool should select/create an editable island
+  board and route gizmo movement/rotation to the island group, while normal
+  object transform rows continue to operate on selected cells only.
+- Selection overlays on duplicate islands must be drawn in island-local cell
+  axes. When an island is rotated, transform both selected tile centers and
+  edge-strip offsets through the island group instead of offsetting borders in
+  world X/Z.
 - Model stamps should expose All material / All mat scale controls, but Body/Top material controls should be limited to selected asset kinds with known Tiny World material buckets; mixed selections must not write part-material fields onto model stamps.
 
 Stamps panel:
@@ -72,6 +80,9 @@ Stamps panel:
 - The `Recent` stamps category is derived from `tinyworld:stamp-builder-recent.v1` and should use the same `stampBuilderSelectionKey()` values as selected-card state. Keep it ordered by most recent selection and remove deleted template keys.
 - Toolbar, flyout, and keyboard selections that correspond to stamp-builder tools should update `Recent`; ignore Select, Erase, Auto, hidden tools, and other non-stamps so stale keys do not crowd out real stamps.
 - Model-stamp categories are inferred from labels, paths, formats, URLs, and sidecars. Do not add generator manifest fields unless a durable category contract is explicitly needed.
+- Model-stamp OBJ/MTL support must preserve filenames with spaces in `mtllib` and `map_Kd` lines. VoxEdit-style `Tr 1.000000` should not make a textured model fully transparent; treat it as opaque unless a `d` dissolve value says otherwise.
+- Rigged GLTF/GLB model stamps need a skinned-mesh-aware clone path. Plain `clone(true)` can leave skeletons tied to the cached source scene when multiple stamps are placed.
+- Preserve `gltf.animations` in the model-stamp asset cache. Runtime systems such as crowd character replacements use those clips after cloning the cached scene.
 
 Validation:
 

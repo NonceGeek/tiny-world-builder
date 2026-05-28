@@ -11,6 +11,8 @@ Use this skill when changing TinyWorld's 2.5D crowd/person sprite system.
 ## Rules
 
 - Keep people out of `world[x][z]` and `cellMeshes`; they are moving runtime entities, not terrain/object intent.
+- If replacing 2.5D people with rigged/model characters, keep `TinyCrowdLayer` as the movement/zone simulation source and mirror its people into transient scene actors. Hide sprites through `showSprites` / `setSpritesVisible`, but do not persist the character actors into world state.
+- Rigged/model crowd actors should route animation through the reusable `createRiggedCharacterRuntime()` / `updateRiggedCharacterRuntime()` helpers. GLTF/GLB clips drive `AnimationMixer` actions; do not cut or infer limbs from a T-pose mesh.
 - Use `tilePos(x, z)` for map placement and a terrain-height callback for feet height.
 - Preserve the original crowd demo's `P` config surface (`count`, `size`, `slices`, `bob`, `sway`, `headSway`, `leg`, `squash`, `lean`, `hipLine`, `cadence`, `speed`, etc.) when tuning animation.
 - Render movement through the original slice-wave canvas animation, then upload that canvas into a `THREE.CanvasTexture` used by a `THREE.Sprite`.
@@ -29,6 +31,7 @@ Use this skill when changing TinyWorld's 2.5D crowd/person sprite system.
 ## Asset contract
 
 - Character sets need four PNG views: `down`, `up`, `right`, and `left`.
+- Animatable 3D character replacements must come from model stamps with real skins and animation clips. OBJ/MTL character stamps can replace sprites visually in other contexts, but they do not carry skeleton animation clips and should not be used as animated crowd actors.
 - The imported source repo has a misspelled `charachters/` path; preserve it in copied asset URLs unless migrating all references at once.
 - If a sprite fails to load, the layer should degrade to a visible fallback texture instead of breaking app boot.
 

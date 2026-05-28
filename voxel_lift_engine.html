@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Voxel Lift Engine - Three.js</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#11151b;font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:white}
+    #ui{position:fixed;left:18px;top:18px;z-index:5;background:rgba(12,16,22,.72);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px 16px;backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.35)}
+    #ui h1{font-size:16px;margin:0 0 8px;letter-spacing:.08em;text-transform:uppercase}
+    #ui p{margin:4px 0;color:#b9c0cc;font-size:13px}.kbd{color:#fff;background:#26303c;padding:1px 6px;border-radius:6px}
+  </style>
+</head>
+<body>
+<div id="ui">
+  <h1>Voxel Lift Engine</h1>
+  <p>Drag to orbit · wheel to zoom</p>
+  <p><span class="kbd">Space</span> pause propeller</p>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x12171f);
+scene.fog = new THREE.Fog(0x12171f, 18, 55);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(8, 6, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, .4, 0);
+
+scene.add(new THREE.HemisphereLight(0xdde8ff, 0x20242b, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.5);
+sun.position.set(7, 10, 5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+scene.add(sun);
+
+const mats = {
+  stone: new THREE.MeshStandardMaterial({ color:0x7b7a71, roughness:.82, metalness:.05 }),
+  dark:  new THREE.MeshStandardMaterial({ color:0x34383a, roughness:.9, metalness:.02 }),
+  trim:  new THREE.MeshStandardMaterial({ color:0xb8b4a6, roughness:.65, metalness:.05 }),
+  wood:  new THREE.MeshStandardMaterial({ color:0xa66b25, roughness:.86, metalness:.02 }),
+  wood2: new THREE.MeshStandardMaterial({ color:0x7d4d1e, roughness:.9, metalness:.02 }),
+  amber: new THREE.MeshStandardMaterial({ color:0xd48317, roughness:.65, metalness:.05 }),
+  metal: new THREE.MeshStandardMaterial({ color:0x575d5f, roughness:.55, metalness:.45 }),
+  glow:  new THREE.MeshStandardMaterial({ color:0x3ee7ff, emissive:0x19cfff, emissiveIntensity:2.8, transparent:true, opacity:.78 }),
+  white: new THREE.MeshStandardMaterial({ color:0xe9e3d4, roughness:.55 })
+};
+
+const root = new THREE.Group();
+scene.add(root);
+
+const boxGeo = new THREE.BoxGeometry(1,1,1);
+function cube(parent, x,y,z, sx=1,sy=1,sz=1, mat=mats.stone) {
+  const m = new THREE.Mesh(boxGeo, mat);
+  m.position.set(x,y,z); m.scale.set(sx,sy,sz);
+  m.castShadow = m.receiveShadow = true;
+  parent.add(m); return m;
+}
+function vox(parent, x,y,z, mat=mats.stone, s=.34){ return cube(parent, x*s,y*s,z*s, s*.96,s*.96,s*.96, mat); }
+
+// engine wrapper: rotated so the propeller faces down
+const engine = new THREE.Group();
+engine.rotation.x = -Math.PI / 2;
+root.add(engine);
+
+// rounded voxel-ish central body made from stepped cubes
+const body = new THREE.Group(); engine.add(body);
+for (let y=-3; y<=3; y++) {
+  for (let x=-4; x<=4; x++) for (let z=-3; z<=3; z++) {
+    const r = Math.sqrt((x/4.2)**2 + (y/3.8)**2 + (z/3.3)**2);
+    if (r < 1.03 && !(Math.abs(x)>3 && Math.abs(y)>2)) {
+      const pick = Math.random() < .18 ? mats.dark : (Math.random() < .2 ? mats.trim : mats.stone);
+      vox(body,x,y,z,pick,.34);
+    }
+  }
+}
+
+// front intake / gear box
+for (let x=-2; x<=2; x++) for (let y=-1; y<=1; y++) vox(body,x,y,-4,mats.dark,.34);
+for (let x=-1; x<=1; x++) for (let y=-1; y<=1; y++) vox(body,x,y,-5,mats.stone,.34);
+vox(body,0,0,-6,mats.trim,.34); vox(body,0,0,-7,mats.dark,.34);
+
+// top stone handle and amber cap
+cube(body, -1.25, 1.95, 0, .32,1.55,.32, mats.trim);
+cube(body,  1.25, 1.95, 0, .32,1.55,.32, mats.trim);
+cube(body, 0, 2.78, 0, 3.25,.34,.58, mats.stone);
+cube(body, 0, 1.45,-.55, 1.25,.32,.9, mats.amber);
+cube(body, 0, 1.78,-.55, .75,.26,.65, mats.amber);
+
+// rear orange tank + side crates
+cube(body, 0, .9, 1.35, 1.1,.9,.8, mats.amber);
+cube(body, -1.75, -.15, .4, .68,1.25,1.05, mats.stone);
+cube(body,  1.75, -.15, .4, .68,1.25,1.05, mats.stone);
+cube(body, -2.25, -.35, -.65, .75,.95,.55, mats.amber);
+cube(body,  2.25, -.35, -.65, .75,.95,.55, mats.amber);
+cube(body, -2.25, -.35, -.98, .28,.28,.12, mats.white);
+cube(body,  2.25, -.35, -.98, .28,.28,.12, mats.white);
+
+// lower nozzle housing
+cube(body, 0,-1.65,0, 1.6,.55,1.45, mats.dark);
+cube(body, 0,-2.05,0, 1.1,.45,1.0, mats.metal);
+
+// propeller, mounted on front, rotating around Z axis
+const prop = new THREE.Group();
+prop.position.set(0,-.45,-2.05);
+engine.add(prop);
+cube(prop,0,0,0,.85,.85,.45,mats.metal);
+cube(prop,0,0,-.25,.45,.45,.36,mats.trim);
+
+function makeBlade(angle) {
+  const g = new THREE.Group();
+  g.rotation.z = angle;
+  prop.add(g);
+  for(let i=0;i<9;i++) {
+    const w = 0.42 + i*.025;
+    cube(g, 0, .58+i*.33, 0, w, .34, .28, i%2 ? mats.wood : mats.wood2);
+  }
+  cube(g,0,3.65,0,.55,.38,.31,mats.white);
+  cube(g,0,3.95,0,.46,.32,.28,mats.wood);
+}
+for (let i=0;i<4;i++) makeBlade(i*Math.PI/2 + Math.PI/4);
+
+// horizontal jet exhaust plumes coming out of the nozzle panel
+// authored in engine-local coords: nozzle face sits at y ≈ -2.275,
+// so plumes extend in -Y locally (which maps to +Z in world after the engine's -90° X-rotation).
+const plume = new THREE.Group(); engine.add(plume);
+const plumeData = [];
+const nozzleFaceY = -2.28;
+// a 3x3 grid of jets across the nozzle opening, each with its own length
+const offsets = [
+  [-.55,-.35], [0,-.4], [.55,-.35],
+  [-.6,  0],   [0, 0],  [.6,  0],
+  [-.55, .35], [0, .4], [.55, .35],
+];
+offsets.forEach(([ox, oz], i) => {
+  const len = 3.2 + Math.random()*4.8;            // 3.2 .. 8.0 long
+  const w   = 0.22 + Math.random()*0.08;
+  const p = cube(plume, ox, nozzleFaceY - len*0.5, oz, w, len, w, mats.glow);
+  p.material = mats.glow.clone();
+  p.material.opacity = 0.4 + Math.random()*0.35;
+  plumeData.push({ mesh: p, baseLen: len, ox, oz, phase: Math.random()*Math.PI*2 });
+});
+const glow = new THREE.PointLight(0x19d8ff, 8, 12);
+glow.position.set(0, -3.8, 0); engine.add(glow);
+
+// simple blue floor glow
+const disc = new THREE.Mesh(new THREE.CircleGeometry(2.2, 48), new THREE.MeshBasicMaterial({ color:0x16bdfd, transparent:true, opacity:.12, depthWrite:false }));
+disc.rotation.x = -Math.PI/2; disc.position.y = -5.1; scene.add(disc);
+
+// ground
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80,80), new THREE.MeshStandardMaterial({ color:0x171b22, roughness:.9 }));
+floor.rotation.x = -Math.PI/2; floor.position.y = -5.15; floor.receiveShadow = true; scene.add(floor);
+
+let spin = true;
+addEventListener('keydown', e => { if(e.code==='Space') spin = !spin; });
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+});
+
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  if(spin) prop.rotation.z -= .22;
+  plumeData.forEach((d, i) => {
+    const pulse = 1 + Math.sin(t*6 + d.phase)*0.18 + Math.sin(t*13 + i)*0.06;
+    const len = d.baseLen * pulse;
+    d.mesh.scale.y = len;                                  // box geo is 1 tall; scale.y == length
+    d.mesh.position.y = nozzleFaceY - len*0.5;             // keep flush against the nozzle face
+    d.mesh.material.opacity = 0.4 + Math.sin(t*5 + d.phase)*0.25;
+  });
+  glow.intensity = 7 + Math.sin(t*5)*2;
+  root.rotation.y = Math.sin(t*.22)*.12;
+  controls.update(); renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
