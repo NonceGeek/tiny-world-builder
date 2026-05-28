@@ -170,6 +170,8 @@ const EXCLUDED_DEFAULT_KEY_PATTERNS = [
   /^tinyworld:ai:key:/,                // API credentials
   /^tinyworld:ai:prompt$/,             // user prompt text
   /^tinyworld:vehicle-demo:/,          // session-only demo state
+  /^tinyworld:audio:music-track$/,     // per-user manual music choice
+  /^tinyworld:audio:music-mode$/,      // random vs manual music mode
   /^tinyworld:welcome:dismissedId$/,   // per-user welcome dismissal
   /:backup$/,                          // explicit backups
   // Panel/widget positions — inherently viewport-specific. Shipping a

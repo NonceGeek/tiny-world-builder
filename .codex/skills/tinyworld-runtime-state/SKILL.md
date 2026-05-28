@@ -40,6 +40,8 @@ inline `setupDevSaveDefaults()` IIFE (client filter):
 - `/^tinyworld:ai:key:/` — API credentials (SECURITY)
 - `/^tinyworld:ai:prompt$/` — user prompt text
 - `/^tinyworld:vehicle-demo:/` — session demo state
+- `/^tinyworld:audio:music-track$/` — per-user manual music choice
+- `/^tinyworld:audio:music-mode$/` — random vs manual music mode
 - `/^tinyworld:welcome:dismissedId$/` — per-user welcome dismissal
 - `/:backup$/` — any explicit backup
 - `/\.pos$/`, `/-pos$/`, `/:pos$/` — panel/widget positions (viewport-specific)
@@ -88,12 +90,15 @@ Two layers:
    `(sourceWorldPos - camera.position)` projected onto camera-right.
 
 State keys (`AUDIO_LS`):
-- `tinyworld:audio:music` / `music-muted` / `music-track`
+- `tinyworld:audio:music` / `music-muted` / `music-track` / `music-mode`
 - `tinyworld:audio:sfx` / `sfx-muted`
 - `tinyworld:audio:ambient` / `ambient-muted`
 - `tinyworld:audio:engines` / `engines-muted`
 
-Music tracks: `MUSIC_TRACKS` array (currently 6 horizon + 1 rising). Avoid
+Music tracks: `MUSIC_TRACKS` array (currently 6 horizon + 1 rising). Random
+playback must use only `MUSIC_RANDOM_TRACKS` / the `music-horizon-*` files;
+`music-rising-1.mp3` stays selectable manually but should not ship as a default
+or be picked by automatic random playback. Avoid
 prop engine files (`large-prop-engine-*`, `foley-propellers-*`) — the planes
 have jet engines, use `foley-rocket-engines-1..4`. Water variants:
 `foley-water-1..4`. Loop seams are hidden by **overlaying two variants at
@@ -119,10 +124,8 @@ defaults — sets the welcome shot for new users.
 
 ## Feature flags
 
-- `tinyworld:features:cluso` — Cluso dev inspector. **Default ON for localhost**
-  (the gating IIFE near top of inline JS sets `let enabled = true` before
-  reading the localStorage override). To force off: `?cluso=0` or set the LS
-  key to `'0'`.
+- `tinyworld:features:cluso` — legacy Cluso flag. The in-page Cluso embed has
+  been removed, and no app runtime path reads this key.
 - `tinyworld:features:ai` — AI panel.
 - `tinyworld:features:model-stamp-api` — stamp-defaults dev endpoint.
 

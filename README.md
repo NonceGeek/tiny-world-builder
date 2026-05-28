@@ -66,21 +66,21 @@ http://localhost:3000/tiny-world-builder?demo=vehicles&seed=tide-ridge-428
 Large-scale route stress URL:
 
 ```text
-http://localhost:3000/tiny-world-builder?demo=vehicles-large&seed=metro-culdesac-48&stats=1
+http://localhost:3000/tiny-world-builder?demo=vehicles-large&seed=metro-culdesac-20&stats=1
 ```
 
 Large demo URL params:
 
-- `size=` / `mapSize=` / `grid=` / `gridSize=` — rounded to the nearest valid demo grid size from `12` through `48` (`12`, `16`, `20`, `32`, `48`).
+- `size=` / `mapSize=` / `grid=` / `gridSize=` — rounded to the nearest valid demo grid size from `12` through `20` (`12`, `16`, `20`).
 - `cars=` / `carCount=` / `vehicles=` / `vehicleCount=` — clamped to `1..120` and capped by available unique route endpoints.
 
 Example:
 
 ```text
-http://localhost:3000/tiny-world-builder?demo=vehicles-large&seed=ridge-loop-917&size=48&cars=18&stats=1
+http://localhost:3000/tiny-world-builder?demo=vehicles-large&seed=ridge-loop-917&size=20&cars=18&stats=1
 ```
 
-The large route defaults to a deterministic 48×48 map with arterial roads,
+The large route defaults to a deterministic 20×20 map with arterial roads,
 ring roads, bridge crossings, cul-de-sac endpoints, and 36 runtime vehicles
 retargeting through long paths. Use it for route planner / traffic scale checks;
 the default bare-port redirect still opens the smaller watchable demo.

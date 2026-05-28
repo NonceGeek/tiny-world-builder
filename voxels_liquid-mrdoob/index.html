@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>Voxels liquid</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #f0f0f0;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				padding: 5px;
+				text-align:center;
+			}
+		</style>
+	</head>
+	<body>
+
+		<div id="info"><span id="camStatus">camera: waiting…</span></div>
+		<video id="cam" autoplay playsinline muted style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
+
+		<script src="js/Detector.js"></script>
+		<script src="js/RequestAnimationFrame.js"></script>
+		<script src="js/Stats.js"></script>
+		<script src="js/Three.js"></script>
+
+		<script>
+
+			var size = 10, res = 64, sizeres = size * res, halfsizeres = sizeres / 2;
+			var buffer1 = [], buffer2 = [], temp;
+			var stamps = [];
+			var grid = [], plane;
+			var scene, camera, light, renderer;
+			var geometry, material;
+			var stats;
+
+			// Balls (multi) — proper rigid-body physics on the voxel heightmap
+			var balls = [];
+			var BALL_COUNT = 14;
+			var BALL_MIN_R = 18, BALL_MAX_R = 64;
+			var BALL_G = 1.4;                  // gravity (units/frame²)
+			var BALL_RESTITUTION = 0.62;       // bounce factor (0 dead, 1 perfect)
+			var BALL_AIR_DRAG = 0.992;         // per frame, in-air
+			var BALL_GROUND_FRICTION = 0.93;   // lateral friction when in contact
+			var BALL_IMPACT_GAIN = 0.45;       // strength of side-impulse from terrain
+			var BALL_MAX_VEL = 50;
+			var BALL_REST_VEL = 0.6;           // |vy| below this stops bouncing (kills jitter)
+			var BALL_GRASP_FOLLOW = 0.9;       // how strongly ball follows the grasp centroid
+			var BALL_PALETTE = [
+				0xff3399, 0x33ccff, 0xffcc33, 0x66ff66, 0xff6633, 0x9933ff,
+				0xffffff, 0x33ffcc, 0xff5577, 0xccccff, 0xffee00, 0xff77ff,
+				0x55ddaa, 0x4488ff
+			];
+
+			// Orbit camera state
+			var orbitTarget = { x: halfsizeres, y: 0, z: halfsizeres };
+			var orbitRadius = 900;
+			var orbitTheta = 0;       // yaw around world +Y
+			var orbitPhi = 0.05;      // polar from +Y; small = near top-down
+			var orbitMinPhi = 0.05, orbitMaxPhi = Math.PI - 0.05;
+			var dragging = false, dragBtn = 0, dragX = 0, dragY = 0;
+
+			function updateCamera() {
+				var sinPhi = Math.sin( orbitPhi ), cosPhi = Math.cos( orbitPhi );
+				camera.position.x = orbitTarget.x + orbitRadius * sinPhi * Math.sin( orbitTheta );
+				camera.position.y = orbitTarget.y + orbitRadius * cosPhi;
+				camera.position.z = orbitTarget.z + orbitRadius * sinPhi * Math.cos( orbitTheta );
+				camera.up.x = 0; camera.up.y = 1; camera.up.z = 0;
+				camera.lookAt( new THREE.Vector3( orbitTarget.x, orbitTarget.y, orbitTarget.z ) );
+			}
+
+			if ( Detector.webgl ) {
+
+				init();
+				animate();
+
+			} else {
+
+				document.body.appendChild( Detector.getWebGLErrorMessage() );
+
+			}
+
+			function init() {
+
+				var container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.top = '0px';
+				// container.appendChild( stats.domElement );
+
+				for ( var i = 0, l = res * res; i < l; i ++ ) {
+
+					buffer1[ i ] = 0;
+					buffer2[ i ] = 0;
+					stamps[ i ] = 0;
+
+				}
+
+				scene = new THREE.Scene();
+
+				camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 3000 );
+				updateCamera();
+				scene.add( camera );
+
+				scene.add( new THREE.AmbientLight( 0x808080 ) );
+
+				light = new THREE.SpotLight( 0xffffff, 1.25 );
+				light.position.set( - 500, 900, 600 );
+				light.target.position.set( halfsizeres, 0, halfsizeres );
+				light.castShadow = true;
+				scene.add( light );
+
+				geometry = new THREE.CubeGeometry( size, size, size );
+				geometry.applyMatrix( new THREE.Matrix4().setTranslation( 0, size / 2, 0 ) );
+				material = new THREE.MeshLambertMaterial( { color: 0xd0d0d0 } );
+
+				for ( var i = 0, l = res * res; i < l; i ++ ) {
+
+					cube = new THREE.Mesh( geometry, material );
+					cube.position.x = size + ( ( i % res ) * 10 );
+					cube.position.z = size + ( Math.floor( i / res ) * 10 );
+					cube.castShadow = true;
+					cube.receiveShadow = true;
+					scene.add( cube );
+
+					grid.push( cube );
+
+				}
+
+				geometry = new THREE.PlaneGeometry( sizeres, sizeres );
+
+				plane = new THREE.Mesh( geometry, material );
+				plane.position.x = halfsizeres;
+				plane.position.z = halfsizeres;
+				plane.rotation.x = - 90 * Math.PI / 180;
+				plane.visible = false;
+				scene.add( plane );
+
+				// Balls: random sizes, palette colours, sprinkled across the grid
+				for ( var bi = 0; bi < BALL_COUNT; bi ++ ) {
+					var r = BALL_MIN_R + Math.random() * ( BALL_MAX_R - BALL_MIN_R );
+					var bGeo = new THREE.SphereGeometry( r, 20, 16 );
+					var bMat = new THREE.MeshLambertMaterial( { color: BALL_PALETTE[ bi % BALL_PALETTE.length ] } );
+					var mesh = new THREE.Mesh( bGeo, bMat );
+					mesh.position.x = size + r + Math.random() * ( sizeres - 2 * ( size + r ) );
+					mesh.position.z = size + r + Math.random() * ( sizeres - 2 * ( size + r ) );
+					mesh.position.y = r + 200 + Math.random() * 200;
+					mesh.castShadow = true;
+					scene.add( mesh );
+					balls.push( {
+						mesh: mesh, radius: r,
+						vx: ( Math.random() - 0.5 ) * 4,
+						vy: 0,
+						vz: ( Math.random() - 0.5 ) * 4,
+						mass: r * r * r,     // ∝ volume
+						graspCx: null, graspCz: null
+					} );
+				}
+
+				renderer = new THREE.WebGLRenderer();
+
+				renderer.shadowMapEnabled = true;
+				renderer.shadowMapSoft = true;
+
+				renderer.shadowCameraNear = 3;
+				renderer.shadowCameraFar = camera.far;
+				renderer.shadowCameraFov = 50;
+
+				renderer.shadowMapBias = 0.0039;
+				renderer.shadowMapDarkness = 0.5;
+				renderer.shadowMapWidth = 512;
+				renderer.shadowMapHeight = 512;
+
+				var devicePixelRatio = window.devicePixelRatio || 1;
+
+				renderer.setSize( window.innerWidth * devicePixelRatio, window.innerHeight * devicePixelRatio );
+				renderer.domElement.style.width = window.innerWidth + 'px';
+				renderer.domElement.style.height = window.innerHeight + 'px';
+
+				container.appendChild( renderer.domElement );
+
+				// Orbit / pan / zoom
+				renderer.domElement.addEventListener( 'mousedown', onMouseDown, false );
+				document.addEventListener( 'mouseup', onMouseUp, false );
+				document.addEventListener( 'mousemove', onMouseMove, false );
+				renderer.domElement.addEventListener( 'wheel', onWheel, { passive: false } );
+				renderer.domElement.addEventListener( 'contextmenu', function ( e ) { e.preventDefault(); }, false );
+
+			}
+
+			function onMouseDown( e ) {
+				dragging = true;
+				dragBtn = e.button;
+				dragX = e.clientX;
+				dragY = e.clientY;
+				e.preventDefault();
+			}
+
+			function onMouseUp() { dragging = false; }
+
+			function onMouseMove( e ) {
+				if ( ! dragging ) return;
+				var dx = e.clientX - dragX, dy = e.clientY - dragY;
+				dragX = e.clientX; dragY = e.clientY;
+
+				var pan = ( dragBtn === 2 ) || e.shiftKey;
+				if ( ! pan ) {
+					// orbit
+					orbitTheta -= dx * 0.005;
+					orbitPhi -= dy * 0.005;
+					if ( orbitPhi < orbitMinPhi ) orbitPhi = orbitMinPhi;
+					if ( orbitPhi > orbitMaxPhi ) orbitPhi = orbitMaxPhi;
+				} else {
+					// pan target along the camera's right/up screen axes
+					var fx = orbitTarget.x - camera.position.x;
+					var fy = orbitTarget.y - camera.position.y;
+					var fz = orbitTarget.z - camera.position.z;
+					var fl = Math.sqrt( fx * fx + fy * fy + fz * fz ) || 1;
+					fx /= fl; fy /= fl; fz /= fl;
+					// right = forward × worldUp(0,1,0)
+					var rx = fz, ry = 0, rz = - fx;
+					var rl = Math.sqrt( rx * rx + rz * rz ) || 1;
+					rx /= rl; rz /= rl;
+					// screenUp = right × forward
+					var ux = ry * fz - rz * fy;
+					var uy = rz * fx - rx * fz;
+					var uz = rx * fy - ry * fx;
+					var ul = Math.sqrt( ux * ux + uy * uy + uz * uz ) || 1;
+					ux /= ul; uy /= ul; uz /= ul;
+					var scale = orbitRadius * 0.0015;
+					orbitTarget.x += ( - rx * dx + ux * dy ) * scale;
+					orbitTarget.y += ( - ry * dx + uy * dy ) * scale;
+					orbitTarget.z += ( - rz * dx + uz * dy ) * scale;
+				}
+				updateCamera();
+			}
+
+			function onWheel( e ) {
+				var factor = e.deltaY > 0 ? 1.1 : 1 / 1.1;
+				orbitRadius *= factor;
+				if ( orbitRadius < 50 ) orbitRadius = 50;
+				if ( orbitRadius > 2500 ) orbitRadius = 2500;
+				updateCamera();
+				e.preventDefault();
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				render();
+				stats.update();
+
+			}
+
+			function render() {
+
+				var bottom = res * res - res;
+
+				// update buffers
+				for ( var i = 0, l = res * res; i < l; i ++ ) {
+
+					var x1, x2, y1, y2;
+
+					if ( i % res == 0 ) {
+
+						// left edge
+
+						x1 = 0;
+						x2 = buffer1[ i + 1 ];
+
+					} else if ( i % res == res - 1 ) {
+
+						// right edge
+
+						x1 = buffer1[ i - 1 ];
+						x2 = 0;
+
+					} else {
+
+						x1 = buffer1[ i - 1 ];
+						x2 = buffer1[ i + 1 ];
+
+					}
+
+					if ( i < res ) {
+
+						// top edge
+
+						y1 = 0;
+						y2 = buffer1[ i + res ];
+
+					} else if ( i > l - res - 1 ) {
+
+						// bottom edge
+
+						y1 = buffer1[ i - res ];
+						y2 = 0;
+
+					} else {
+
+						y1 = buffer1[ i - res ];
+						y2 = buffer1[ i + res ];
+
+					}
+
+					buffer2[ i ] = ( x1 + x2 + y1 + y2 ) / 1.9 - buffer2[ i ];
+					buffer2[ i ] -= buffer2[ i ] / 10;
+
+				}
+
+				temp = buffer1;
+				buffer1 = buffer2;
+				buffer2 = temp;
+
+				// Stamps run on their own buffer, not the wave — keeps shapes crisp
+				for ( var i = 0, l = res * res; i < l; i ++ ) stamps[ i ] = 0;
+				if ( window.tracker && window.tracker.ready ) {
+
+					window.tracker.stamp( stamps, res );
+
+				}
+
+				// update grid — target = max(wave, stamp), eased fast for snappy response
+
+				for ( var i = 0, l = res * res; i < l; i ++ ) {
+
+					var target = Math.min( 12, Math.max( 0.1, Math.max( 0.1 + buffer2[ i ], stamps[ i ] ) ) );
+					grid[ i ].scale.y += ( target - grid[ i ].scale.y ) * 0.45;
+
+				}
+
+				updateBalls();
+
+				renderer.render( scene, camera );
+
+			}
+
+			function updateBalls() {
+				for ( var i = 0; i < balls.length; i ++ ) updateOneBall( balls[ i ] );
+				// Pairwise sphere–sphere collisions
+				for ( var i = 0; i < balls.length; i ++ ) {
+					for ( var j = i + 1; j < balls.length; j ++ ) {
+						collideBalls( balls[ i ], balls[ j ] );
+					}
+				}
+			}
+
+			function collideBalls( a, b ) {
+				var ax = a.mesh.position.x, ay = a.mesh.position.y, az = a.mesh.position.z;
+				var bx = b.mesh.position.x, by = b.mesh.position.y, bz = b.mesh.position.z;
+				var dx = bx - ax, dy = by - ay, dz = bz - az;
+				var minDist = a.radius + b.radius;
+				var d2 = dx * dx + dy * dy + dz * dz;
+				if ( d2 >= minDist * minDist ) return;
+				var d = Math.sqrt( d2 ) || 0.001;
+				var nx = dx / d, ny = dy / d, nz = dz / d;
+				var overlap = minDist - d;
+				var invA = 1 / a.mass, invB = 1 / b.mass;
+				var invTot = invA + invB;
+				// Positional split by inverse mass
+				a.mesh.position.x -= nx * overlap * ( invA / invTot );
+				a.mesh.position.y -= ny * overlap * ( invA / invTot );
+				a.mesh.position.z -= nz * overlap * ( invA / invTot );
+				b.mesh.position.x += nx * overlap * ( invB / invTot );
+				b.mesh.position.y += ny * overlap * ( invB / invTot );
+				b.mesh.position.z += nz * overlap * ( invB / invTot );
+				// Impulse along contact normal
+				var rvx = b.vx - a.vx, rvy = b.vy - a.vy, rvz = b.vz - a.vz;
+				var velN = rvx * nx + rvy * ny + rvz * nz;
+				if ( velN > 0 ) return; // already separating
+				var jImp = - ( 1 + BALL_RESTITUTION ) * velN / invTot;
+				a.vx -= jImp * nx * invA;
+				a.vy -= jImp * ny * invA;
+				a.vz -= jImp * nz * invA;
+				b.vx += jImp * nx * invB;
+				b.vy += jImp * ny * invB;
+				b.vz += jImp * nz * invB;
+			}
+
+			function sampleHeight( gx, gy ) {
+				// bilinear sample of the displayed cube heights (scale.y * size)
+				gx = Math.max( 0, Math.min( res - 1.001, gx ) );
+				gy = Math.max( 0, Math.min( res - 1.001, gy ) );
+				var x0 = Math.floor( gx ), y0 = Math.floor( gy );
+				var fx = gx - x0, fy = gy - y0;
+				var h00 = grid[ x0 + y0 * res ].scale.y;
+				var h10 = grid[ ( x0 + 1 ) + y0 * res ].scale.y;
+				var h01 = grid[ x0 + ( y0 + 1 ) * res ].scale.y;
+				var h11 = grid[ ( x0 + 1 ) + ( y0 + 1 ) * res ].scale.y;
+				return ( h00 * ( 1 - fx ) + h10 * fx ) * ( 1 - fy ) + ( h01 * ( 1 - fx ) + h11 * fx ) * fy;
+			}
+
+			function updateOneBall( b ) {
+				var ballRadius = b.radius;
+				var R2 = ballRadius * ballRadius;
+				var rCells = ballRadius / size;
+				var pos = b.mesh.position;
+
+				// (1) Gravity
+				b.vy -= BALL_G;
+
+				// (2) Sample perimeter contacts and decide push-vs-grasp
+				var gx = pos.x / size - 1;
+				var gy = pos.z / size - 1;
+				var samples = 24;
+				var contactCount = 0, totalPen = 0;
+				var cWX = 0, cWZ = 0;
+				var hasL = false, hasR = false, hasF = false, hasB = false;
+				var contactA = [];
+				var contactPen = [];
+				for ( var s = 0; s < samples; s ++ ) {
+					var a = ( s / samples ) * Math.PI * 2;
+					var cosA = Math.cos( a ), sinA = Math.sin( a );
+					var hW = sampleHeight( gx + cosA * rCells, gy + sinA * rCells ) * size;
+					var pen = hW - pos.y;
+					if ( pen > 0 ) {
+						contactCount ++;
+						totalPen += pen;
+						cWX += ( pos.x + cosA * ballRadius ) * pen;
+						cWZ += ( pos.z + sinA * ballRadius ) * pen;
+						if ( cosA > 0.3 ) hasR = true;
+						if ( cosA < - 0.3 ) hasL = true;
+						if ( sinA > 0.3 ) hasF = true;
+						if ( sinA < - 0.3 ) hasB = true;
+						contactA.push( a );
+						contactPen.push( pen );
+					}
+				}
+
+				var grasping = contactCount > 0 && ( ( hasL && hasR ) || ( hasF && hasB ) );
+				if ( grasping ) {
+					var cx = cWX / totalPen, cz = cWZ / totalPen;
+					if ( b.graspCx !== null ) {
+						var gvx = cx - b.graspCx, gvz = cz - b.graspCz;
+						b.vx = gvx * BALL_GRASP_FOLLOW + b.vx * ( 1 - BALL_GRASP_FOLLOW );
+						b.vz = gvz * BALL_GRASP_FOLLOW + b.vz * ( 1 - BALL_GRASP_FOLLOW );
+					}
+					b.graspCx = cx; b.graspCz = cz;
+				} else {
+					b.graspCx = null; b.graspCz = null;
+					for ( var k = 0; k < contactA.length; k ++ ) {
+						var imp = contactPen[ k ] * BALL_IMPACT_GAIN;
+						b.vx -= Math.cos( contactA[ k ] ) * imp;
+						b.vz -= Math.sin( contactA[ k ] ) * imp;
+					}
+				}
+
+				// (3) Air drag
+				b.vx *= BALL_AIR_DRAG;
+				b.vz *= BALL_AIR_DRAG;
+
+				// (4) Clamp total speed
+				var sp = Math.sqrt( b.vx * b.vx + b.vy * b.vy + b.vz * b.vz );
+				if ( sp > BALL_MAX_VEL ) {
+					var kk = BALL_MAX_VEL / sp;
+					b.vx *= kk; b.vy *= kk; b.vz *= kk;
+				}
+
+				// (5) Integrate
+				pos.x += b.vx;
+				pos.y += b.vy;
+				pos.z += b.vz;
+
+				// (6) Grid-edge walls
+				var minXZ = size + ballRadius * 0.5;
+				var maxXZ = sizeres - ballRadius * 0.5;
+				if ( pos.x < minXZ ) { pos.x = minXZ; b.vx = - b.vx * BALL_RESTITUTION; }
+				if ( pos.x > maxXZ ) { pos.x = maxXZ; b.vx = - b.vx * BALL_RESTITUTION; }
+				if ( pos.z < minXZ ) { pos.z = minXZ; b.vz = - b.vz * BALL_RESTITUTION; }
+				if ( pos.z > maxXZ ) { pos.z = maxXZ; b.vz = - b.vz * BALL_RESTITUTION; }
+
+				// (7) Terrain Y-collision
+				gx = pos.x / size - 1;
+				gy = pos.z / size - 1;
+				var requiredY = ballRadius;
+				var contactNormalX = 0, contactNormalZ = 0, contactNormalY = 1;
+				var N = 7;
+				for ( var i = 0; i < N; i ++ ) {
+					for ( var j = 0; j < N; j ++ ) {
+						var ux = ( i / ( N - 1 ) - 0.5 ) * 2;
+						var uz = ( j / ( N - 1 ) - 0.5 ) * 2;
+						var dxw = ux * ballRadius;
+						var dzw = uz * ballRadius;
+						var distSq = dxw * dxw + dzw * dzw;
+						if ( distSq > R2 ) continue;
+						var hW = sampleHeight( gx + dxw / size, gy + dzw / size ) * size;
+						var clearance = Math.sqrt( R2 - distSq );
+						var minCenterY = hW + clearance;
+						if ( minCenterY > requiredY ) {
+							requiredY = minCenterY;
+							var nLen = Math.sqrt( dxw * dxw + dzw * dzw + clearance * clearance ) || 1;
+							contactNormalX = - dxw / nLen;
+							contactNormalY = clearance / nLen;
+							contactNormalZ = - dzw / nLen;
+						}
+					}
+				}
+
+				if ( pos.y < requiredY ) {
+					pos.y = requiredY;
+					var vDotN = b.vx * contactNormalX + b.vy * contactNormalY + b.vz * contactNormalZ;
+					if ( vDotN < 0 ) {
+						b.vx -= ( 1 + BALL_RESTITUTION ) * vDotN * contactNormalX;
+						b.vy -= ( 1 + BALL_RESTITUTION ) * vDotN * contactNormalY;
+						b.vz -= ( 1 + BALL_RESTITUTION ) * vDotN * contactNormalZ;
+						if ( Math.abs( b.vy ) < BALL_REST_VEL ) b.vy = 0;
+					}
+					b.vx *= BALL_GROUND_FRICTION;
+					b.vz *= BALL_GROUND_FRICTION;
+				}
+			}
+
+		</script>
+
+		<script type="module">
+
+			import { FilesetResolver, PoseLandmarker, HandLandmarker }
+				from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+			const statusEl = document.getElementById( "camStatus" );
+			const video = document.getElementById( "cam" );
+			const MIRROR = false;           // selfie mirror — natural feel
+			const BASE_HEIGHT = 3.0;        // floor for any detected landmark (so curled fingers don't collapse)
+			const MAX_HEIGHT = 12;          // matches scale.y cap
+			const HAND_DEPTH_GAIN = 80;     // hand z range ~±0.15
+			const POSE_DEPTH_GAIN = 6;      // pose z range ~±1
+			const HAND_RADIUS = 1;          // stamp neighbours in grid cells
+			const FOREARM_FALLBACK_LEN = 0.18; // normalised image units past wrist
+
+			function depthHeight( z, gain ) {
+				return Math.min( MAX_HEIGHT, Math.max( BASE_HEIGHT, BASE_HEIGHT + ( - z ) * gain ) );
+			}
+
+			function setStatus( msg ) { statusEl.textContent = "camera: " + msg; }
+
+			async function pickCamera() {
+				// Permission first so labels populate
+				let temp = await navigator.mediaDevices.getUserMedia( { video: true } );
+				temp.getTracks().forEach( t => t.stop() );
+				const devices = await navigator.mediaDevices.enumerateDevices();
+				const cams = devices.filter( d => d.kind === "videoinput" );
+				const brio = cams.find( d => /brio/i.test( d.label ) );
+				const chosen = brio || cams[ 0 ];
+				const constraints = {
+					video: {
+						deviceId: chosen ? { exact: chosen.deviceId } : undefined,
+						width: { ideal: 1920 },
+						height: { ideal: 1080 },
+						frameRate: { ideal: 60 }
+					}
+				};
+				const stream = await navigator.mediaDevices.getUserMedia( constraints );
+				video.srcObject = stream;
+				await new Promise( r => { video.onloadedmetadata = () => { video.play(); r(); }; } );
+				setStatus( ( brio ? "BRIO" : ( chosen && chosen.label ) || "default" ) + " " + video.videoWidth + "x" + video.videoHeight );
+			}
+
+			async function loadModels() {
+				const vision = await FilesetResolver.forVisionTasks(
+					"https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+				);
+				const pose = await PoseLandmarker.createFromOptions( vision, {
+					baseOptions: {
+						// Full model — slower but much more accurate than lite
+						modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
+						delegate: "GPU"
+					},
+					runningMode: "VIDEO",
+					numPoses: 1,
+					minPoseDetectionConfidence: 0.6,
+					minPosePresenceConfidence: 0.6,
+					minTrackingConfidence: 0.6
+				} );
+				const hands = await HandLandmarker.createFromOptions( vision, {
+					baseOptions: {
+						modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+						delegate: "GPU"
+					},
+					runningMode: "VIDEO",
+					numHands: 2,
+					minHandDetectionConfidence: 0.6,
+					minHandPresenceConfidence: 0.6,
+					minTrackingConfidence: 0.6
+				} );
+				return { pose, hands };
+			}
+
+			function stampCell( buffer, res, gx, gy, h ) {
+				if ( gx < 0 || gx >= res || gy < 0 || gy >= res ) return;
+				const i = gx + gy * res;
+				if ( buffer[ i ] < h ) buffer[ i ] = h;
+			}
+
+			function stampPoint( buffer, res, nx, ny, h, radius ) {
+				const x = MIRROR ? ( 1 - nx ) : nx;
+				const gx = Math.floor( x * res );
+				const gy = Math.floor( ny * res );
+				for ( let dy = - radius; dy <= radius; dy ++ ) {
+					for ( let dx = - radius; dx <= radius; dx ++ ) {
+						if ( dx * dx + dy * dy > radius * radius ) continue;
+						stampCell( buffer, res, gx + dx, gy + dy, h );
+					}
+				}
+			}
+
+			function stampLine( buffer, res, ax, ay, bx, by, h1, h2, radius ) {
+				const dx = ( bx - ax ), dy = ( by - ay );
+				const steps = Math.max( 1, Math.ceil( Math.hypot( dx * res, dy * res ) ) );
+				for ( let i = 0; i <= steps; i ++ ) {
+					const t = i / steps;
+					const h = h1 + ( h2 - h1 ) * t;
+					stampPoint( buffer, res, ax + dx * t, ay + dy * t, h, radius );
+				}
+			}
+
+			let lastTs = - 1;
+			const SMOOTH = 0.55; // 0=raw (jittery), 1=frozen. 0.55 ~ 4-frame lowpass at 60fps.
+			const smoothed = { pose: null, handsByLabel: {} };
+
+			function smoothLandmarks( prev, next ) {
+				if ( ! prev || prev.length !== next.length ) return next.map( p => ( { x: p.x, y: p.y, z: p.z, visibility: p.visibility } ) );
+				for ( let i = 0; i < next.length; i ++ ) {
+					prev[ i ].x = prev[ i ].x * SMOOTH + next[ i ].x * ( 1 - SMOOTH );
+					prev[ i ].y = prev[ i ].y * SMOOTH + next[ i ].y * ( 1 - SMOOTH );
+					prev[ i ].z = prev[ i ].z * SMOOTH + next[ i ].z * ( 1 - SMOOTH );
+					prev[ i ].visibility = next[ i ].visibility;
+				}
+				return prev;
+			}
+
+			function stamp( buffer, res ) {
+				if ( ! tracker.pose || ! tracker.hands || video.readyState < 2 ) return;
+				let ts = performance.now();
+				if ( ts <= lastTs ) ts = lastTs + 1;
+				lastTs = ts;
+
+				let poseRes, handRes;
+				try { poseRes = tracker.pose.detectForVideo( video, ts ); } catch ( e ) {}
+				try { handRes = tracker.hands.detectForVideo( video, ts ); } catch ( e ) {}
+
+				// Smooth pose landmarks
+				if ( poseRes && poseRes.landmarks && poseRes.landmarks[ 0 ] ) {
+					smoothed.pose = smoothLandmarks( smoothed.pose, poseRes.landmarks[ 0 ] );
+					poseRes.landmarks[ 0 ] = smoothed.pose;
+				} else {
+					smoothed.pose = null;
+				}
+
+				// Smooth hand landmarks by handedness label so L/R don't cross-contaminate
+				if ( handRes && handRes.landmarks ) {
+					const seen = {};
+					for ( let h = 0; h < handRes.landmarks.length; h ++ ) {
+						const label = ( handRes.handednesses && handRes.handednesses[ h ] && handRes.handednesses[ h ][ 0 ] )
+							? handRes.handednesses[ h ][ 0 ].categoryName : ( "h" + h );
+						smoothed.handsByLabel[ label ] = smoothLandmarks( smoothed.handsByLabel[ label ], handRes.landmarks[ h ] );
+						handRes.landmarks[ h ] = smoothed.handsByLabel[ label ];
+						seen[ label ] = true;
+					}
+					for ( const k in smoothed.handsByLabel ) if ( ! seen[ k ] ) delete smoothed.handsByLabel[ k ];
+				} else {
+					smoothed.handsByLabel = {};
+				}
+
+				let poseElbows = { L: null, R: null };
+
+				// Forearms from pose: L 13->15, R 14->16  (height from landmark depth)
+				if ( poseRes && poseRes.landmarks && poseRes.landmarks[ 0 ] ) {
+					const lm = poseRes.landmarks[ 0 ];
+					const visOK = p => p && ( p.visibility === undefined || p.visibility > 0.5 );
+					if ( visOK( lm[ 13 ] ) && visOK( lm[ 15 ] ) ) {
+						stampLine( buffer, res, lm[ 13 ].x, lm[ 13 ].y, lm[ 15 ].x, lm[ 15 ].y,
+							depthHeight( lm[ 13 ].z, POSE_DEPTH_GAIN ), depthHeight( lm[ 15 ].z, POSE_DEPTH_GAIN ), 1 );
+						poseElbows.L = lm[ 15 ];
+					}
+					if ( visOK( lm[ 14 ] ) && visOK( lm[ 16 ] ) ) {
+						stampLine( buffer, res, lm[ 14 ].x, lm[ 14 ].y, lm[ 16 ].x, lm[ 16 ].y,
+							depthHeight( lm[ 14 ].z, POSE_DEPTH_GAIN ), depthHeight( lm[ 16 ].z, POSE_DEPTH_GAIN ), 1 );
+						poseElbows.R = lm[ 16 ];
+					}
+				}
+
+				// Hands: stamp all 21 landmarks + fingertip-to-knuckle lines + wrist-extended forearm fallback
+				if ( handRes && handRes.landmarks ) {
+					for ( const hand of handRes.landmarks ) {
+						// palm + finger landmarks as filled dots
+						for ( const p of hand ) {
+							stampPoint( buffer, res, p.x, p.y, depthHeight( p.z, HAND_DEPTH_GAIN ), HAND_RADIUS );
+						}
+						// connect along fingers for solidity
+						const chains = [
+							[ 0, 1, 2, 3, 4 ],          // thumb
+							[ 0, 5, 6, 7, 8 ],          // index
+							[ 9, 10, 11, 12 ],          // middle (skip 0 dup)
+							[ 13, 14, 15, 16 ],         // ring
+							[ 0, 17, 18, 19, 20 ],      // pinky
+							[ 5, 9, 13, 17 ]            // knuckles
+						];
+						for ( const c of chains ) {
+							for ( let i = 0; i < c.length - 1; i ++ ) {
+								const a = hand[ c[ i ] ], b = hand[ c[ i + 1 ] ];
+								stampLine( buffer, res, a.x, a.y, b.x, b.y,
+									depthHeight( a.z, HAND_DEPTH_GAIN ), depthHeight( b.z, HAND_DEPTH_GAIN ), HAND_RADIUS );
+							}
+						}
+						// Forearm fallback: extend from wrist (0) opposite middle-MCP (9)
+						const wrist = hand[ 0 ], mcp = hand[ 9 ];
+						const vx = wrist.x - mcp.x, vy = wrist.y - mcp.y;
+						const len = Math.hypot( vx, vy ) || 1;
+						const ex = wrist.x + ( vx / len ) * FOREARM_FALLBACK_LEN;
+						const ey = wrist.y + ( vy / len ) * FOREARM_FALLBACK_LEN;
+						// Only fallback-stamp if pose didn't already cover a nearby wrist
+						const covered = ( poseElbows.L && Math.hypot( poseElbows.L.x - wrist.x, poseElbows.L.y - wrist.y ) < 0.1 )
+							|| ( poseElbows.R && Math.hypot( poseElbows.R.x - wrist.x, poseElbows.R.y - wrist.y ) < 0.1 );
+						if ( ! covered ) {
+							const wristH = depthHeight( wrist.z, HAND_DEPTH_GAIN );
+							stampLine( buffer, res, wrist.x, wrist.y, ex, ey, wristH, wristH * 0.6, 1 );
+						}
+					}
+				}
+			}
+
+			const tracker = window.tracker = { ready: false, pose: null, hands: null, stamp };
+
+			( async () => {
+				try {
+					setStatus( "requesting permission…" );
+					await pickCamera();
+					setStatus( statusEl.textContent.replace( "camera: ", "" ) + " — loading models…" );
+					const { pose, hands } = await loadModels();
+					tracker.pose = pose;
+					tracker.hands = hands;
+					tracker.ready = true;
+					setStatus( statusEl.textContent.replace( "camera: ", "" ).replace( " — loading models…", "" ) + " — tracking" );
+				} catch ( e ) {
+					console.error( e );
+					setStatus( "error: " + e.message );
+				}
+			} )();
+
+		</script>
+	</body>
+</html>

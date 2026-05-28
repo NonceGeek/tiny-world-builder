@@ -90,7 +90,6 @@ Validation:
 When `landscapeMeshMode` is active (procedural Canyon landscape style):
 - **Clipped Diorama**: If the user has not panned the camera yet, the landscape is clipped strictly to the home board (`GRID` size) to present a clean, sliced diorama look.
 - **Dynamic Panning**: Unlike standard mode (which clamps camera panning to the home board), landscape mode allows the camera to pan freely.
-- **Dynamic Clip Bounds**: On the first camera pan, `hasUserPanned` is set to `true`, and the landscape clipping radius expands to `renderVisibleSize` (up to 48x48) and centers on the camera target. This allows continuous terrain chunks to generate and "paint in" dynamically as the user explores the surrounding landscape, while the 8x8 home grid remains centered and intact.
+- **Dynamic Clip Bounds**: On the first camera pan, `hasUserPanned` is set to `true`, and the landscape clipping radius expands to `renderVisibleSize` within the 20x20 home-board cap and centers on the camera target. This allows continuous terrain chunks to generate and "paint in" dynamically as the user explores the surrounding landscape, while the 8x8 home grid remains centered and intact.
 - **Reset to Diorama**: When a new scene is generated, loaded, or reset, `hasUserPanned` is reset to `false`, restoring the clean sliced diorama look centered on `0, 0` until the user starts panning again.
 - **Pixel Outline Clipping**: During normal/depth outline passes, the active clipping planes are copied to `pixelState.normalMaterial.clippingPlanes` to prevent out-of-bounds clipped mesh segments from rendering outline "ghosts".
-

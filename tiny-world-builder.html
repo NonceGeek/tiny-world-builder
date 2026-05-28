@@ -4439,6 +4439,28 @@
     to { transform: translate3d(4%, 2%, 0); }
   }
 
+  #under-occlusion-cloud-wipe {
+    position: fixed;
+    left: -30vw;
+    top: 22vh;
+    width: 160vw;
+    height: 42vh;
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    filter: blur(6px);
+    will-change: opacity, transform;
+    transform: translate3d(-58vw, 0, 0) rotate(-4deg);
+    background:
+      radial-gradient(ellipse at 10% 52%, rgba(255,255,255,0.00) 0 16%, rgba(255,255,255,0.28) 22%, rgba(255,255,255,0.00) 40%),
+      radial-gradient(ellipse at 26% 44%, rgba(255,255,255,0.42) 0 13%, rgba(255,255,255,0.16) 28%, transparent 44%),
+      radial-gradient(ellipse at 43% 56%, rgba(255,255,255,0.50) 0 17%, rgba(255,255,255,0.15) 31%, transparent 50%),
+      radial-gradient(ellipse at 61% 43%, rgba(255,255,255,0.40) 0 14%, rgba(255,255,255,0.13) 28%, transparent 46%),
+      radial-gradient(ellipse at 78% 55%, rgba(255,255,255,0.32) 0 12%, rgba(255,255,255,0.11) 26%, transparent 42%),
+      linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.16) 22%, rgba(255,255,255,0.32) 50%, rgba(255,255,255,0.14) 76%, transparent 100%);
+  }
+
   /* -------- profile / saves -------- */
   .saves-list { list-style: none; padding: 0; margin: 10px 0 0; max-height: 300px; overflow-y: auto; }
   .saves-list li {
@@ -4668,55 +4690,13 @@
     document.documentElement.classList.toggle('ai-disabled', !enabled);
   }());
 
-  // Cluso is a local feedback tool only. Production hosts must not load or
-  // display it, even when the optional cluso/ files exist in a dev checkout.
-  (function () {
-    const host = window.location.hostname;
-    const isLocal = window.location.protocol === 'file:'
-      || host === 'localhost'
-      || host === '127.0.0.1'
-      || host === '[::1]'
-      || host.endsWith('.local');
-    if (!isLocal) return;
-    // On localhost, default to ON so the magnifying-glass inspector always
-    // appears for dev users. Users can still opt out via ?cluso=0 or by
-    // setting localStorage['tinyworld:features:cluso']='0'.
-    let enabled = true;
-    try {
-      const flag = window.__TWB_ENABLE_CLUSO__;
-      if (typeof flag === 'boolean') enabled = flag;
-      const qs = new URLSearchParams(window.location.search);
-      if (qs.get('cluso') === '1') enabled = true;
-      if (qs.get('cluso') === '0') enabled = false;
-      const stored = window.localStorage && window.localStorage.getItem('tinyworld:features:cluso');
-      if (stored === '1') enabled = true;
-      if (stored === '0') enabled = false;
-    } catch (_) {}
-    if (!enabled) return;
-    window.__CLUSO_EMBEDDED_CONFIG__ = {
-      defaultActive: false,
-      showToolbar: true,
-      hideCollapsedToolbar: false,
-      visibleControls: {
-        pause: true, markers: true, copy: true, send: true,
-        clear: true, settings: true, inspector: true, exit: true
-      }
-    };
-    const style = document.createElement('link');
-    style.rel = 'stylesheet';
-    style.href = 'cluso/cluso-embed.css';
-    document.head.appendChild(style);
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.src = 'cluso/cluso-embed.js';
-    document.head.appendChild(script);
-  }());
 </script>
 </head>
 <body>
   <div id="app"></div>
   <div id="root" style="position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;"></div>
   <div id="cloud-layer"></div>
+  <div id="under-occlusion-cloud-wipe" aria-hidden="true"></div>
   <div id="tod-tint" aria-hidden="true"></div>
 
   <!-- Minimap (top-down repaint of the home grid) -->
@@ -5588,39 +5568,8 @@
             </div>
           </section>
 
-          <section class="settings-panel" id="settings-panel-world" role="tabpanel" aria-labelledby="settings-tab-world" data-settings-panel="world" data-settings-keywords="world mechanics preview ghost terrain voxel landscape opacity distance window floors objects" hidden>
-            <div class="settings-section-title">Preview</div>
-            <div class="range-row">
-              <span>Preview distance</span>
-              <input id="render-distance" type="range" min="1" max="6" step="1" />
-              <output id="render-distance-value"></output>
-            </div>
-            <div class="range-row">
-              <span>Preview window</span>
-              <input id="render-visible-size" type="range" min="8" max="72" step="1" />
-              <output id="render-visible-size-value"></output>
-            </div>
-            <div class="range-row">
-              <span>Preview opacity</span>
-              <input id="render-ghost-opacity" type="range" min="5" max="100" step="1" />
-              <output id="render-ghost-opacity-value"></output>
-            </div>
-            <div class="range-row">
-              <span>Preview floors</span>
-              <input id="render-floor-opacity" type="range" min="10" max="100" step="1" />
-              <output id="render-floor-opacity-value"></output>
-            </div>
-            <div class="range-row">
-              <span>Preview objects</span>
-              <input id="render-object-opacity" type="range" min="0" max="100" step="1" />
-              <output id="render-object-opacity-value"></output>
-            </div>
+          <section class="settings-panel" id="settings-panel-world" role="tabpanel" aria-labelledby="settings-tab-world" data-settings-panel="world" data-settings-keywords="world mechanics terrain voxel landscape" hidden>
             <div class="settings-section-title">Terrain style</div>
-            <div class="range-row">
-              <span>Voxel gap</span>
-              <input id="render-voxel-gap" type="range" min="0" max="14" step="1" />
-              <output id="render-voxel-gap-value"></output>
-            </div>
             <div class="range-row">
               <span>Voxel bevel</span>
               <input id="render-voxel-bevel" type="range" min="0" max="0.06" step="0.001" />
@@ -5641,10 +5590,6 @@
             <label class="gen-check">
               <input type="checkbox" id="render-textured-grass" />
               <span>Cottage grass texture <em class="gen-hint">dense cottage-style grass blades instead of checkerboard</em></span>
-            </label>
-            <label class="gen-check">
-              <input type="checkbox" id="render-show-crowns" />
-              <span>Show crowns <em class="gen-hint">dense crowns on trees and rocks</em></span>
             </label>
             <label>Terrain voxel resolution
               <select id="render-terrain-voxel-resolution">
@@ -5745,6 +5690,10 @@
               <input id="render-cloud-shadow" type="range" min="0" max="100" step="1" />
               <output id="render-cloud-shadow-value"></output>
             </div>
+            <label class="gen-check" data-settings-keywords="planes aircraft crop duster banner flyover motion animation performance">
+              <input type="checkbox" id="render-planes-enabled" />
+              <span>Planes <em class="gen-hint">ambient flyovers and towed banners</em></span>
+            </label>
             <div class="range-row">
               <span>Undercloud width</span>
               <input id="render-undercloud-spread" type="range" min="70" max="220" step="1" />
@@ -6026,14 +5975,14 @@
 
   // -------- constants --------
   // GRID is the home board edge length. Mutable: the user can resize it
-  // from tiny 8×8 dioramas up to 48×48 worlds. Tiles outside the current
+  // from tiny 8×8 dioramas up to 20×20 worlds. Tiles outside the current
   // home grid are still tracked in world[][] (used by ghost boards and
   // export) but rendered grayscale; growing GRID brings those tiles into
   // the home area and rebuilds them in full colour.
   const HOME_GRID_DEFAULT = 8;
   const HOME_GRID_MIN = 8;
-  const HOME_GRID_MAX = 48;
-  const HOME_GRID_OPTIONS = [8, 12, 16, 20, 32, 48];
+  const HOME_GRID_MAX = 20;
+  const HOME_GRID_OPTIONS = [8, 12, 16, 20];
   const HOME_GRID_OPTION_SET = new Set(HOME_GRID_OPTIONS);
   let GRID = HOME_GRID_DEFAULT;
 
@@ -6180,6 +6129,7 @@
     cloudSpeed: 'tinyworld:render:cloudSpeed',
     cloudHeight: 'tinyworld:render:cloudHeight',
     cloudShadow: 'tinyworld:render:cloudShadow',
+    planesEnabled: 'tinyworld:render:planesEnabled',
     underCloudSpread: 'tinyworld:render:underCloudSpread',
     skyBlueDepth: 'tinyworld:render:skyBlueDepth',
     skyBlueSaturation: 'tinyworld:render:skyBlueSaturation',
@@ -6224,7 +6174,7 @@
     crowdEnabled: 'tinyworld:crowd:enabled',
     version: 'tinyworld:render:version',
   };
-  const RENDER_SETTINGS_VERSION = '22';
+  const RENDER_SETTINGS_VERSION = '23';
   const RENDER_DEFAULTS = {
     // Defaults tuned to keep image quality crisp while still trimming
     // a few cheap things off the per-frame budget.
@@ -6232,10 +6182,8 @@
     //     pixelated under DPR>1 — the visible "smoothing fails" issue).
     //   - shadow kept at 'balanced' (PCF filtering 1024 map).  'low'
     //     swaps in BasicShadowMap with no filtering → jagged dropouts.
-    //   - preview distance/window are auto-sized from GRID on first load and
-    //     whenever the board size changes. Small boards now default higher
-    //     (distance 3) and allow up to 4 rings so you can see more of the
-    //     world you've built when panning far ("where we've come from").
+    //   - preview/ghost boards are disabled by default; editable island
+    //     expansion should be explicit, not hidden render work.
     //   - clouds + cloudShadow trimmed because those are pure CPU/GPU saves
     //     with no aesthetic cost.
     //   - post-processing settings were removed in v14; colour sliders are
@@ -6250,12 +6198,13 @@
     frontFill: '0.46',
     sideFill: '0.36',
     backFill: '0.30',
-    visibleDistance: '2',
-    visibleSize: '8',
+    visibleDistance: '0',
+    visibleSize: '0',
     clouds: '0.4',
     cloudSpeed: '0.35',
     cloudHeight: '6',
     cloudShadow: '0',
+    planesEnabled: '0',
     underCloudSpread: '1.35',
     skyBlueDepth: '0.58',
     skyBlueSaturation: '1',
@@ -6264,13 +6213,14 @@
     backdropVignette: '0.24',
     tiltBlur: '1.0',
     tiltFocus: '65',
-    ghostOpacity: '1',
-    floorOpacity: '1',
-    objectOpacity: '1',
+    ghostOpacity: '0',
+    floorOpacity: '0',
+    objectOpacity: '0',
     voxelGap: '0',
     voxelBevel: '0.018',
     voxelTerrain: '1',
     texturedGrass: '1',
+    showCrowns: '0',
     surfaceLinkedMaterials: '1',
     terrainColors: '{}',
     terrainColorTarget: 'grass',
@@ -6315,6 +6265,14 @@
       'tinyworld:render:vignette',
       'tinyworld:render:warmth',
     ]) localStorage.removeItem(key);
+    localStorage.setItem(RENDER_LS.visibleDistance, '0');
+    localStorage.setItem(RENDER_LS.visibleSize, '0');
+    localStorage.setItem(RENDER_LS.ghostOpacity, '0');
+    localStorage.setItem(RENDER_LS.floorOpacity, '0');
+    localStorage.setItem(RENDER_LS.objectOpacity, '0');
+    localStorage.setItem(RENDER_LS.voxelGap, '0');
+    localStorage.setItem(RENDER_LS.showCrowns, '0');
+    localStorage.setItem(RENDER_LS.cloudShadow, '0');
   } catch (_) {}
 
   function storedNumber(key, fallback, min, max) {
@@ -6357,14 +6315,6 @@
   let renderBackFill = storedNumber(RENDER_LS.backFill, 0.38, 0, 1);
   function renderBudgetForGrid(grid) {
     const g = coerceGridSize(grid, GRID);
-    // 128+ boards are data-scale boards. Until ghost boards are truly
-    // chunked/windowed, do not build full GRID² preview boards around them.
-    if (g >= 256) return { maxDistance: 0, ghostRadius: 0, visibleScale: 1.0, homeWindowMin: 16, homeWindowMax: 32, queueCap: 32 };
-    if (g >= 128) return { maxDistance: 0, ghostRadius: 0, visibleScale: 1.0, homeWindowMin: 16, homeWindowMax: 32, queueCap: 32 };
-    if (g >= 96)  return { maxDistance: 0, ghostRadius: 0, visibleScale: 1.0, homeWindowMin: 16, homeWindowMax: 32, queueCap: 32 };
-    if (g >= 64)  return { maxDistance: 1, ghostRadius: 1, visibleScale: 1.05, homeWindowMin: 28, homeWindowMax: 96, queueCap: 96 };
-    if (g >= 48)  return { maxDistance: 1, ghostRadius: 1, visibleScale: 1.05, homeWindowMin: 22, homeWindowMax: 36, queueCap: 128 };
-    if (g >= 32)  return { maxDistance: 1, ghostRadius: 2, visibleScale: 1.08, homeWindowMin: 18, homeWindowMax: 26, queueCap: 128 };
     return { maxDistance: g <= 12 ? 4 : 2, ghostRadius: g <= 12 ? 4 : 2, visibleScale: 1.125, homeWindowMin: g, homeWindowMax: g, queueCap: 256 };
   }
 
@@ -6414,17 +6364,11 @@
   }
 
   function previewSettingsForGrid(grid, explored) {
-    const g = coerceGridSize(grid, GRID);
-    const budget = renderBudgetForGrid(g);
-    const distance = Math.min(budget.maxDistance, g <= 12 ? 3 : 2);
-    const visibleSize = explored ? maxRenderVisibleSizeForGrid(g) : g;
-    return { distance, visibleSize };
+    return { distance: 0, visibleSize: 0 };
   }
   const initialPreviewSettings = previewSettingsForGrid(GRID, false);
-  let renderVisibleDistance = Math.round(storedNumber(RENDER_LS.visibleDistance, initialPreviewSettings.distance, 0, maxRenderVisibleDistanceForGrid(GRID)));
-  // Visible-square size controls the surrounding Preview boards only; it must
-  // never be smaller than the editable home grid.
-  let renderVisibleSize = Math.max(GRID, Math.round(storedNumber(RENDER_LS.visibleSize, initialPreviewSettings.visibleSize, GRID, maxRenderVisibleSizeForGrid(GRID))));
+  let renderVisibleDistance = 0;
+  let renderVisibleSize = 0;
   if (renderSettingsReset) {
     renderVisibleDistance = initialPreviewSettings.distance;
     renderVisibleSize = initialPreviewSettings.visibleSize;
@@ -6435,23 +6379,18 @@
   }
   let hasUserPanned = false;
   function visibleSizeForExplorer() {
-    return previewSettingsForGrid(GRID, true).visibleSize;
+    return 0;
   }
   function expandVisibleSizeOnFirstMove() {
-    if (!renderAutoExpand && !isLandscapeMeshActive()) return false;
-    if (hasUserPanned) return false;
-    hasUserPanned = true;
-    renderVisibleSize = visibleSizeForExplorer();
-    try { localStorage.setItem(RENDER_LS.visibleSize, String(renderVisibleSize)); } catch (_) {}
-    if (typeof updateGhostRenderBubble === 'function') updateGhostRenderBubble();
-    return true;
+    return false;
   }
   let renderCloudAmount = storedNumber(RENDER_LS.clouds, 0.61, 0, 1);
   let renderCloudSpeed = storedNumber(RENDER_LS.cloudSpeed, 0.35, 0, 1);
   let renderCloudHeight = storedNumber(RENDER_LS.cloudHeight, 6, 2, 14);
   // Cloud shadow strength — controls per-puff alphaTest so only the
   // denser parts of each cloud cast on the world below.
-  let renderCloudShadow = storedNumber(RENDER_LS.cloudShadow, 0.5, 0, 1);
+  let renderCloudShadow = storedNumber(RENDER_LS.cloudShadow, 0, 0, 1);
+  let renderPlanesEnabled = localStorage.getItem(RENDER_LS.planesEnabled) === '1';
   let renderUnderCloudSpread = storedNumber(RENDER_LS.underCloudSpread, 1.35, 0.7, 2.2);
   let renderSkyBlueDepth = storedNumber(RENDER_LS.skyBlueDepth, 0.58, 0, 1);
   let renderSkyBlueSaturation = storedNumber(RENDER_LS.skyBlueSaturation, 1, 0.25, 2.2);
@@ -6465,18 +6404,18 @@
   let renderShaderAntialias = storedNumber(RENDER_LS.shaderAntialias, 0, 0, 1);
   let renderTiltBlur = storedNumber(RENDER_LS.tiltBlur, 1.0, 0, 18);
   let renderTiltFocus = storedNumber(RENDER_LS.tiltFocus, 65, 15, 80);
-  let renderGhostOpacity = storedNumber(RENDER_LS.ghostOpacity, 1, 0.05, 1);
-  let renderFloorOpacity = storedNumber(RENDER_LS.floorOpacity, 1, 0.10, 1);
-  let renderObjectOpacity = storedNumber(RENDER_LS.objectOpacity, 1, 0, 1);
-  let renderVoxelGap = storedNumber(RENDER_LS.voxelGap, 0, 0, 0.14);
+  let renderGhostOpacity = 0;
+  let renderFloorOpacity = 0;
+  let renderObjectOpacity = 0;
+  let renderVoxelGap = 0;
   let renderVoxelBevel = storedNumber(RENDER_LS.voxelBevel, parseFloat(RENDER_DEFAULTS.voxelBevel), 0, 0.06);
   let renderVoxelTerrain = localStorage.getItem(RENDER_LS.voxelTerrain) !== '0';
   let renderTexturedGrass = localStorage.getItem(RENDER_LS.texturedGrass) !== '0';
   let renderSurfaceLinkedMaterials = localStorage.getItem(RENDER_LS.surfaceLinkedMaterials) !== '0';
   let renderTerrainVoxelResolution = localStorage.getItem(RENDER_LS.terrainVoxelResolution) || 'mixed';
-  let showCrowns = localStorage.getItem(RENDER_LS.showCrowns) !== '0';
+  let showCrowns = false;
   if (!['mixed', '4', '6', '8', '12'].includes(renderTerrainVoxelResolution)) renderTerrainVoxelResolution = 'mixed';
-  if (!renderAutoExpand) renderVisibleSize = GRID;
+  if (!renderAutoExpand) renderVisibleSize = 0;
   function applyBackdropSettings() {
     const d = Math.max(0, Math.min(1, renderSkyBlueDepth || 0));
     const satMul = Math.max(0.25, Math.min(2.2, renderSkyBlueSaturation || 1));
@@ -6584,18 +6523,29 @@
   }
   applySkyBubbleSettings();
 
+  const DISTANCE_MIST_NEUTRAL = new THREE.Color(0xf2eee4);
+  const distanceMistFogColor = new THREE.Color();
+  function distanceMistFogHex(colorHex) {
+    const bgHex = Number.isFinite(colorHex)
+      ? colorHex
+      : (scene.background && scene.background.isColor ? scene.background.getHex() : 0xf4ede0);
+    const d = Math.max(0, Math.min(1, renderSkyBlueDepth || 0));
+    const satOver = Math.max(0, (renderSkyBlueSaturation || 1) - 1);
+    const neutralBlend = Math.max(0.56, Math.min(0.82, 0.62 + d * 0.08 + satOver * 0.12));
+    return distanceMistFogColor.setHex(bgHex).lerp(DISTANCE_MIST_NEUTRAL, neutralBlend).getHex();
+  }
+
   function applyDistanceMistSettings(colorHex) {
     const amount = Math.max(0, Math.min(2, renderDistanceMist || 0));
-    // Atmospheric perspective: fade distant scenery toward the live sky
-    // colour. This is a colour fade, not per-object opacity or ground mist.
+    // Atmospheric perspective: fade distant scenery toward a warm neutral
+    // haze derived from the live sky, not the fully saturated blue sky colour.
+    // This is a colour fade, not per-object opacity or ground mist.
     // AR needs transparent passthrough, not opaque scene fog.
     if (amount <= 0 || !scene.background) {
       scene.fog = null;
       return;
     }
-    const bgHex = Number.isFinite(colorHex)
-      ? colorHex
-      : (scene.background && scene.background.isColor ? scene.background.getHex() : 0xf4ede0);
+    const fogHex = distanceMistFogHex(colorHex);
     const camDistance = (typeof camera !== 'undefined' && camera && typeof target !== 'undefined')
       ? camera.position.distanceTo(target)
       : 48;
@@ -6603,7 +6553,7 @@
     const zoomFade = Math.max(0, Math.min(1, ((viewSize || DEFAULT_VIEW_SIZE) - DEFAULT_VIEW_SIZE * 1.55) / (DEFAULT_VIEW_SIZE * 2.2)));
     const near = camDistance + span * (0.24 + (1 - amount) * 0.64) - span * zoomFade * (0.72 + amount * 0.58);
     const far = camDistance + span * (1.08 + (1 - amount) * 1.05) - span * zoomFade * 0.16;
-    scene.fog = new THREE.Fog(bgHex, near, Math.max(near + span * 0.45, far));
+    scene.fog = new THREE.Fog(fogHex, near, Math.max(near + span * 0.45, far));
   }
 
   function setRenderResolutionScale(value) {
@@ -6613,8 +6563,7 @@
 
   var landscapeGhostBoardsSuppressed = false;
   function ghostBoardsEnabledForGrid() {
-    const suppressForLandscape = landscapeGhostBoardsSuppressed && isLandscapeMeshActive();
-    return !!renderAutoExpand && !suppressForLandscape && renderBudgetForGrid(GRID).ghostRadius > 0;
+    return false;
   }
 
   function clearGhostBoardsOnly() {
@@ -6637,20 +6586,14 @@
   }
 
   function setRenderVisibleDistance(value) {
-    renderVisibleDistance = Math.max(0, Math.min(maxRenderVisibleDistanceForGrid(GRID), Math.round(value)));
+    renderVisibleDistance = 0;
     syncGhostRenderBudget();
     invalidateHomeFade();
-    if (renderAutoExpand && typeof ensureGhostBoardsAroundTarget === 'function') ensureGhostBoardsAroundTarget();
   }
 
   function setRenderVisibleSize(value) {
-    renderVisibleSize = Math.max(GRID, Math.min(maxRenderVisibleSizeForGrid(GRID), Math.round(value)));
+    renderVisibleSize = 0;
     invalidateHomeFade();
-    if (typeof ensureGhostBoardsAroundTarget === 'function') ensureGhostBoardsAroundTarget();
-    // Zoom/window changes can force existing ghost boards to rebuild. Any
-    // rendered Preview board stays full-fidelity; large grids reduce rings
-    // through renderBudgetForGrid() rather than visible proxy geometry.
-    if (renderAutoExpand) reevaluateGhostDetailLevels();
   }
 
   function applyAutoPreviewSettingsForGrid(opts = {}) {
@@ -7035,8 +6978,258 @@
     pixelState.wantNormals = wantNormals;
   }
 
+  // -------- render culling --------
+  // Three.js frustum-culls meshes, but it does not know our scene-level
+  // occlusion rules: island top content is invisible from underneath, and
+  // full island/cell roots should leave both the camera and shadow passes when
+  // their board bounds are outside the active camera frustum.
+  const renderCullFrustum = new THREE.Frustum();
+  const renderCullMatrix = new THREE.Matrix4();
+  const renderCullBox = new THREE.Box3();
+  const renderCullIslandBox = new THREE.Box3();
+  const renderCullMin = new THREE.Vector3();
+  const renderCullMax = new THREE.Vector3();
+  const renderCullWorldPos = new THREE.Vector3();
+  const renderCullStats = { roots: 0, cells: 0, islands: 0, ghosts: 0, topHidden: 0 };
+  const underOcclusionCloudWipe = document.getElementById('under-occlusion-cloud-wipe');
+  let underOcclusionWipeOpacity = 0;
+  let underOcclusionWipeActive = 0;
+  let underOcclusionWipeDirection = 1;
+  let underOcclusionWipeLastPhase = null;
+  let underOcclusionWipeLastTime = 0;
+
+  function resetRenderCullStats() {
+    renderCullStats.roots = 0;
+    renderCullStats.cells = 0;
+    renderCullStats.islands = 0;
+    renderCullStats.ghosts = 0;
+    renderCullStats.topHidden = 0;
+  }
+
+  function renderCullSmoothstep(edge0, edge1, value) {
+    const t = Math.max(0, Math.min(1, (value - edge0) / Math.max(0.0001, edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  }
+
+  function renderCullTopContentOpacity(surfaceWorldY) {
+    return renderCullSmoothstep(-0.85, 0.45, camera.position.y - surfaceWorldY);
+  }
+
+  function renderCullTopContentVisible(surfaceWorldY) {
+    return renderCullTopContentOpacity(surfaceWorldY) > 0.001;
+  }
+
+  function topContentTransitionStrength(opacity) {
+    const t = Math.max(0, Math.min(1, opacity));
+    return Math.sin(t * Math.PI);
+  }
+
+  function updateUnderOcclusionCloudWipe(strength, phase) {
+    if (!underOcclusionCloudWipe) return;
+    const now = performance.now();
+    const dt = underOcclusionWipeLastTime ? Math.min(0.08, Math.max(0.001, (now - underOcclusionWipeLastTime) / 1000)) : 0.016;
+    underOcclusionWipeLastTime = now;
+    const nextPhase = Math.max(0, Math.min(1, phase));
+    const prevPhase = underOcclusionWipeLastPhase;
+    if (prevPhase !== null) {
+      const crossingDown = prevPhase < 0.42 && nextPhase >= 0.42;
+      const crossingUp = prevPhase > 0.58 && nextPhase <= 0.58;
+      if (strength > 0.20 && (crossingDown || crossingUp)) {
+        underOcclusionWipeActive = 1;
+        underOcclusionWipeDirection = crossingDown ? 1 : -1;
+      }
+    }
+    underOcclusionWipeLastPhase = nextPhase;
+    underOcclusionWipeActive = Math.max(0, underOcclusionWipeActive - dt * 2.4);
+    const progress = 1 - underOcclusionWipeActive;
+    const envelope = underOcclusionWipeActive > 0 ? Math.sin(progress * Math.PI) : 0;
+    const target = Math.max(0, Math.min(0.22, envelope * Math.max(0.35, strength) * 0.22));
+    underOcclusionWipeOpacity += (target - underOcclusionWipeOpacity) * 0.55;
+    if (underOcclusionWipeOpacity < 0.01 && underOcclusionWipeActive <= 0) {
+      underOcclusionWipeOpacity = 0;
+      underOcclusionCloudWipe.style.opacity = '0';
+      return;
+    }
+    const sweepProgress = underOcclusionWipeDirection > 0 ? progress : 1 - progress;
+    const sweep = -64 + Math.max(0, Math.min(1, sweepProgress)) * 128;
+    const bob = Math.sin(performance.now() * 0.0015 + azimuth) * 3.5;
+    underOcclusionCloudWipe.style.opacity = underOcclusionWipeOpacity.toFixed(3);
+    underOcclusionCloudWipe.style.transform = 'translate3d(' + sweep.toFixed(1) + 'vw, ' + bob.toFixed(1) + 'vh, 0) rotate(' + (-5 + polar * 2.4).toFixed(2) + 'deg)';
+  }
+
+  function renderCullBaseVisible(root) {
+    if (!root) return false;
+    const u = root.userData || {};
+    if (u.currentOpacity !== undefined && u.fadeRole) {
+      return displayOpacityForRole(root, u.currentOpacity, { ignoreRenderCull: true }) > 0.001;
+    }
+    if (u.renderCullActive && u.renderCullBaseVisible !== undefined) return !!u.renderCullBaseVisible;
+    return root.visible !== false;
+  }
+
+  function setRenderCullVisible(root, visible, baseVisible) {
+    if (!root) return;
+    const u = root.userData || (root.userData = {});
+    const base = baseVisible === undefined ? renderCullBaseVisible(root) : !!baseVisible;
+    const nextVisible = base && !!visible;
+    u.renderCullBaseVisible = base;
+    u.renderCullActive = base && !visible;
+    u.renderCullCulled = base && !visible;
+    root.visible = nextVisible;
+    if (u.renderCullCulled) renderCullStats.roots++;
+  }
+
+  function renderCullBoxVisible(minX, minY, minZ, maxX, maxY, maxZ, matrixWorld) {
+    renderCullMin.set(minX, minY, minZ);
+    renderCullMax.set(maxX, maxY, maxZ);
+    renderCullBox.set(renderCullMin, renderCullMax);
+    if (matrixWorld) renderCullBox.applyMatrix4(matrixWorld);
+    return renderCullFrustum.intersectsBox(renderCullBox);
+  }
+
+  function renderCullBoardVisible(boardX, boardZ, matrixWorld) {
+    const span = GRID * TILE;
+    const half = span * 0.5;
+    const pad = Math.max(1.25, span * 0.18);
+    const x = (boardX || 0) * GRID * TILE;
+    const z = (boardZ || 0) * GRID * TILE;
+    const depth = Math.max(8, span * 0.80);
+    const height = Math.max(10, span * 0.90);
+    return renderCullBoxVisible(
+      x - half - pad,
+      -depth,
+      z - half - pad,
+      x + half + pad,
+      height,
+      z + half + pad,
+      matrixWorld || worldGroup.matrixWorld,
+    );
+  }
+
+  function setRenderCullOpacity(root, opacity) {
+    if (!root || !root.userData || !root.userData.fadeRole) return;
+    const next = Math.max(0, Math.min(1, opacity));
+    const prev = root.userData.renderCullOpacity === undefined ? 1 : root.userData.renderCullOpacity;
+    if (Math.abs(prev - next) < 0.001) return;
+    if (next >= 0.999) delete root.userData.renderCullOpacity;
+    else root.userData.renderCullOpacity = next;
+    applyElementOpacity(root, root.userData.currentOpacity === undefined ? 1 : root.userData.currentOpacity);
+  }
+
+  function renderCullCellVisible(x, z) {
+    const display = cellDisplayPointForCell(x, z);
+    const cell = getWorldCell(x, z);
+    const floors = Math.max(cell.floors || 1, cell.terrainFloors || 1);
+    const radius = 0.92 + Math.max(0, floors - 1) * 0.10;
+    const below = Math.max(1.1, DIRT_H + 1.1);
+    const above = Math.max(2.4, floors * 0.86 + 1.25);
+    return renderCullBoxVisible(
+      display.x - radius,
+      display.y - below,
+      display.z - radius,
+      display.x + radius,
+      display.y + above,
+      display.z + radius,
+      xrWorldRoot.matrixWorld,
+    );
+  }
+
+  function updateSceneVisibilityForCamera() {
+    resetRenderCullStats();
+    camera.updateMatrixWorld(true);
+    worldGroup.updateMatrixWorld(true);
+    xrWorldRoot.updateMatrixWorld(true);
+    renderCullMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    renderCullFrustum.setFromProjectionMatrix(renderCullMatrix);
+
+    worldGroup.getWorldPosition(renderCullWorldPos);
+    const homeTopVisible = renderCullTopContentVisible(renderCullWorldPos.y);
+    const homeTopOpacity = renderCullTopContentOpacity(renderCullWorldPos.y);
+    let wipeStrength = topContentTransitionStrength(homeTopOpacity);
+    let wipePhase = 1 - homeTopOpacity;
+    const homeVisible = renderCullBoardVisible(0, 0);
+    if (homeBorderGroup) setRenderCullVisible(homeBorderGroup, homeVisible, true);
+
+    for (const key in cellMeshes) {
+      const entry = cellMeshes[key];
+      if (!entry) continue;
+      const x = Number.isFinite(entry.x) ? entry.x : parseInt(key.split(',')[0], 10);
+      const z = Number.isFinite(entry.z) ? entry.z : parseInt(key.split(',')[1], 10);
+      if (!Number.isFinite(x) || !Number.isFinite(z)) continue;
+      const island = editableIslandForWorldCell(x, z);
+      let topVisible = homeTopVisible;
+      let topOpacity = homeTopOpacity;
+      if (island && island.group) {
+        island.group.getWorldPosition(renderCullWorldPos);
+        topVisible = renderCullTopContentVisible(renderCullWorldPos.y);
+        topOpacity = renderCullTopContentOpacity(renderCullWorldPos.y);
+      }
+      const transitionStrength = topContentTransitionStrength(topOpacity);
+      if (transitionStrength > wipeStrength) {
+        wipeStrength = transitionStrength;
+        wipePhase = 1 - topOpacity;
+      }
+      if (topOpacity < 0.999) renderCullStats.topHidden++;
+      const visible = renderCullCellVisible(x, z);
+      if (!visible) renderCullStats.cells++;
+      setRenderCullVisible(entry.tile, visible);
+      setRenderCullOpacity(entry.object, topOpacity);
+      setRenderCullVisible(entry.object, visible && topVisible);
+      if (entry.extras) {
+        for (const extra of entry.extras) {
+          setRenderCullOpacity(extra, topOpacity);
+          setRenderCullVisible(extra, visible && topVisible);
+        }
+      }
+    }
+
+    if (typeof ghostBoards !== 'undefined') {
+      for (const board of ghostBoards.values()) {
+        const bx = board.userData && board.userData.boardX || 0;
+        const bz = board.userData && board.userData.boardZ || 0;
+        const visible = renderCullBoardVisible(bx, bz);
+        if (!visible) renderCullStats.ghosts++;
+        setRenderCullVisible(board, visible, true);
+      }
+    }
+
+    if (typeof editableIslands !== 'undefined') {
+      const span = GRID * TILE;
+      const half = span * 0.5;
+      const pad = Math.max(1.25, span * 0.18);
+      const depth = Math.max(8, span * 0.80);
+      const height = Math.max(10, span * 0.90);
+      renderCullBox.set(
+        renderCullMin.set(-half - pad, -depth, -half - pad),
+        renderCullMax.set( half + pad,  height,  half + pad),
+      );
+      for (const island of editableIslands) {
+        if (!island || !island.group) continue;
+        island.group.updateMatrixWorld(true);
+        renderCullIslandBox.copy(renderCullBox).applyMatrix4(island.group.matrixWorld);
+        const visible = renderCullFrustum.intersectsBox(renderCullIslandBox);
+        const lod = island.lod || 'hidden';
+        island.group.getWorldPosition(renderCullWorldPos);
+        const topOpacity = renderCullTopContentOpacity(renderCullWorldPos.y);
+        const transitionStrength = topContentTransitionStrength(topOpacity);
+        if (transitionStrength > wipeStrength) {
+          wipeStrength = transitionStrength;
+          wipePhase = 1 - topOpacity;
+        }
+        if (!visible) renderCullStats.islands++;
+        setRenderCullVisible(island.group, visible, lod !== 'hidden');
+        setRenderCullVisible(island.baseGroup, visible && lod === 'full', lod === 'full');
+        setRenderCullVisible(island.contentGroup, visible && lod === 'full', lod === 'full');
+        setRenderCullVisible(island.proxyGroup, visible && lod === 'proxy', lod === 'proxy');
+        if (topOpacity < 0.999 && lod === 'full') renderCullStats.topHidden++;
+      }
+    }
+    updateUnderOcclusionCloudWipe(wipeStrength, wipePhase);
+  }
+
   function renderScene() {
     renderer.info.reset();
+    updateSceneVisibilityForCamera();
     const xrPresenting = renderer.xr && renderer.xr.isPresenting;
     const usePixelation = renderPixelSize > 1 && !xrPresenting;
     const useShaderAA = renderShaderAntialias > 0.001 && !xrPresenting;
@@ -7141,6 +7334,7 @@
     const programs = (renderer.info.programs && renderer.info.programs.length) || 0;
     const ghostQueue = (typeof pendingGhostBoards !== 'undefined') ? pendingGhostBoards.length : 0;
     const islandStats = (typeof editableIslandPerfStats === 'function') ? editableIslandPerfStats() : null;
+    const cellMeshCount = Object.keys(cellMeshes).length;
     const repaintLines = formatRepaintProfileLines(now);
     statsOverlay.textContent =
       'fps     ' + fps.toFixed(1) + '\n' +
@@ -7151,10 +7345,15 @@
       'mats    ' + (typeof fadeMatCache !== 'undefined' ? fadeMatCache.size : '-') + '\n' +
       'progs   ' + programs + '\n' +
       'texs    ' + m.textures + '\n' +
+      'culled  ' + (renderCullStats.roots || 0) +
+        ' c' + (renderCullStats.cells || 0) +
+        '/i' + (renderCullStats.islands || 0) +
+        '/g' + (renderCullStats.ghosts || 0) +
+        (renderCullStats.topHidden ? '/top' + renderCullStats.topHidden : '') + '\n' +
       'ghosts  ' + (typeof ghostBoards !== 'undefined' ? ghostBoards.size : 0) +
         (ghostQueue ? ' (+' + ghostQueue + ')' : '') + '\n' +
       'islands ' + (islandStats ? (islandStats.count + ' f' + islandStats.full + '/p' + islandStats.proxy + '/h' + islandStats.hidden + '/b' + islandStats.fullBudget) : '-') + '\n' +
-      'cells   ' + Object.keys(cellMeshes).length + '\n' +
+      'cells   ' + cellMeshCount + (renderCullStats.cells ? ' v' + Math.max(0, cellMeshCount - renderCullStats.cells) : '') + '\n' +
       'crops   ' + (typeof cropPositions !== 'undefined' ? cropPositions.size : 0) + '\n' +
       'maxPump ' + (typeof maxPumpkinPositions !== 'undefined' ? maxPumpkinPositions.size : 0) +
       (repaintLines ? '\n\n' + repaintLines : '');
@@ -7678,8 +7877,8 @@
     roofBlue:  new THREE.MeshLambertMaterial({ color: 0x2a6dd1 }),
     roofBlueD: new THREE.MeshLambertMaterial({ color: 0x1d4d9c }),
     boardSide:  new THREE.MeshLambertMaterial({ color: 0x8b8d88, side: THREE.FrontSide }),
-    islandUnder:  new THREE.MeshLambertMaterial({ color: 0x34373b, side: THREE.FrontSide }),
-    islandUnderD: new THREE.MeshLambertMaterial({ color: 0x202327, side: THREE.FrontSide }),
+    islandUnder:  new THREE.MeshLambertMaterial({ color: 0x34373b, side: THREE.DoubleSide }),
+    islandUnderD: new THREE.MeshLambertMaterial({ color: 0x202327, side: THREE.DoubleSide }),
     rocketSteel:  new THREE.MeshLambertMaterial({ color: 0x767d86, side: THREE.FrontSide }),
     rocketSteelD: new THREE.MeshLambertMaterial({ color: 0x2f353c, side: THREE.FrontSide }),
     utilityPipe:  new THREE.MeshLambertMaterial({ color: 0x6f7881, side: THREE.FrontSide }),
@@ -7749,6 +7948,20 @@
     hover:     new THREE.MeshBasicMaterial({ color: 0x2a2722, transparent: true, opacity: 0.18, depthWrite: false }),
     hoverErase:new THREE.MeshBasicMaterial({ color: 0xb84838, transparent: true, opacity: 0.28, depthWrite: false }),
   };
+
+  const islandShellMaterialCache = new Map();
+  function islandShellMaterial(baseMat) {
+    if (!baseMat || baseMat.side === THREE.DoubleSide) return baseMat;
+    const key = baseMat.uuid;
+    let hit = islandShellMaterialCache.get(key);
+    if (hit) return hit;
+    const mat = baseMat.clone();
+    mat.side = THREE.DoubleSide;
+    mat.userData = mat.userData || {};
+    mat.userData.islandShellMaterial = true;
+    islandShellMaterialCache.set(key, mat);
+    return mat;
+  }
 
   // -------- procedural pixel-art textures --------
   function createPixelTexture(type, scale = 16) {
@@ -10446,6 +10659,7 @@
     g.userData.weatherSurfaceY = topY + WEATHER_SURFACE_PAD;
 
     const skipTerrain = !!(opts && opts.skipTerrain);
+    const useVoxelTerrainForTile = renderVoxelTerrain && !(opts && opts.simpleTerrain);
 
     // Dirt / riser block (sides + bottom of tile).
     // For grass we *always* use a simple vertical brown dirt wall (BoxGeometry
@@ -10475,7 +10689,7 @@
       const hasVisibleRiser = !(skipE && skipW && skipS && skipN);
       if (hasVisibleRiser) {
         const riserMat = terrainRiserMaterial(terrain);
-        if (renderVoxelTerrain) {
+        if (useVoxelTerrainForTile) {
           addVoxelTerrainRiserBacking(g, terrain, riserSize, DIRT_H + rise + positiveTerrainOffset, {
             e: skipE,
             w: skipW,
@@ -10515,7 +10729,7 @@
       // still read as full panels aligned to the board grid.
       const seamOverlap = 0.006;
       const topHeight = TOP_H + seamOverlap;
-      if (renderVoxelTerrain) {
+      if (useVoxelTerrainForTile) {
         addVoxelTerrainTop(g, terrain, x, z, visualRise - seamOverlap * 0.5, topSize, topHeight, pathN, terrainN, {
           e: skipE,
           w: skipW,
@@ -10581,7 +10795,16 @@
     // water insets, path trim bands, pavers, and scuffs) became visible as
     // chunky rectangular panels under pixel rendering.
 
-    castReceive(g);
+    if (opts && opts.simpleTerrain) {
+      g.traverse(c => {
+        if (!c.isMesh) return;
+        c.castShadow = false;
+        c.receiveShadow = !(c.userData && c.userData.noShadow);
+        c.frustumCulled = true;
+      });
+    } else {
+      castReceive(g);
+    }
     return g;
   }
 
@@ -14208,7 +14431,10 @@
     const gh = Math.max(0.006, h - gap);
     const gd = Math.max(0.006, d - gap);
     const bevel = opts.noBevel ? 0 : (renderVoxelBevel || 0);
-    const geo = getVoxelBoxGeometry(gw, gh, gd, bevel);
+    const hasHiddenFaces = opts.skipTop || opts.skipBottom || opts.skipPX || opts.skipNX || opts.skipPZ || opts.skipNZ;
+    const geo = hasHiddenFaces
+      ? getOpenBoxGeometry(gw, gh, gd, opts.skipTop, opts.skipBottom, opts.skipPX, opts.skipNX, opts.skipPZ, opts.skipNZ)
+      : getVoxelBoxGeometry(gw, gh, gd, bevel);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x || 0, y || h / 2, z || 0);
     if (opts.ry) mesh.rotation.y = opts.ry;
@@ -14303,6 +14529,159 @@
     return root;
   }
 
+  function canMergeStaticBaseMesh(mesh) {
+    if (!mesh || !mesh.isMesh || !mesh.geometry || !mesh.material || Array.isArray(mesh.material)) return false;
+    if (mesh.material.transparent) return false;
+    const u = mesh.userData || {};
+    if (
+      u.noBatch ||
+      u.noStaticBaseMerge ||
+      u.waterfall ||
+      u.weatherFx ||
+      u.rocketPlumeSheet ||
+      u.rocketFlame ||
+      u.propellerBlurDisc
+    ) return false;
+    let n = mesh;
+    while (n) {
+      const data = n.userData || {};
+      if (
+        data.noStaticBaseMerge ||
+        data.isEditableIslandEnginePropeller ||
+        data.propellerBlurDisc ||
+        data.editableIslandEngineId
+      ) return false;
+      n = n.parent;
+    }
+    return true;
+  }
+
+  function appendGeometryTriangles(target, geometry, matrix) {
+    const posAttr = geometry && geometry.attributes && geometry.attributes.position;
+    if (!posAttr) return 0;
+    const normalAttr = geometry.attributes.normal;
+    const uvAttr = geometry.attributes.uv;
+    const indexAttr = geometry.index;
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(matrix);
+    const p = new THREE.Vector3();
+    const n = new THREE.Vector3();
+    let vertices = 0;
+    const count = indexAttr ? indexAttr.count : posAttr.count;
+    for (let i = 0; i < count; i++) {
+      const idx = indexAttr ? indexAttr.getX(i) : i;
+      p.fromBufferAttribute(posAttr, idx).applyMatrix4(matrix);
+      target.positions.push(p.x, p.y, p.z);
+      if (normalAttr) {
+        n.fromBufferAttribute(normalAttr, idx).applyMatrix3(normalMatrix).normalize();
+        target.normals.push(n.x, n.y, n.z);
+      } else {
+        target.normals.push(0, 1, 0);
+      }
+      if (uvAttr) target.uvs.push(uvAttr.getX(idx), uvAttr.getY(idx));
+      else target.uvs.push(0, 0);
+      vertices++;
+    }
+    return Math.floor(vertices / 3);
+  }
+
+  function mergeStaticBaseMeshesByMaterial(root, opts = {}) {
+    if (!root || !root.traverse) return root;
+    root.updateMatrixWorld(true);
+    const rootInverse = new THREE.Matrix4().copy(root.matrixWorld).invert();
+    const sources = [];
+    root.traverse(node => {
+      if (!canMergeStaticBaseMesh(node)) return;
+      sources.push(node);
+    });
+    if (sources.length < Math.max(2, opts.minMeshes || 2)) return root;
+
+    const buckets = new Map();
+    function bucketFor(mesh) {
+      const mat = mesh.material;
+      const key = [
+        mat.uuid,
+        mesh.castShadow ? 1 : 0,
+        mesh.receiveShadow ? 1 : 0,
+        mesh.frustumCulled ? 1 : 0,
+      ].join('|');
+      if (!buckets.has(key)) {
+        buckets.set(key, {
+          material: mat,
+          castShadow: mesh.castShadow,
+          receiveShadow: mesh.receiveShadow,
+          frustumCulled: mesh.frustumCulled,
+          positions: [],
+          normals: [],
+          uvs: [],
+          meshes: 0,
+          triangles: 0,
+        });
+      }
+      return buckets.get(key);
+    }
+
+    const instanceMatrix = new THREE.Matrix4();
+    const meshLocal = new THREE.Matrix4();
+    const combined = new THREE.Matrix4();
+    for (const mesh of sources) {
+      const bucket = bucketFor(mesh);
+      if (mesh.isInstancedMesh) {
+        const count = Math.max(0, mesh.count || 0);
+        for (let i = 0; i < count; i++) {
+          mesh.getMatrixAt(i, instanceMatrix);
+          meshLocal.multiplyMatrices(mesh.matrixWorld, instanceMatrix);
+          combined.multiplyMatrices(rootInverse, meshLocal);
+          bucket.triangles += appendGeometryTriangles(bucket, mesh.geometry, combined);
+        }
+      } else {
+        combined.multiplyMatrices(rootInverse, mesh.matrixWorld);
+        bucket.triangles += appendGeometryTriangles(bucket, mesh.geometry, combined);
+      }
+      bucket.meshes++;
+    }
+
+    let mergedMeshes = 0;
+    let mergedSources = 0;
+    let mergedTriangles = 0;
+    for (const bucket of buckets.values()) {
+      if (!bucket.positions.length) continue;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(bucket.positions, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(bucket.normals, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(bucket.uvs, 2));
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      const merged = new THREE.Mesh(geo, bucket.material);
+      merged.name = 'merged_static_base_' + (opts.reason || 'island');
+      merged.castShadow = bucket.castShadow;
+      merged.receiveShadow = bucket.receiveShadow;
+      merged.frustumCulled = bucket.frustumCulled;
+      merged.userData = {
+        staticBaseMerged: true,
+        mergeReason: opts.reason || 'island-base',
+        sourceMeshes: bucket.meshes,
+        triangles: bucket.triangles,
+      };
+      root.add(merged);
+      mergedMeshes++;
+      mergedSources += bucket.meshes;
+      mergedTriangles += bucket.triangles;
+    }
+
+    if (!mergedMeshes) return root;
+    for (const mesh of sources) {
+      if (mesh.parent) mesh.parent.remove(mesh);
+    }
+    root.userData = root.userData || {};
+    root.userData.staticBaseMergeStats = {
+      sourceMeshes: mergedSources,
+      mergedMeshes,
+      triangles: mergedTriangles,
+      reason: opts.reason || 'island-base',
+    };
+    return root;
+  }
+
   function voxelWindow(parent, x, y, z, face = 'z', mat = M.windowB) {
     if (face === 'x') {
       vbox(parent, 0.034, 0.19, 0.17, x, y, z, M.woodTrim);
@@ -14357,9 +14736,9 @@
       const d = Math.max(0.36, depth * (1 - t * 0.78));
       const y = topY - i * yStep - layerH * 0.5;
       const mat = i % 3 === 0 ? trimMat : roofMat;
-      vbox(parent, w, layerH, d, 0, y, 0, mat, { noGap: true });
+      vbox(parent, w, layerH, d, 0, y, 0, mat, { noGap: true, skipTop: true });
     }
-    vbox(parent, Math.max(0.30, width * 0.10), layerH * 1.1, Math.max(0.30, depth * 0.10), 0, topY - totalDrop - layerH * 0.55, 0, trimMat, { noGap: true });
+    vbox(parent, Math.max(0.30, width * 0.10), layerH * 1.1, Math.max(0.30, depth * 0.10), 0, topY - totalDrop - layerH * 0.55, 0, trimMat, { noGap: true, skipTop: true });
   }
 
   function makeBlankIsland() {
@@ -14374,7 +14753,7 @@
     vbox(g, width + 0.08, 0.055, 0.10, 0, grassH * 0.72,  depth * 0.5, M.grassEdge, { noGap: true, noBevel: true });
     vbox(g, 0.10, 0.055, depth + 0.08, -width * 0.5, grassH * 0.72, 0, M.grassEdge, { noGap: true, noBevel: true });
     vbox(g, 0.10, 0.055, depth + 0.08,  width * 0.5, grassH * 0.72, 0, M.grassEdge, { noGap: true, noBevel: true });
-    vbox(g, width * 0.94, dirtH, depth * 0.94, 0, -dirtH * 0.5, 0, M.dirtRich, { noGap: true });
+    vbox(g, width * 0.94, dirtH, depth * 0.94, 0, -dirtH * 0.5, 0, M.dirtRich, { noGap: true, skipTop: true });
     voxelInvertedSteppedRoof(g, width * 0.86, depth * 0.86, -dirtH - 0.02, M.islandUnder, M.islandUnderD);
     const tuftMat = M.grassHi;
     for (let i = 0; i < 10; i++) {
@@ -16016,7 +16395,7 @@
 
   // Keep world sparse. getWorldCell()/ensureWorldCell() provide virtual
   // default grass cells, which avoids allocating HOME_GRID_MAX² default
-  // objects at startup when HOME_GRID_MAX is 512.
+  // objects at startup as the home board cap changes.
 
   const MAX_FLOORS = 8;
 
@@ -16126,12 +16505,7 @@
     return TOP_H + terrainRiseAt(Math.round(x), Math.round(z));
   }
 
-  function vehicleVisualScaleForGrid(grid = GRID) {
-    const g = coerceGridSize(grid, GRID);
-    if (g >= 256) return 0.40;
-    if (g >= 128) return 0.355;
-    if (g >= 64) return 0.31;
-    if (g >= 32) return 0.28;
+  function vehicleVisualScaleForGrid() {
     return 0.25;
   }
 
@@ -16764,10 +17138,10 @@
 
   // -------- seeded vehicle demo --------
   const VEHICLE_DEMO_DEFAULT_SEED = 'tide-ridge-428';
-  const VEHICLE_DEMO_LARGE_SEED = 'metro-culdesac-48';
-  const VEHICLE_DEMO_LARGE_SIZE_DEFAULT = 48;
+  const VEHICLE_DEMO_LARGE_SEED = 'metro-culdesac-20';
+  const VEHICLE_DEMO_LARGE_SIZE_DEFAULT = 20;
   const VEHICLE_DEMO_LARGE_SIZE_MIN = 12;
-  const VEHICLE_DEMO_LARGE_SIZE_MAX = 48;
+  const VEHICLE_DEMO_LARGE_SIZE_MAX = 20;
   const VEHICLE_DEMO_LARGE_CARS_DEFAULT = 36;
   const VEHICLE_DEMO_LARGE_CARS_MAX = 120;
   const vehicleDemoTimers = [];
@@ -18492,7 +18866,7 @@
     // Delta queue update for common small movements (1-2 tiles):
     // Instead of rebuilding the entire queue + full sort every frame,
     // only add the newly visible cells on the far side of the movement.
-    // This keeps panning on 96-256 grids much lighter.
+    // This keeps panning on busier grids much lighter.
     const movementX = nextBounds.cx - (oldBounds ? oldBounds.cx : nextBounds.cx);
     const movementZ = nextBounds.cz - (oldBounds ? oldBounds.cz : nextBounds.cz);
 
@@ -18654,6 +19028,14 @@
     return !!(world[x] && world[x][z] && world[x][z].userEdited);
   }
 
+  function shouldUseSimpleFlatGrassTile(x, z, cell) {
+    if (isLandscapeMeshActive()) return false;
+    if (!cell || cell.terrain !== 'grass' || cell.kind || (cell.extras && cell.extras.length)) return false;
+    if (terrainLevelForCell(cell) !== 1) return false;
+    if (cell.appearance || cell.waterFlow && cell.waterFlow !== 'auto') return false;
+    return true;
+  }
+
   // -------- distant world dressing --------
   const distantWorldGroup = new THREE.Group();
   distantWorldGroup.name = 'distant-worlds';
@@ -18731,8 +19113,13 @@
     cloud.position.set(0.4, 2.0 + cellRand(seed, GRID, 2530) * 0.5, -0.9);
     cloud.scale.set(0.72, 0.44, 0.58);
     g.add(cloud);
-    g.traverse(o => { if (o.isMesh) o.raycast = function () {}; });
-    castReceive(g);
+    g.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = false;
+        o.receiveShadow = false;
+        o.raycast = function () {};
+      }
+    });
     return g;
   }
 
@@ -18762,6 +19149,32 @@
       w.scale.setScalar(p.s);
       distantWorldGroup.add(w);
     });
+    mergeStaticBaseMeshesByMaterial(distantWorldGroup, { reason: 'distant-worlds' });
+    distantWorldGroup.traverse(o => {
+      if (!o.isMesh) return;
+      o.castShadow = false;
+      o.receiveShadow = false;
+      o.frustumCulled = true;
+      o.raycast = function () {};
+    });
+  }
+
+  function addIslandSideBacking(parent) {
+    const span = GRID * TILE;
+    const half = span * 0.5;
+    const thickness = 0.16;
+    const inset = thickness * 0.5 + 0.035;
+    const wallH = DIRT_H + 0.035;
+    const y = -DIRT_H * 0.5 - 0.018;
+    const mat = islandShellMaterial(M.boardSide);
+    const north = vbox(parent, span, wallH, thickness, 0, y, -half + inset, mat, { noGap: true, noBevel: true, noShadow: true, skipTop: true, skipBottom: true });
+    const south = vbox(parent, span, wallH, thickness, 0, y,  half - inset, mat, { noGap: true, noBevel: true, noShadow: true, skipTop: true, skipBottom: true });
+    const west  = vbox(parent, thickness, wallH, span, -half + inset, y, 0, mat, { noGap: true, noBevel: true, noShadow: true, skipTop: true, skipBottom: true });
+    const east  = vbox(parent, thickness, wallH, span,  half - inset, y, 0, mat, { noGap: true, noBevel: true, noShadow: true, skipTop: true, skipBottom: true });
+    for (const mesh of [north, south, west, east]) {
+      mesh.name = 'island-side-backing';
+      mesh.userData.islandSideBacking = true;
+    }
   }
 
   function addIslandEdgeDressing(parent) {
@@ -18955,7 +19368,9 @@
         // without changing placement/editing fidelity.
         c.castShadow = false;
         c.receiveShadow = false;
-        c.frustumCulled = true;
+        // Scene-level island culling owns this group. Per-mesh frustum culling
+        // can clip the side/back faces at low or grazing camera angles.
+        c.frustumCulled = false;
       }
     });
     return obj;
@@ -18975,12 +19390,14 @@
       const c = homeBorderGroup.children.pop();
       disposeGroup(c);
     }
-    vbox(homeBorderGroup, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true });
+    vbox(homeBorderGroup, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true, skipTop: true });
     voxelInvertedSteppedRoof(homeBorderGroup, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
+    addIslandSideBacking(homeBorderGroup);
     addIslandUtilityUnderside(homeBorderGroup);
     addIslandRocketEngines(homeBorderGroup);
     addIslandEdgeDressing(homeBorderGroup);
     optimizeVoxelObjectGroup(homeBorderGroup, { reason: 'home-island-border' });
+    mergeStaticBaseMeshesByMaterial(homeBorderGroup, { reason: 'home-island-border' });
     buildIslandFrontBanner(homeBorderGroup);
     prepareHomeBorderForRender(homeBorderGroup);
     buildDistantWorlds();
@@ -19005,7 +19422,7 @@
   // if full boards are too expensive, renderBudgetForGrid() reduces rings.
   const cheapGhostTerrainBuckets = new Map(); // terrain -> { dirtMesh, topMesh, slots, keyAt, count }
   const revealedCheapCells = new Set();
-  const CHEAP_GHOST_CAPACITY = 65536; // 48×48 radius-2 preview worst case
+  const CHEAP_GHOST_CAPACITY = 65536; // generous ghost-preview pool
   let cheapGhostGeomDirt = null;
   let cheapGhostGeomTop = null;
 
@@ -19139,11 +19556,11 @@
       boardZ: island && island.boardZ,
     };
     const span = GRID * TILE;
-    const top = new THREE.Mesh(getOpenBoxGeometry(span, 0.12, span, false, true, false, false, false, false), M.grass);
+    const top = new THREE.Mesh(getOpenBoxGeometry(span, 0.12, span, false, true, false, false, false, false), islandShellMaterial(M.grass));
     top.position.y = 0.02;
-    const dirt = new THREE.Mesh(getOpenBoxGeometry(span * 0.98, 0.40, span * 0.98, true, true, false, false, false, false), M.dirtRich);
+    const dirt = new THREE.Mesh(getOpenBoxGeometry(span * 0.98, 0.40, span * 0.98, true, true, false, false, false, false), islandShellMaterial(M.dirtRich));
     dirt.position.y = -0.22;
-    const under = new THREE.Mesh(getOpenBoxGeometry(span * 0.78, 0.28, span * 0.78, true, true, false, false, false, false), M.islandUnderD);
+    const under = new THREE.Mesh(getOpenBoxGeometry(span * 0.78, 0.28, span * 0.78, true, true, false, false, false, false), islandShellMaterial(M.islandUnderD));
     under.position.y = -0.58;
     g.add(top, dirt, under);
     stampEditableIslandSurface(top, island);
@@ -19151,7 +19568,7 @@
       if (node.isMesh) {
         node.castShadow = false;
         node.receiveShadow = false;
-        node.frustumCulled = true;
+        node.frustumCulled = false;
       }
     });
     g.visible = false;
@@ -19175,12 +19592,14 @@
 
   function makeEditableIslandBase(island) {
     const g = new THREE.Group();
-    vbox(g, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true });
+    vbox(g, GRID * TILE, 0.10, GRID * TILE, 0, -DIRT_H - 0.055, 0, M.islandUnderD, { noGap: true, skipTop: true });
     voxelInvertedSteppedRoof(g, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
+    addIslandSideBacking(g);
     addIslandUtilityUnderside(g);
     addEditableIslandLiftEngines(g, island);
     addIslandEdgeDressing(g);
     optimizeVoxelObjectGroup(g, { reason: 'editable-island-base' });
+    mergeStaticBaseMeshesByMaterial(g, { reason: 'editable-island-base' });
     prepareHomeBorderForRender(g);
     return g;
   }
@@ -19945,7 +20364,10 @@
     const total = coerceIslandStressCount(count);
     stopSeededVehicleDemo({ clearVehicles: true });
     dismissWelcomeForDemo();
-    if (opts.clearExisting !== false) clearEditableIslands();
+    if (opts.clearExisting !== false) {
+      clearMooringCables();
+      clearEditableIslands();
+    }
     const cols = Math.max(5, Math.ceil(Math.sqrt(total)));
     const spacing = GRID * TILE + 2.4;
     const rows = Math.ceil(total / cols);
@@ -20353,12 +20775,13 @@
     return group;
   }
 
-  function displayOpacityForRole(root, opacity) {
+  function displayOpacityForRole(root, opacity, opts = {}) {
     if (opacity <= 0) return 0;
     const revealOpacity = Math.min(1, opacity);
-    if (!root.userData.preview) return revealOpacity;
+    const renderCullOpacity = opts.ignoreRenderCull ? 1 : (root.userData.renderCullOpacity === undefined ? 1 : root.userData.renderCullOpacity);
+    if (!root.userData.preview) return revealOpacity * renderCullOpacity;
     const roleOpacity = root.userData.fadeRole === 'tile' ? renderFloorOpacity : renderObjectOpacity;
-    return Math.min(1, revealOpacity * renderGhostOpacity * roleOpacity);
+    return Math.min(1, revealOpacity * renderGhostOpacity * roleOpacity * renderCullOpacity);
   }
 
   function applyElementOpacity(root, opacity) {
@@ -20504,9 +20927,8 @@
   }
 
   // Visibility model:
-  //  - Small home boards are always fully rendered. Large 32+ boards use
-  //    the render window as a lightweight visibility bubble so 48x48 worlds
-  //    don't keep thousands of far-away roots in the draw list.
+  //  - Home boards are capped at 20×20, but the render window still keeps
+  //    neighbouring ghost boards from filling the draw list.
   //  - Outside the home board, cells are revealed once they enter the
   //    visible square around the camera target — and stay revealed
   //    afterwards (the user keeps the breadcrumb trail behind them).
@@ -22007,11 +22429,12 @@
 
     const cell = getWorldCell(x, z);
     const makeStart = repaintProfileBegin();
+    const simpleTerrain = shouldUseSimpleFlatGrassTile(x, z, cell);
     const tile = makeTile(cell.terrain, {
       path: getPathNeighbors(x, z),
       terrain: getTerrainNeighbors(x, z),
       levels: getLevelNeighbors(x, z),
-    }, x, z, tileLevelForCell(cell));
+    }, x, z, tileLevelForCell(cell), { simpleTerrain });
     repaintProfileEnd('tile.make', makeStart);
 
     const p = cellRenderPositionForCell(x, z);
@@ -22652,6 +23075,8 @@
   // -------- initial scene (matches the reference image) --------
   function loadInitialScene() {
     twPerfMark('initial:start');
+    clearMooringCables();
+    clearEditableIslands();
     // Wipe any existing meshes + animation state so a Reset re-plays the drop.
     for (const key in cellMeshes) {
       const e = cellMeshes[key];
@@ -22686,7 +23111,7 @@
     layout['1,4'] = { terrain: 'grass', kind: 'house' };
     layout['2,4'] = { terrain: 'grass', kind: 'house' };
     layout['5,4'] = { terrain: 'grass', kind: 'house', buildingType: 'manor', floors: 2 };
-    layout['6,3'] = { terrain: 'grass', kind: 'house', buildingType: 'tower', floors: 5 };
+    layout['6,3'] = { terrain: 'grass', kind: 'house', buildingType: 'tower', floors: 3 };
 
     layout['0,0'] = { terrain: 'grass', kind: 'house', floors: 2 };
     layout['0,1'] = { terrain: 'grass', kind: 'fence' };
@@ -26724,7 +27149,7 @@
 
   function resetCameraDefaults() {
     // Scale the default view to the current home board so the whole
-    // grid sits inside the frame regardless of size (8 / 12 / 16 / 20 / 32 / 48).
+    // grid sits inside the frame regardless of size (8 / 12 / 16 / 20).
     viewSize = DEFAULT_VIEW_SIZE * (GRID / HOME_GRID_DEFAULT);
     azimuth = DEFAULT_AZIMUTH;
     polar = DEFAULT_POLAR;
@@ -26732,7 +27157,7 @@
     setCameraMode(DEFAULT_CAMERA_MODE);
   }
 
-  // Resize the home board between the allowed presets (8 through 48).
+  // Resize the home board between the allowed presets (8 through 20).
   // World data outside the previous board is preserved in world[][] —
   // growing the grid brings those tiles into the home area (so the
   // existing 'outside home' grayscale is no longer applied to them).
@@ -26773,6 +27198,9 @@
     } catch (_) {}
 
     GRID = n;
+    // Mooring anchors store local points against the current board and island
+    // surfaces, so a grid resize invalidates both existing cables and a pending pin.
+    clearMooringCables();
     initCellMeshesGrid();
     // Grid size changed — old index entries may be out of range or stale.
     // Subsequent setCell / load will repopulate via incremental updates or rebuild.
@@ -27082,7 +27510,15 @@
           terrainFloors: 1,
           kind: null,
           floors: 1,
+          buildingType: null,
+          fenceSide: null,
           extras: [], // also drop any decorative tufts / fences
+          rotationY: 0,
+          offsetX: 0,
+          offsetY: 0,
+          offsetZ: 0,
+          appearance: null,
+          waterFlow: 'auto',
           tileDelay: (x + z) * TILE_STAGGER,
           impactDust: false,
           forceTile: true,
@@ -27101,8 +27537,8 @@
     const settingsSearchStatus = document.getElementById('settings-search-status');
     const shadowEl = document.getElementById('render-shadow');
     const resolutionEl = document.getElementById('render-resolution');
-    const distanceEl = document.getElementById('render-distance');
-    const visibleSizeEl = document.getElementById('render-visible-size');
+    const distanceEl = null;
+    const visibleSizeEl = null;
     const homeGridEl = document.getElementById('render-home-grid');
     fillGridSizeSelect(homeGridEl);
     const brightnessEl = document.getElementById('render-brightness');
@@ -27117,6 +27553,7 @@
     const cloudSpeedEl = document.getElementById('render-cloud-speed');
     const cloudHeightEl = document.getElementById('render-cloud-height');
     const cloudShadowEl = document.getElementById('render-cloud-shadow');
+    const planesEnabledEl = document.getElementById('render-planes-enabled');
     const underCloudSpreadEl = document.getElementById('render-undercloud-spread');
     const skyBlueDepthEl = document.getElementById('render-sky-blue-depth');
     const skyBlueSaturationEl = document.getElementById('render-sky-blue-saturation');
@@ -27152,17 +27589,17 @@
     const crowdEnabledLiveEl = document.getElementById('crowd-enabled-live');
     const crowdReseedLiveEl = document.getElementById('crowd-reseed-live');
     const crowdDebugLiveEl = document.getElementById('crowd-debug-live');
-    const ghostOpacityEl = document.getElementById('render-ghost-opacity');
-    const floorOpacityEl = document.getElementById('render-floor-opacity');
-    const objectOpacityEl = document.getElementById('render-object-opacity');
-    const voxelGapEl = document.getElementById('render-voxel-gap');
+    const ghostOpacityEl = null;
+    const floorOpacityEl = null;
+    const objectOpacityEl = null;
+    const voxelGapEl = null;
     const voxelBevelEl = document.getElementById('render-voxel-bevel');
     const landscapeMeshContainer = document.getElementById('render-landscape-mesh-container');
     const landscapeMeshModeEl = document.getElementById('render-landscape-mesh-mode');
     const voxelTerrainEl = document.getElementById('render-voxel-terrain');
     const texturedGrassEl = document.getElementById('render-textured-grass');
     const surfaceLinkedMaterialsEl = document.getElementById('render-surface-linked-materials');
-    const showCrownsEl = document.getElementById('render-show-crowns');
+    const showCrownsEl = null;
     const terrainVoxelResolutionEl = document.getElementById('render-terrain-voxel-resolution');
     const terrainColorTargetEl = document.getElementById('render-terrain-color-target');
     const terrainTintEl = document.getElementById('render-terrain-tint');
@@ -27178,8 +27615,8 @@
     const materialResetEl = document.getElementById('render-material-reset');
     const materialWearEl = document.getElementById('render-material-wear');
     const resolutionValue = document.getElementById('render-resolution-value');
-    const distanceValue = document.getElementById('render-distance-value');
-    const visibleSizeValue = document.getElementById('render-visible-size-value');
+    const distanceValue = null;
+    const visibleSizeValue = null;
     const brightnessValue = document.getElementById('render-brightness-value');
     const lightingValue = document.getElementById('render-lighting-value');
     const ambientFillValue = document.getElementById('render-ambient-fill-value');
@@ -27204,10 +27641,10 @@
     const shaderAntialiasValue = document.getElementById('render-shader-antialias-value');
     const tiltBlurValue = document.getElementById('render-tilt-blur-value');
     const tiltFocusValue = document.getElementById('render-tilt-focus-value');
-    const ghostOpacityValue = document.getElementById('render-ghost-opacity-value');
-    const floorOpacityValue = document.getElementById('render-floor-opacity-value');
-    const objectOpacityValue = document.getElementById('render-object-opacity-value');
-    const voxelGapValue = document.getElementById('render-voxel-gap-value');
+    const ghostOpacityValue = null;
+    const floorOpacityValue = null;
+    const objectOpacityValue = null;
+    const voxelGapValue = null;
     const voxelBevelValue = document.getElementById('render-voxel-bevel-value');
     const terrainToneValue = document.getElementById('render-terrain-tone-value');
     const terrainTextureScaleValue = document.getElementById('render-terrain-texture-scale-value');
@@ -27407,12 +27844,16 @@
     function syncControls() {
       shadowEl.value = renderShadowQuality;
       resolutionEl.value = String(Math.round(renderResolutionScale * 100));
-      distanceEl.min = '0';
-      distanceEl.max = String(maxRenderVisibleDistanceForGrid(GRID));
-      visibleSizeEl.min = String(GRID);
-      visibleSizeEl.max = String(maxRenderVisibleSizeForGrid(GRID));
-      distanceEl.value = String(renderVisibleDistance);
-      visibleSizeEl.value = String(renderVisibleSize);
+      if (distanceEl) {
+        distanceEl.min = '0';
+        distanceEl.max = '0';
+        distanceEl.value = '0';
+      }
+      if (visibleSizeEl) {
+        visibleSizeEl.min = '0';
+        visibleSizeEl.max = '0';
+        visibleSizeEl.value = '0';
+      }
       if (homeGridEl) homeGridEl.value = String(GRID);
       brightnessEl.value = String(Math.round(renderBrightness * 100));
       lightingEl.value = String(Math.round(renderLighting * 100));
@@ -27426,6 +27867,7 @@
       cloudSpeedEl.value = String(Math.round(renderCloudSpeed * 100));
       cloudHeightEl.value = String(renderCloudHeight);
       cloudShadowEl.value = String(Math.round(renderCloudShadow * 100));
+      if (planesEnabledEl) planesEnabledEl.checked = !!renderPlanesEnabled;
       if (underCloudSpreadEl) underCloudSpreadEl.value = String(Math.round(renderUnderCloudSpread * 100));
       if (skyBlueDepthEl) skyBlueDepthEl.value = String(Math.round(renderSkyBlueDepth * 100));
       if (skyBlueSaturationEl) skyBlueSaturationEl.value = String(Math.round(renderSkyBlueSaturation * 100));
@@ -27438,10 +27880,10 @@
       shaderAntialiasEl.value = String(Math.round(renderShaderAntialias * 100));
       tiltBlurEl.value = String(renderTiltBlur);
       tiltFocusEl.value = String(Math.round(renderTiltFocus));
-      ghostOpacityEl.value = String(Math.round(renderGhostOpacity * 100));
-      floorOpacityEl.value = String(Math.round(renderFloorOpacity * 100));
-      objectOpacityEl.value = String(Math.round(renderObjectOpacity * 100));
-      voxelGapEl.value = String(Math.round(renderVoxelGap * 100));
+      if (ghostOpacityEl) ghostOpacityEl.value = '0';
+      if (floorOpacityEl) floorOpacityEl.value = '0';
+      if (objectOpacityEl) objectOpacityEl.value = '0';
+      if (voxelGapEl) voxelGapEl.value = '0';
       voxelBevelEl.value = renderVoxelBevel.toFixed(3);
       if (landscapeMeshContainer) {
         landscapeMeshContainer.style.display = useLandscapeEngine ? 'flex' : 'none';
@@ -27453,7 +27895,7 @@
       if (voxelTerrainEl) voxelTerrainEl.checked = !!renderVoxelTerrain;
       if (texturedGrassEl) texturedGrassEl.checked = !!renderTexturedGrass;
       if (surfaceLinkedMaterialsEl) surfaceLinkedMaterialsEl.checked = !!renderSurfaceLinkedMaterials;
-      if (showCrownsEl) showCrownsEl.checked = !!showCrowns;
+      if (showCrownsEl) showCrownsEl.checked = false;
       if (terrainVoxelResolutionEl) terrainVoxelResolutionEl.value = renderTerrainVoxelResolution;
       if (terrainColorTargetEl) terrainColorTargetEl.value = renderTerrainColorTarget;
       const terrainAdjustment = renderTerrainMaterialAdjustments[renderTerrainColorTarget] || {};
@@ -27489,8 +27931,8 @@
       if (crowdPausedLiveEl) crowdPausedLiveEl.checked = !!crowdPaused;
       if (crowdEnabledLiveEl) crowdEnabledLiveEl.checked = !!crowdEnabled;
       resolutionValue.textContent = resolutionEl.value + '%';
-      distanceValue.textContent = distanceEl.value;
-      visibleSizeValue.textContent = visibleSizeEl.value + 'x' + visibleSizeEl.value;
+      if (distanceValue && distanceEl) distanceValue.textContent = distanceEl.value;
+      if (visibleSizeValue && visibleSizeEl) visibleSizeValue.textContent = visibleSizeEl.value + 'x' + visibleSizeEl.value;
       brightnessValue.textContent = brightnessEl.value + '%';
       lightingValue.textContent = lightingEl.value + '%';
       ambientFillValue.textContent = ambientFillEl.value + '%';
@@ -27515,10 +27957,10 @@
       shaderAntialiasValue.textContent = shaderAntialiasEl.value + '%';
       tiltBlurValue.textContent = tiltBlurEl.value + 'px';
       tiltFocusValue.textContent = tiltFocusEl.value + '%';
-      ghostOpacityValue.textContent = ghostOpacityEl.value + '%';
-      floorOpacityValue.textContent = floorOpacityEl.value + '%';
-      objectOpacityValue.textContent = objectOpacityEl.value + '%';
-      voxelGapValue.textContent = (parseInt(voxelGapEl.value, 10) / 100).toFixed(2);
+      if (ghostOpacityValue && ghostOpacityEl) ghostOpacityValue.textContent = ghostOpacityEl.value + '%';
+      if (floorOpacityValue && floorOpacityEl) floorOpacityValue.textContent = floorOpacityEl.value + '%';
+      if (objectOpacityValue && objectOpacityEl) objectOpacityValue.textContent = objectOpacityEl.value + '%';
+      if (voxelGapValue && voxelGapEl) voxelGapValue.textContent = (parseInt(voxelGapEl.value, 10) / 100).toFixed(2);
       voxelBevelValue.textContent = parseFloat(voxelBevelEl.value).toFixed(3);
       if (terrainToneValue && terrainToneEl) {
         const tone = parseInt(terrainToneEl.value, 10) || 0;
@@ -27542,13 +27984,13 @@
       if (crowdScaleLiveEl) document.getElementById('crowd-scale-live-value').textContent = Math.round(crowdScale * 100) + '%';
       if (crowdSpeedLiveEl) document.getElementById('crowd-speed-live-value').textContent = Math.round(crowdSpeedMul * 100) + '%';
       if (crowdZoneRadiusLiveEl) document.getElementById('crowd-zone-radius-live-value').textContent = crowdZoneRadius.toFixed(2);
-      status.textContent = 'DPR ' + renderer.getPixelRatio().toFixed(2) + ' · shadow ' + sun.shadow.mapSize.x + ' · preview ' + renderVisibleDistance + ' / ' + renderVisibleSize + 'x' + renderVisibleSize + ' · crowd ' + crowdCount;
+      status.textContent = 'DPR ' + renderer.getPixelRatio().toFixed(2) + ' · shadow ' + sun.shadow.mapSize.x + ' · preview off · planes ' + (renderPlanesEnabled ? 'on' : 'off') + ' · crowd ' + crowdCount;
     }
 
     function persistSettings() {
       localStorage.setItem(RENDER_LS.resolution, renderResolutionScale.toFixed(2));
-      localStorage.setItem(RENDER_LS.visibleDistance, String(renderVisibleDistance));
-      localStorage.setItem(RENDER_LS.visibleSize, String(renderVisibleSize));
+      localStorage.setItem(RENDER_LS.visibleDistance, '0');
+      localStorage.setItem(RENDER_LS.visibleSize, '0');
       localStorage.setItem(RENDER_LS.brightness, renderBrightness.toFixed(2));
       localStorage.setItem(RENDER_LS.lighting, renderLighting.toFixed(2));
       localStorage.setItem(RENDER_LS.ambientFill, renderAmbientFill.toFixed(2));
@@ -27562,6 +28004,7 @@
       localStorage.setItem(RENDER_LS.cloudSpeed, renderCloudSpeed.toFixed(2));
       localStorage.setItem(RENDER_LS.cloudHeight, renderCloudHeight.toFixed(1));
       localStorage.setItem(RENDER_LS.cloudShadow, renderCloudShadow.toFixed(2));
+      localStorage.setItem(RENDER_LS.planesEnabled, renderPlanesEnabled ? '1' : '0');
       localStorage.setItem(RENDER_LS.underCloudSpread, renderUnderCloudSpread.toFixed(2));
       localStorage.setItem(RENDER_LS.skyBlueDepth, renderSkyBlueDepth.toFixed(2));
       localStorage.setItem(RENDER_LS.skyBlueSaturation, renderSkyBlueSaturation.toFixed(2));
@@ -27574,10 +28017,10 @@
       localStorage.setItem(RENDER_LS.shaderAntialias, renderShaderAntialias.toFixed(2));
       localStorage.setItem(RENDER_LS.tiltBlur, renderTiltBlur.toFixed(1));
       localStorage.setItem(RENDER_LS.tiltFocus, renderTiltFocus.toFixed(0));
-      localStorage.setItem(RENDER_LS.ghostOpacity, renderGhostOpacity.toFixed(2));
-      localStorage.setItem(RENDER_LS.floorOpacity, renderFloorOpacity.toFixed(2));
-      localStorage.setItem(RENDER_LS.objectOpacity, renderObjectOpacity.toFixed(2));
-      localStorage.setItem(RENDER_LS.voxelGap, renderVoxelGap.toFixed(2));
+      localStorage.setItem(RENDER_LS.ghostOpacity, '0');
+      localStorage.setItem(RENDER_LS.floorOpacity, '0');
+      localStorage.setItem(RENDER_LS.objectOpacity, '0');
+      localStorage.setItem(RENDER_LS.voxelGap, '0');
       localStorage.setItem(RENDER_LS.voxelBevel, renderVoxelBevel.toFixed(3));
       localStorage.setItem(RENDER_LS.voxelTerrain, renderVoxelTerrain ? '1' : '0');
       localStorage.setItem(RENDER_LS.texturedGrass, renderTexturedGrass ? '1' : '0');
@@ -27588,7 +28031,7 @@
       localStorage.setItem(RENDER_LS.materialTarget, renderMaterialTarget);
       localStorage.setItem(RENDER_LS.materialWear, renderMaterialWear.toFixed(2));
       localStorage.setItem(RENDER_LS.landscapeMeshMode, landscapeMeshMode ? '1' : '0');
-      localStorage.setItem(RENDER_LS.showCrowns, showCrowns ? '1' : '0');
+      localStorage.setItem(RENDER_LS.showCrowns, '0');
       localStorage.setItem(RENDER_LS.terrainVoxelResolution, renderTerrainVoxelResolution);
       localStorage.setItem(RENDER_LS.autoExpand, renderAutoExpand ? '1' : '0');
       localStorage.setItem(RENDER_LS.crowdEnabled, crowdEnabled ? '1' : '0');
@@ -27609,10 +28052,11 @@
       const oldMaterialWear = renderMaterialWear;
       const oldCloudHeight = renderCloudHeight;
       const oldUnderCloudSpread = renderUnderCloudSpread;
+      const oldPlanesEnabled = renderPlanesEnabled;
       setShadowQuality(shadowEl.value);
       setRenderResolutionScale(parseInt(resolutionEl.value, 10) / 100);
-      setRenderVisibleDistance(parseInt(distanceEl.value, 10));
-      setRenderVisibleSize(parseInt(visibleSizeEl.value, 10));
+      setRenderVisibleDistance(0);
+      setRenderVisibleSize(0);
       renderBrightness = parseInt(brightnessEl.value, 10) / 100;
       renderLighting = parseInt(lightingEl.value, 10) / 100;
       renderAmbientFill = parseInt(ambientFillEl.value, 10) / 100;
@@ -27626,6 +28070,7 @@
       renderCloudSpeed = parseInt(cloudSpeedEl.value, 10) / 100;
       renderCloudHeight = parseFloat(cloudHeightEl.value);
       renderCloudShadow = parseInt(cloudShadowEl.value, 10) / 100;
+      renderPlanesEnabled = planesEnabledEl ? !!planesEnabledEl.checked : renderPlanesEnabled;
       renderUnderCloudSpread = underCloudSpreadEl ? parseInt(underCloudSpreadEl.value, 10) / 100 : renderUnderCloudSpread;
       renderSkyBlueDepth = skyBlueDepthEl ? parseInt(skyBlueDepthEl.value, 10) / 100 : renderSkyBlueDepth;
       renderSkyBlueSaturation = skyBlueSaturationEl ? parseInt(skyBlueSaturationEl.value, 10) / 100 : renderSkyBlueSaturation;
@@ -27650,10 +28095,10 @@
       renderTiltBlur = parseFloat(tiltBlurEl.value);
       renderTiltFocus = parseInt(tiltFocusEl.value, 10);
       applyTiltShiftSettings();
-      renderGhostOpacity = parseInt(ghostOpacityEl.value, 10) / 100;
-      renderFloorOpacity = parseInt(floorOpacityEl.value, 10) / 100;
-      renderObjectOpacity = parseInt(objectOpacityEl.value, 10) / 100;
-      renderVoxelGap = parseInt(voxelGapEl.value, 10) / 100;
+      renderGhostOpacity = 0;
+      renderFloorOpacity = 0;
+      renderObjectOpacity = 0;
+      renderVoxelGap = 0;
       renderVoxelBevel = Math.max(0, Math.min(0.06, parseFloat(voxelBevelEl.value) || 0));
       if (landscapeMeshModeEl && useLandscapeEngine) {
         const nextMode = !!landscapeMeshModeEl.checked;
@@ -27678,7 +28123,7 @@
         }
       }
       if (surfaceLinkedMaterialsEl) renderSurfaceLinkedMaterials = !!surfaceLinkedMaterialsEl.checked;
-      if (showCrownsEl) showCrowns = !!showCrownsEl.checked;
+      showCrowns = false;
       if (terrainVoxelResolutionEl) renderTerrainVoxelResolution = terrainVoxelResolutionEl.value;
       if (terrainColorTargetEl && TERRAIN_COLOR_KEYS.includes(terrainColorTargetEl.value)) {
         renderTerrainColorTarget = terrainColorTargetEl.value;
@@ -27744,6 +28189,9 @@
         commitTerrainMaterialAdjustments();
         rebuildTerrainRender();
       }
+      if (oldPlanesEnabled !== renderPlanesEnabled && typeof setPlanesEnabled === 'function') {
+        setPlanesEnabled(renderPlanesEnabled);
+      }
       if (oldSurfaceLinkedMaterials !== renderSurfaceLinkedMaterials) {
         commitPartMaterialAdjustments();
         rebuildTerrainRender();
@@ -27800,7 +28248,7 @@
     });
     closeBtn.addEventListener('click', () => { closeTinyModal(modal); });
     modal.addEventListener('click', e => { if (e.target === modal) closeTinyModal(modal); });
-    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, ambientFillEl, frontFillEl, sideFillEl, backFillEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, underCloudSpreadEl, skyBlueDepthEl, skyBlueSaturationEl, distanceMistEl, backdropEl, backdropVignetteEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, shaderAntialiasEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl, voxelGapEl, voxelBevelEl, voxelTerrainEl, surfaceLinkedMaterialsEl, showCrownsEl, terrainVoxelResolutionEl, terrainTintEl, terrainTextureEl, terrainTextureScaleEl, terrainToneEl, materialTintEl, materialTextureEl, materialTextureScaleEl, materialToneEl, materialWearEl, crowdCountEl, crowdScaleEl, crowdSpeedEl, crowdBobEl, crowdSwayEl, crowdLeanEl, crowdZoneRadiusEl, crowdShowZonesEl, crowdPausedEl, crowdEnabledEl, crowdDebugEl, crowdModeEl, crowdCountLiveEl, crowdScaleLiveEl, crowdSpeedLiveEl, crowdZoneRadiusLiveEl, crowdShowZonesLiveEl, crowdShowArrowsLiveEl, crowdPausedLiveEl, crowdEnabledLiveEl]) {
+    for (const el of [shadowEl, resolutionEl, distanceEl, visibleSizeEl, brightnessEl, lightingEl, ambientFillEl, frontFillEl, sideFillEl, backFillEl, saturationEl, contrastEl, cloudsEl, cloudSpeedEl, cloudHeightEl, cloudShadowEl, planesEnabledEl, underCloudSpreadEl, skyBlueDepthEl, skyBlueSaturationEl, distanceMistEl, backdropEl, backdropVignetteEl, pixelSizeEl, pixelDepthEdgeEl, pixelNormalEdgeEl, shaderAntialiasEl, tiltBlurEl, tiltFocusEl, ghostOpacityEl, floorOpacityEl, objectOpacityEl, voxelGapEl, voxelBevelEl, voxelTerrainEl, surfaceLinkedMaterialsEl, showCrownsEl, terrainVoxelResolutionEl, terrainTintEl, terrainTextureEl, terrainTextureScaleEl, terrainToneEl, materialTintEl, materialTextureEl, materialTextureScaleEl, materialToneEl, materialWearEl, crowdCountEl, crowdScaleEl, crowdSpeedEl, crowdBobEl, crowdSwayEl, crowdLeanEl, crowdZoneRadiusEl, crowdShowZonesEl, crowdPausedEl, crowdEnabledEl, crowdDebugEl, crowdModeEl, crowdCountLiveEl, crowdScaleLiveEl, crowdSpeedLiveEl, crowdZoneRadiusLiveEl, crowdShowZonesLiveEl, crowdShowArrowsLiveEl, crowdPausedLiveEl, crowdEnabledLiveEl]) {
       if (!el) continue;
       el.addEventListener('input', applyFromControls);
       el.addEventListener('change', applyFromControls);
@@ -27853,7 +28301,8 @@
     resetBtn.addEventListener('click', () => {
       setShadowQuality('balanced');
       setRenderResolutionScale(1);
-      applyAutoPreviewSettingsForGrid({ explored: hasUserPanned });
+      setRenderVisibleDistance(0);
+      setRenderVisibleSize(0);
       renderBrightness = 1;
       renderLighting = 1.0;
       renderAmbientFill = 0.58;
@@ -27866,7 +28315,9 @@
       renderCloudAmount = 0.61;
       renderCloudSpeed = 0.35;
       renderCloudHeight = 7;
-      renderCloudShadow = 0.5;
+      renderCloudShadow = 0;
+      renderPlanesEnabled = false;
+      if (typeof setPlanesEnabled === 'function') setPlanesEnabled(false);
       applyCloudSettings();
       if (typeof applyCloudHeight === 'function') applyCloudHeight();
       renderDistanceMist = 0.28;
@@ -27881,13 +28332,14 @@
       renderTiltBlur = 3.5;
       renderTiltFocus = 18;
       applyTiltShiftSettings();
-      renderGhostOpacity = 1;
-      renderFloorOpacity = 1;
-      renderObjectOpacity = 1;
+      renderGhostOpacity = 0;
+      renderFloorOpacity = 0;
+      renderObjectOpacity = 0;
       renderVoxelGap = 0;
       renderVoxelBevel = parseFloat(RENDER_DEFAULTS.voxelBevel);
       renderVoxelTerrain = true;
       renderTexturedGrass = true;
+      showCrowns = false;
       renderSurfaceLinkedMaterials = true;
       renderTerrainMaterialAdjustments = {};
       renderTerrainColorTarget = 'grass';
@@ -29005,10 +29457,9 @@
   })();
 
   // -------- audio --------
-  // Music: pick one of two horizon themes at random per session and loop it
-  // forever — never restart on the second pick so users genuinely hear A or
-  // B for the whole visit. Music can't auto-play before a user gesture, so
-  // we defer the first .play() to the next pointerdown/keydown.
+  // Music: random sessions pick from the Horizon themes only. Rising stays in
+  // the picker as a deliberate manual choice. Music can't auto-play before a
+  // user gesture, so we defer the first .play() to the next pointerdown/keydown.
   //
   // SFX: small pools of foley clips. playSfx(group) clones the chosen node
   // so overlapping plays don't truncate each other. A per-group min-gap
@@ -29023,6 +29474,7 @@
     ambientMuted: 'tinyworld:audio:ambient-muted',
     enginesMuted: 'tinyworld:audio:engines-muted',
     musicTrack:   'tinyworld:audio:music-track',
+    musicMode:    'tinyworld:audio:music-mode',
     ambientRange: 'tinyworld:audio:ambient-range',
     enginesRange: 'tinyworld:audio:engines-range',
   };
@@ -29050,6 +29502,7 @@
     'music-horizon-6.mp3',
     'music-rising-1.mp3',
   ];
+  const MUSIC_RANDOM_TRACKS = MUSIC_TRACKS.filter(name => /^music-horizon-\d+\.mp3$/i.test(name));
   const SFX_GROUPS = {
     rustle: ['foley-rustle-1.mp3', 'foley-rustle-2.mp3', 'foley-rustle-3.mp3'],
     knock:  ['foley-knock-jingle-1.mp3', 'foley-knock-jingle-2.mp3'],
@@ -29101,13 +29554,19 @@
   let musicAudio = null;
   let musicStarted = false;
   let musicPickedTrack = null;
+  function randomMusicTrack() {
+    const pool = MUSIC_RANDOM_TRACKS.length ? MUSIC_RANDOM_TRACKS : MUSIC_TRACKS;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  function manualMusicTrack() {
+    const mode = localStorage.getItem(AUDIO_LS.musicMode);
+    const savedTrack = localStorage.getItem(AUDIO_LS.musicTrack);
+    return mode === 'manual' && savedTrack && MUSIC_TRACKS.includes(savedTrack) ? savedTrack : null;
+  }
   function startMusicIfNeeded() {
     if (musicStarted || audioMusicMuted) return;
     musicStarted = true;
-    const savedTrack = localStorage.getItem(AUDIO_LS.musicTrack);
-    musicPickedTrack = (savedTrack && MUSIC_TRACKS.includes(savedTrack))
-      ? savedTrack
-      : MUSIC_TRACKS[Math.floor(Math.random() * MUSIC_TRACKS.length)];
+    musicPickedTrack = manualMusicTrack() || musicPickedTrack || randomMusicTrack();
     musicAudio = new Audio(SOUNDS_BASE + musicPickedTrack);
     musicAudio.loop = true;
     musicAudio.volume = audioMusicVolume;
@@ -29192,6 +29651,7 @@
   function setMusicTrack(name) {
     if (typeof name !== 'string' || !MUSIC_TRACKS.includes(name)) return;
     try { localStorage.setItem(AUDIO_LS.musicTrack, name); } catch (_) {}
+    try { localStorage.setItem(AUDIO_LS.musicMode, 'manual'); } catch (_) {}
     musicPickedTrack = name;
     // Restart playback so the new track takes over immediately if music is on.
     if (musicAudio) {
@@ -29202,8 +29662,20 @@
     musicStarted = false;
     if (!audioMusicMuted) startMusicIfNeeded();
   }
+  function setMusicRandomTrack() {
+    try { localStorage.removeItem(AUDIO_LS.musicTrack); } catch (_) {}
+    try { localStorage.removeItem(AUDIO_LS.musicMode); } catch (_) {}
+    musicPickedTrack = randomMusicTrack();
+    if (musicAudio) {
+      try { musicAudio.pause(); } catch (_) {}
+      try { musicAudio.src = ''; } catch (_) {}
+    }
+    musicAudio = null;
+    musicStarted = false;
+    if (!audioMusicMuted) startMusicIfNeeded();
+  }
   function currentMusicTrack() {
-    return musicPickedTrack || localStorage.getItem(AUDIO_LS.musicTrack) || MUSIC_TRACKS[0];
+    return musicPickedTrack || manualMusicTrack() || MUSIC_RANDOM_TRACKS[0] || MUSIC_TRACKS[0];
   }
 
   // -------- positional audio (water + engines) --------
@@ -29481,13 +29953,31 @@
     function renderTracks() {
       if (!trackList) return;
       const active = currentMusicTrack();
+      const manualTrack = manualMusicTrack();
       trackList.innerHTML = '';
+      const randomBtn = document.createElement('button');
+      randomBtn.type = 'button';
+      randomBtn.className = 'sound-track-item' + (!manualTrack ? ' active' : '');
+      randomBtn.setAttribute('role', 'option');
+      randomBtn.setAttribute('aria-selected', !manualTrack ? 'true' : 'false');
+      const randomDot = document.createElement('span');
+      randomDot.className = 'track-dot';
+      randomDot.setAttribute('aria-hidden', 'true');
+      const randomLabel = document.createElement('span');
+      randomLabel.textContent = 'Random Horizon';
+      randomBtn.appendChild(randomDot);
+      randomBtn.appendChild(randomLabel);
+      randomBtn.addEventListener('click', () => {
+        setMusicRandomTrack();
+        renderTracks();
+      });
+      trackList.appendChild(randomBtn);
       MUSIC_TRACKS.forEach(name => {
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'sound-track-item' + (name === active ? ' active' : '');
+        btn.className = 'sound-track-item' + (manualTrack && name === active ? ' active' : '');
         btn.setAttribute('role', 'option');
-        btn.setAttribute('aria-selected', name === active ? 'true' : 'false');
+        btn.setAttribute('aria-selected', manualTrack && name === active ? 'true' : 'false');
         const dot = document.createElement('span');
         dot.className = 'track-dot';
         dot.setAttribute('aria-hidden', 'true');
@@ -30664,6 +31154,7 @@
   xrWorldRoot.add(cropDusterRoot);
   const cropDusterMaterials = [];
   let cropDusterModel = null;
+  let cropDusterLoadStarted = false;
   let cropDusterTime = 0;
   const cropDustParticles = [];
   const cropDustGeo = new THREE.SphereGeometry(0.055, 6, 6);
@@ -30687,6 +31178,52 @@
       localOffset: new THREE.Vector3(),
       variantIndex: 0
     });
+  }
+
+  function hideCropDusterBanners() {
+    for (const p of planes) {
+      if (p.bannerMesh) p.bannerMesh.visible = false;
+      if (p.bannerWire) p.bannerWire.visible = false;
+    }
+  }
+
+  function clearCropDustParticles() {
+    for (let i = cropDustParticles.length - 1; i >= 0; i--) {
+      const p = cropDustParticles[i];
+      if (p && p.parent) p.parent.remove(p);
+      cropDustParticles.splice(i, 1);
+    }
+  }
+
+  function stopCropDusterRuntime(opts = {}) {
+    cropDusterRoot.visible = false;
+    for (const p of planes) {
+      p.group.visible = false;
+    }
+    hideCropDusterBanners();
+    cropDusterState.phase = 'idle';
+    cropDusterState.curve = null;
+    cropDusterState.curveLen = 0;
+    cropDusterState.travel = 0;
+    cropDusterState.isBanner = false;
+    cropDusterState.numActivePlanes = 0;
+    if (opts.clearDust) clearCropDustParticles();
+  }
+
+  function setPlanesEnabled(enabled) {
+    renderPlanesEnabled = !!enabled;
+    try { localStorage.setItem(RENDER_LS.planesEnabled, renderPlanesEnabled ? '1' : '0'); } catch (_) {}
+    if (!renderPlanesEnabled) {
+      stopCropDusterRuntime({ clearDust: true });
+      return;
+    }
+    if (!cropDusterModel) {
+      loadCropDuster();
+      return;
+    }
+    cropDusterState.phase = 'idle';
+    cropDusterState.refuelTimer = 0;
+    startNextRun();
   }
 
   // -------- crop duster route / state --------
@@ -30911,6 +31448,8 @@
       /^tinyworld:ai:key:/,              // API credentials
       /^tinyworld:ai:prompt$/,           // user prompt text
       /^tinyworld:vehicle-demo:/,        // session-only demo state
+      /^tinyworld:audio:music-track$/,   // per-user manual music choice
+      /^tinyworld:audio:music-mode$/,    // random vs manual music mode
       /^tinyworld:welcome:dismissedId$/, // per-user welcome dismissal
       /:backup$/,
       // Panel/widget positions are viewport-specific — never ship as defaults.
@@ -30974,7 +31513,9 @@
   const ISLAND_BANNER_HEIGHT = 1.12;       // 2.5:1 aspect to match logo art
   const ISLAND_BANNER_OFFSET = 0.35;       // outward gap from island face (clears edge dressing)
   const ISLAND_BANNER_TOP_Y = -0.32;       // below grass / dirt-line so edge tufts don't clip
+  const ISLAND_BANNER_FLAP_INTERVAL = 1 / 12;
   let islandBannerEntry = null;            // { mesh, basePositions, height }
+  let islandBannerLastFlapTime = -Infinity;
 
   function makeIslandBannerTexture() {
     const tex = new THREE.TextureLoader().load(AUTOINCENTIVE_BANNER_DATA_URL, () => {
@@ -31036,6 +31577,8 @@
   function tickIslandBanners(time) {
     const b = islandBannerEntry;
     if (!b || !b.mesh || !b.mesh.parent) return;
+    if (time - islandBannerLastFlapTime < ISLAND_BANNER_FLAP_INTERVAL) return;
+    islandBannerLastFlapTime = time;
     const pos = b.mesh.geometry.attributes.position;
     const base = b.basePositions;
     const arr = pos.array;
@@ -31086,7 +31629,7 @@
     model.rotation.y = 0;
     model.traverse(o => {
       if (o.isMesh) {
-        o.castShadow = true;
+        o.castShadow = false;
         o.receiveShadow = false;
         o.frustumCulled = true;
       }
@@ -31111,7 +31654,8 @@
   }
 
   function loadCropDuster() {
-    if (!THREE.GLTFLoader) return;
+    if (cropDusterLoadStarted || cropDusterModel || !THREE.GLTFLoader) return;
+    cropDusterLoadStarted = true;
     const texLoader = new THREE.TextureLoader();
     CROP_DUSTER_TEXTURES.forEach(src => {
       const tex = texLoader.load(src);
@@ -31162,8 +31706,10 @@
         applyCropDusterMaterial(i, i);
       }
       
-      cropDusterRoot.visible = true;
+      if (renderPlanesEnabled) cropDusterRoot.visible = true;
+      else stopCropDusterRuntime({ clearDust: true });
     }, undefined, err => {
+      cropDusterLoadStarted = false;
       console.warn('[crop-duster] failed to load model', err);
     });
   }
@@ -31264,6 +31810,7 @@
   }
 
   function startDustingRun() {
+    if (!renderPlanesEnabled || !cropDusterModel) return;
     const curve = planDustingCurve() || planFlyoverCurve(0);
     cropDusterState.curve = curve;
     cropDusterState.curveLen = curve.getLength();
@@ -31289,6 +31836,7 @@
   }
 
   function startBannerRun() {
+    if (!renderPlanesEnabled || !cropDusterModel) return;
     cropDusterState.curve = planBannerCurve();
     cropDusterState.curveLen = cropDusterState.curve.getLength();
     cropDusterState.travel = 0;
@@ -31354,6 +31902,7 @@
   }
 
   function startNextRun() {
+    if (!renderPlanesEnabled || !cropDusterModel) return;
     const haveCrops = cropCellsForDusting().length > 0;
     if (activeSeason !== 'summer' || !haveCrops || Math.random() < FLIGHT_BANNER_CHANCE) {
       startBannerRun();
@@ -31408,6 +31957,11 @@
   }
 
   function updateCropDuster(dt) {
+    if (!renderPlanesEnabled) return;
+    if (!cropDusterModel) {
+      loadCropDuster();
+      return;
+    }
     updateCropDustParticles(dt);
     spinAllPropellers(dt);
     cropDusterTime += dt;
@@ -31505,7 +32059,7 @@
     }
   }
 
-  loadCropDuster();
+  if (renderPlanesEnabled) loadCropDuster();
 
   // -------- animation loop --------
   let prevT = 0;
@@ -31575,7 +32129,7 @@
 
     tickStart = repaintProfileBegin();
     updateCropDuster(dt);
-    if (typeof tickIslandBanners === 'function') tickIslandBanners(cropDusterTime);
+    if (typeof tickIslandBanners === 'function') tickIslandBanners(t);
     if (typeof tickPositionalAudio === 'function') tickPositionalAudio();
     repaintProfileEnd('tick.ambient', tickStart);
 
@@ -31611,7 +32165,7 @@
     repaintProfileEnd('tick.ghosts', tickStart);
 
     // Sway only the roots that can actually animate. Scanning every cell
-    // every frame becomes noticeable once generated worlds reach 32/48.
+    // every frame becomes noticeable once generated worlds get busy.
     tickStart = repaintProfileBegin();
     for (const obj of animatedCellObjects) {
       if (!runtimeRootVisible(obj)) {
@@ -31690,7 +32244,7 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://tinyworld.local/world.schema.json",
     "title": "TinyWorld",
-    "description": "Scene description for the Tiny World Builder. The renderer supports home grids from 8x8 to 48x48, plus sparse user-edited ghost-board cells outside the home grid. Each non-default cell has a terrain, optional object kind, separate object floors and terrainFloors counts, optional house buildingType, optional fenceSide, optional decorative extras, optional within-tile transform, and optional appearance overrides.",
+    "description": "Scene description for the Tiny World Builder. The renderer supports home grids from 8x8 to 20x20, plus sparse user-edited ghost-board cells outside the home grid. Each non-default cell has a terrain, optional object kind, separate object floors and terrainFloors counts, optional house buildingType, optional fenceSide, optional decorative extras, optional within-tile transform, and optional appearance overrides.",
     "type": "object",
     "additionalProperties": false,
     "required": [
@@ -31711,9 +32265,7 @@
           8,
           12,
           16,
-          20,
-          32,
-          48
+          20
         ],
         "description": "Optional home board edge length. Defaults to the current app grid when omitted."
       },
@@ -37333,10 +37885,9 @@
     }
 
     function finishApplyState() {
-      // Final pass: settle only adjacency-aware terrain. On 32/48 boards,
-      // rebuilding every default grass tile doubled generation cost even
-      // though most cells cannot gain path trims, shore lips, or bridge
-      // re-orientation.
+      // Final pass: settle only adjacency-aware terrain. Rebuilding every
+      // default grass tile doubles generation cost even though most cells
+      // cannot gain path trims, shore lips, or bridge re-orientation.
       const settle = new Set();
       function markSettle(x, z) {
         if (x < 0 || x >= GRID || z < 0 || z >= GRID) return;
@@ -37765,7 +38316,7 @@
   const WELCOME_NOTICE_ID = '2026-05-11-jigsaw';
   const WELCOME_LS_KEY = 'tinyworld:welcome:dismissedId';
   function startFarmWorld() {
-    loadInitialScene();
+    doReset();
   }
 
   function startVehicleDemo() {
@@ -38475,7 +39026,7 @@
     return Math.max(GRID, Math.min(HOME_GRID_MAX, Math.ceil(renderVisibleSize || GRID)));
   }
   function minimapDrawCellCount(logicalCells) {
-    return Math.min(logicalCells, GRID >= 256 ? 192 : (GRID >= 128 ? 224 : logicalCells));
+    return logicalCells;
   }
   function minimapGlobalCell(gx, gz) {
     const bx = Math.floor(gx / GRID);
@@ -39739,7 +40290,7 @@
       items.push({ group: 'World', label: 'Run vehicle seed demo', hint: 'map + cars + targets from ' + VEHICLE_DEMO_DEFAULT_SEED, run: () => {
         runSeededVehicleDemo(VEHICLE_DEMO_DEFAULT_SEED);
       } });
-      items.push({ group: 'World', label: 'Run large vehicle stress demo', hint: '48×48 roads, bridges, cul-de-sacs, 36 cars', run: () => {
+      items.push({ group: 'World', label: 'Run large vehicle stress demo', hint: '20×20 roads, bridges, cul-de-sacs, 36 cars', run: () => {
         runSeededVehicleDemo(VEHICLE_DEMO_LARGE_SEED, {
           variant: 'large',
           size: VEHICLE_DEMO_LARGE_SIZE_DEFAULT,

@@ -49,8 +49,8 @@ requireNotIncludes('postTarget', 'post-processing render target');
 requireNotIncludes('postMaterial', 'post-processing shader material');
 requireNotIncludes('postProcessingEnabled', 'post-processing mode flag');
 requireNotIncludes('render-smoothing', 'dead post smoothing control');
-requireNotIncludes('<script type="module" src="cluso/cluso-embed.js"></script>', 'production-visible Cluso script tag');
-requireNotIncludes('<link rel="stylesheet" href="cluso/cluso-embed.css">', 'production-visible Cluso stylesheet tag');
+requireNotIncludes('cluso/cluso-embed.js', 'Cluso runtime script');
+requireNotIncludes('cluso/cluso-embed.css', 'Cluso runtime stylesheet');
 
 for (const asset of [
   'vendor/three/three.r128.min.js',

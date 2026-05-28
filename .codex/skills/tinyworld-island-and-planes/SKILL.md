@@ -9,7 +9,7 @@ description: Use when changing the home island layout, edge dressing, undersides
 
 - The home island is centred at world origin. Top of grass = `y = 0`. Underside
   of dirt slab + inverted stepped underside extends down from there.
-- `GRID` (default 8, max 16, ranges from `HOME_GRID_MIN` to `HOME_GRID_MAX`) ×
+- `GRID` (default 8, max 20, ranges from `HOME_GRID_MIN` to `HOME_GRID_MAX`) ×
   `TILE` (=1) sets the edge length. Half-width = `(GRID * TILE) / 2`.
 - `DIRT_H = 0.55` — visible dirt block height.
 - Default camera: `DEFAULT_AZIMUTH = π * 0.32`, `DEFAULT_POLAR = π * 0.30`
@@ -61,6 +61,8 @@ JPEG) so there's no extra HTTP. Same data URL feeds:
 The flap shader is custom (`tickIslandBanners` ticked from
 `updateCropDuster`'s loop): top edge fixed, motion grows toward the bottom
 (`t = -by / H`), side-to-side sway + forward/back ripple, slight gravity droop.
+The island banner now ticks from the main animation time and is throttled to
+12 Hz so it does not depend on the plane system being enabled.
 
 If the user changes art, swap the data URL and the `2.5:1` aspect — width
 fits ~`GRID * 0.7`.
@@ -70,6 +72,9 @@ fits ~`GRID * 0.7`.
 Defined in the **crop duster route / state** section (~line 26200).
 
 - 3-plane pool (`planes[]`), shown in formations or solo.
+- Persisted setting `tinyworld:render:planesEnabled` controls the whole system
+  and defaults off for now. When off, the GLB/textures are not loaded and
+  hidden banners/crop-dust particles are cleared.
 - Two run kinds chosen randomly each cycle:
   - `startDustingRun()` — uses `planDustingCurve()` to sweep over crop cells.
   - `startBannerRun()` — uses `planBannerCurve()` to fly **behind** the
@@ -121,6 +126,10 @@ travelling along the X axis). Banner messages come from `BANNER_MESSAGES`.
   placing a cable, raycast exact surface points rather than `pickTile()` so
   underside picks work, and reject routes that pass through registered
   propeller, jet engine, or rocket plume hazard spheres.
+- Mooring anchors are tied to the current board/island surface topology. Clear
+  them with `clearMooringCables()` on home-grid changes, starter-scene resets,
+  and demo paths that replace islands; imports can then restore valid saved
+  cables with `replaceMooringCables()` after islands have been recreated.
 - Number duplicate-island engine slots around the island. Slots 1 and 3 spin
   clockwise; slots 2 and 4 spin anticlockwise, so diagonal props match while
   adjacent props counter-rotate.
@@ -142,7 +151,7 @@ travelling along the X axis). Banner messages come from `BANNER_MESSAGES`.
 
 After island/plane changes:
 - `node tools/check.js`
-- Visually check at default 8×8 grid and after toggling to 16×16 — sizes
+- Visually check at default 8×8 grid and after toggling to 20×20 — sizes
   rebuild the island.
 - Confirm planes fly behind the island, banner stays readable against the
   sky, and engine sound (if positional audio active) pans correctly L↔R as

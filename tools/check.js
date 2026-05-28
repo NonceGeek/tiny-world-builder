@@ -8,10 +8,31 @@ const schemaPath = path.join(root, 'world.schema.json');
 const vercelPath = path.join(root, 'vercel.json');
 const netlifyPath = path.join(root, 'netlify.toml');
 const html = fs.readFileSync(htmlPath, 'utf8');
+const defaultsPath = path.join(root, 'tinyworld-defaults.json');
 
 function fail(message) {
   console.error('check failed:', message);
   process.exit(1);
+}
+
+function sourceFunctionBody(source, name) {
+  const needle = 'function ' + name + '(';
+  const start = source.indexOf(needle);
+  if (start < 0) fail('function missing: ' + name);
+  const signatureEnd = source.indexOf(') {', start);
+  if (signatureEnd < 0) fail('function signature malformed: ' + name);
+  const open = source.indexOf('{', signatureEnd);
+  if (open < 0) fail('function body malformed: ' + name);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return source.slice(open + 1, i);
+    }
+  }
+  fail('function body unterminated: ' + name);
 }
 
 const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/);
@@ -27,6 +48,13 @@ try {
   externalSchema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
 } catch (err) {
   fail('world.schema.json is not valid JSON: ' + err.message);
+}
+
+let shippedDefaults;
+try {
+  shippedDefaults = JSON.parse(fs.readFileSync(defaultsPath, 'utf8'));
+} catch (err) {
+  fail('tinyworld-defaults.json is not valid JSON: ' + err.message);
 }
 
 const schemaStart = html.indexOf('  const WORLD_SCHEMA = ');
@@ -61,6 +89,9 @@ for (const match of html.matchAll(attrPattern)) {
 }
 if (missing.length) fail('missing referenced static files: ' + missing.join(', '));
 if (remoteRuntime.length) fail('remote script runtime references are not allowed: ' + remoteRuntime.join(', '));
+if (/cluso\/cluso-embed\.(js|css)/.test(html)) {
+  fail('Cluso embed runtime must not be loaded by the app');
+}
 
 if (/\(1\s*\+\s*2\s*\*\s*maxPreloadRadius\)\s*\*\s*g/.test(html)) {
   fail('Autoexpand preview window must not use full preload-ring diameter');
@@ -131,6 +162,17 @@ if (!/optimizeVoxelObjectGroup\(g, \{ reason: 'voxel-build-stamp' \}\)/.test(htm
 if (!/window\.__tinyworldRepaintProfile/.test(html) || !/repaintProfileEnd\('render\.direct'/.test(html) || !/repaintProfileEnd\('setCell\.refresh'/.test(html) || !/repaintProfileEnd\('tick\.effects'/.test(html)) {
   fail('stats mode must expose repaint profiling across render, setCell refresh, and frame effect buckets');
 }
+const renderSceneBody = sourceFunctionBody(html, 'renderScene');
+if (!/function updateSceneVisibilityForCamera/.test(html) || !/updateSceneVisibilityForCamera\(\);/.test(renderSceneBody) || !/function renderCullTopContentOpacity/.test(html) || !/'culled  '/.test(html)) {
+  fail('render stats must include camera culling for off-frustum and underside-occluded roots');
+}
+const renderCullBody = sourceFunctionBody(html, 'updateSceneVisibilityForCamera');
+if (!/setRenderCullVisible\(entry\.tile, visible\);/.test(renderCullBody) || !/setRenderCullOpacity\(entry\.object, topOpacity\);/.test(renderCullBody) || /renderCullCellVisible\(x, z, topVisible\)/.test(html)) {
+  fail('underside camera occlusion must keep terrain side walls visible while fading top-side content');
+}
+if (!/id="under-occlusion-cloud-wipe"/.test(html) || !/function updateUnderOcclusionCloudWipe/.test(html) || !/topContentTransitionStrength/.test(html)) {
+  fail('underside top-content culling must be masked by the 2D cloud wipe transition');
+}
 if (!/function editableIslandFullLodBudget/.test(html) || !/function editableIslandFullLodSet/.test(html) || !/islandStats\.fullBudget/.test(html)) {
   fail('duplicate editable islands must cap full-detail LODs and report the active full-island budget');
 }
@@ -170,6 +212,58 @@ if (!rocketEngineFactory || !/addIslandRocketPlume\(g, seed\)/.test(rocketEngine
 }
 if (!/function voxelInvertedSteppedRoof/.test(html) || !/voxelInvertedSteppedRoof\(homeBorderGroup, GRID \* TILE/.test(html)) {
   fail('home board must include the inverted stepped roof underside for floating-island depth');
+}
+if (!/islandUnder:\s+new THREE\.MeshLambertMaterial\(\{ color: 0x34373b, side: THREE\.DoubleSide \}\)/.test(html) || !/islandUnderD: new THREE\.MeshLambertMaterial\(\{ color: 0x202327, side: THREE\.DoubleSide \}\)/.test(html)) {
+  fail('island underside shell materials must be double-sided so secondary island sides do not vanish from underside views');
+}
+const islandProxyBody = sourceFunctionBody(html, 'makeEditableIslandProxy');
+if (!/islandShellMaterial\(M\.grass\)/.test(islandProxyBody) || !/islandShellMaterial\(M\.dirtRich\)/.test(islandProxyBody) || !/node\.frustumCulled = false/.test(islandProxyBody)) {
+  fail('editable island proxies must keep double-sided, group-culled side shells');
+}
+const islandSideBackingBody = sourceFunctionBody(html, 'addIslandSideBacking');
+if (!/islandShellMaterial\(M\.boardSide\)/.test(islandSideBackingBody) || !/skipTop: true, skipBottom: true/.test(islandSideBackingBody)) {
+  fail('floating island side backing must keep a cheap double-sided wall behind edge greebles');
+}
+const prepareHomeBorderBody = sourceFunctionBody(html, 'prepareHomeBorderForRender');
+if (!/c\.frustumCulled = false/.test(prepareHomeBorderBody)) {
+  fail('floating island base shells must rely on group culling, not per-mesh clipping');
+}
+const vboxBody = sourceFunctionBody(html, 'vbox');
+if (!/const hasHiddenFaces = opts\.skipTop \|\| opts\.skipBottom \|\| opts\.skipPX \|\| opts\.skipNX \|\| opts\.skipPZ \|\| opts\.skipNZ/.test(vboxBody) || !/getOpenBoxGeometry\(gw, gh, gd, opts\.skipTop, opts\.skipBottom, opts\.skipPX, opts\.skipNX, opts\.skipPZ, opts\.skipNZ\)/.test(vboxBody)) {
+  fail('vbox must route hidden-face voxel pieces through cached open-box geometry');
+}
+const makeTileBody = sourceFunctionBody(html, 'makeTile');
+const renderCellTileBody = sourceFunctionBody(html, 'renderCellTile');
+if (!/const useVoxelTerrainForTile = renderVoxelTerrain && !\(opts && opts\.simpleTerrain\)/.test(makeTileBody) || !/shouldUseSimpleFlatGrassTile\(x, z, cell\)/.test(renderCellTileBody)) {
+  fail('blank flat grass cells must bypass voxel terrain detail to keep empty islands cheap');
+}
+if (/<span>Preview distance<\/span>|<span>Preview window<\/span>|<span>Preview opacity<\/span>|<span>Preview floors<\/span>|<span>Preview objects<\/span>|<span>Voxel gap<\/span>|render-show-crowns/.test(html)) {
+  fail('removed performance controls must stay out of Settings: preview, voxel gap, and show crowns are forced off');
+}
+if (!/visibleDistance:\s+'0'/.test(html) || !/visibleSize:\s+'0'/.test(html) || !/ghostOpacity:\s+'0'/.test(html) || !/floorOpacity:\s+'0'/.test(html) || !/objectOpacity:\s+'0'/.test(html) || !/showCrowns:\s+'0'/.test(html)) {
+  fail('preview/crown render defaults must stay zeroed');
+}
+if (!/function mergeStaticBaseMeshesByMaterial/.test(html) || !/mergeStaticBaseMeshesByMaterial\(homeBorderGroup, \{ reason: 'home-island-border' \}\)/.test(html) || !/mergeStaticBaseMeshesByMaterial\(g, \{ reason: 'editable-island-base' \}\)/.test(html)) {
+  fail('floating island bases must merge fixed shell and greeble meshes by material');
+}
+const distantWorldBody = sourceFunctionBody(html, 'buildDistantWorlds');
+if (!/mergeStaticBaseMeshesByMaterial\(distantWorldGroup, \{ reason: 'distant-worlds' \}\)/.test(distantWorldBody) || !/o\.castShadow = false/.test(distantWorldBody)) {
+  fail('distant worlds must be merged and non-shadowing so blank islands stay cheap');
+}
+if (!/let renderCloudShadow = storedNumber\(RENDER_LS\.cloudShadow, 0, 0, 1\)/.test(html)) {
+  fail('cloud shadows must default to zero');
+}
+const invertedRoofBody = sourceFunctionBody(html, 'voxelInvertedSteppedRoof');
+if (!/skipTop: true/.test(invertedRoofBody)) {
+  fail('floating-island inverted roof layers must not render buried top faces');
+}
+const homeBorderBody = sourceFunctionBody(html, 'buildHomeBorder');
+const editableIslandBaseBody = sourceFunctionBody(html, 'makeEditableIslandBase');
+if (!/M\.islandUnderD, \{ noGap: true, skipTop: true \}/.test(homeBorderBody) || !/M\.islandUnderD, \{ noGap: true, skipTop: true \}/.test(editableIslandBaseBody)) {
+  fail('home and duplicate island underside slabs must strip internal top faces');
+}
+if (!/addIslandSideBacking\(homeBorderGroup\)/.test(homeBorderBody) || !/addIslandSideBacking\(g\)/.test(editableIslandBaseBody)) {
+  fail('home and duplicate island bases must include persistent side backing behind edge greebles');
 }
 if (!/sky-gradient-bubble/.test(html) || !/new THREE\.SphereGeometry\(120, 32, 16\)/.test(html) || !/THREE\.BackSide/.test(html)) {
   fail('background must include the inside-facing shader sphere gradient bubble');
@@ -215,6 +309,10 @@ if (!/id="render-undercloud-spread"/.test(html) || !/underCloudSpread: 'tinyworl
 }
 if (!/id="render-sky-blue-depth"/.test(html) || !/id="render-sky-blue-saturation"/.test(html) || !/skyBlueSaturation: 'tinyworld:render:skyBlueSaturation'/.test(html) || !/--sky-blue-strong-rgb/.test(html)) {
   fail('environment settings must expose persisted blue depth and saturation controls');
+}
+const distanceMistBody = sourceFunctionBody(html, 'applyDistanceMistSettings');
+if (!/distanceMistFogHex\(colorHex\)/.test(distanceMistBody) || !/DISTANCE_MIST_NEUTRAL/.test(html)) {
+  fail('atmosphere fade must blend toward warm neutral haze, not raw blue sky');
 }
 if (!/SELECTION_BODY_COLOR_OPTIONS[\s\S]*Bluewash/.test(html) || !/SELECTION_TOP_COLOR_OPTIONS[\s\S]*Teal/.test(html) || !/SELECTION_LEAF_COLOR_OPTIONS[\s\S]*Lilac/.test(html)) {
   fail('selection color controls must provide the expanded palette');
@@ -262,7 +360,7 @@ function settingsPanelBody(section) {
 const settingsControlGroups = {
   app: ['render-home-grid'],
   rendering: ['render-shadow', 'render-resolution', 'render-brightness', 'render-ambient-fill', 'render-front-fill', 'render-side-fill', 'render-back-fill', 'render-pixel-size', 'render-tilt-focus'],
-  world: ['render-distance', 'render-visible-size', 'render-ghost-opacity', 'render-voxel-terrain', 'render-terrain-voxel-resolution'],
+  world: ['render-voxel-terrain', 'render-terrain-voxel-resolution'],
   materials: ['render-material-wear', 'render-terrain-color-target', 'render-terrain-texture', 'render-material-target', 'render-material-texture'],
   environment: ['render-clouds', 'render-cloud-speed', 'render-undercloud-spread', 'render-sky-blue-depth', 'render-sky-blue-saturation', 'render-distance-mist', 'render-backdrop', 'render-backdrop-vignette'],
   crowd: ['crowd-count', 'crowd-enabled', 'crowd-reseed'],
@@ -276,6 +374,32 @@ for (const [section, ids] of Object.entries(settingsControlGroups)) {
 }
 
 if (!externalSchema.properties || !externalSchema.properties.gridSize) fail('schema missing gridSize contract');
+const gridSizeEnum = externalSchema.properties.gridSize.enum || [];
+if (JSON.stringify(gridSizeEnum) !== JSON.stringify([8, 12, 16, 20])) {
+  fail('gridSize enum must stay capped at 20');
+}
+if (!/const HOME_GRID_MAX = 20;/.test(html) || !/const HOME_GRID_OPTIONS = \[8, 12, 16, 20\];/.test(html)) {
+  fail('home grid constants must stay capped at 20');
+}
+const homeGridResizeBody = sourceFunctionBody(html, 'setHomeGridSize');
+if (!/clearMooringCables\(\);/.test(homeGridResizeBody)) {
+  fail('home grid resize must reset stale mooring anchors');
+}
+const starterSceneBody = sourceFunctionBody(html, 'loadInitialScene');
+if (!/clearMooringCables\(\);/.test(starterSceneBody) || !/clearEditableIslands\(\);/.test(starterSceneBody)) {
+  fail('starter scene reload must clear mooring and editable-island topology');
+}
+const farmStartBody = sourceFunctionBody(html, 'startFarmWorld');
+if (!/doReset\(\);/.test(farmStartBody)) {
+  fail('welcome farm start must use the full reset lifecycle');
+}
+const islandStressBody = sourceFunctionBody(html, 'runIslandStressDemo');
+if (!/clearMooringCables\(\);\s*clearEditableIslands\(\);/.test(islandStressBody)) {
+  fail('island stress demo must clear stale moorings when replacing islands');
+}
+if (shippedDefaults.settings && Object.prototype.hasOwnProperty.call(shippedDefaults.settings, 'tinyworld:audio:music-track')) {
+  fail('shipped defaults must not pin a manual music track');
+}
 const cellDef = externalSchema.$defs && externalSchema.$defs.cell;
 if (!cellDef || !Array.isArray(cellDef.oneOf)) fail('schema must accept tuple and object cells via $defs.cell.oneOf');
 
