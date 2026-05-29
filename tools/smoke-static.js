@@ -3,8 +3,28 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(root, 'tiny-world-builder.html'), 'utf8');
+const htmlRaw = fs.readFileSync(path.join(root, 'tiny-world-builder.html'), 'utf8');
 const devServer = fs.readFileSync(path.join(root, 'tools/dev-server.js'), 'utf8');
+
+// App logic lives in external modules (LandscapeEngine.js + engine/**/*.js)
+// since the single-file HTML was split up. Match against the combined source
+// so these guards still find the functions/markers they expect.
+function collectAppModules(rootDir) {
+  const out = [];
+  const landscape = path.join(rootDir, 'LandscapeEngine.js');
+  if (fs.existsSync(landscape)) out.push(fs.readFileSync(landscape, 'utf8'));
+  const walk = (dir) => {
+    for (const name of fs.readdirSync(dir).sort()) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) walk(full);
+      else if (name.endsWith('.js')) out.push(fs.readFileSync(full, 'utf8'));
+    }
+  };
+  const engineDir = path.join(rootDir, 'engine');
+  if (fs.existsSync(engineDir)) walk(engineDir);
+  return out;
+}
+const html = htmlRaw + '\n' + collectAppModules(root).join('\n');
 
 function fail(message) {
   console.error('smoke failed:', message);

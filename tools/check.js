@@ -7,8 +7,37 @@ const htmlPath = path.join(root, 'tiny-world-builder.html');
 const schemaPath = path.join(root, 'world.schema.json');
 const vercelPath = path.join(root, 'vercel.json');
 const netlifyPath = path.join(root, 'netlify.toml');
-const html = fs.readFileSync(htmlPath, 'utf8');
+const htmlRaw = fs.readFileSync(htmlPath, 'utf8');
 const defaultsPath = path.join(root, 'tinyworld-defaults.json');
+
+// The app was split out of the old single-file HTML into external <script src>
+// modules (LandscapeEngine.js + engine/**/*.js). The DOM markup still lives in
+// the HTML, but the JS logic these checks inspect now lives in those modules.
+// Reconstruct the equivalent combined source so every guard keeps working:
+// HTML-structure patterns match the HTML portion, JS patterns match the modules.
+function collectAppModules(rootDir) {
+  const out = [];
+  const landscape = path.join(rootDir, 'LandscapeEngine.js');
+  if (fs.existsSync(landscape)) {
+    out.push({ file: 'LandscapeEngine.js', source: fs.readFileSync(landscape, 'utf8') });
+  }
+  const walk = (dir) => {
+    for (const name of fs.readdirSync(dir).sort()) {
+      const full = path.join(dir, name);
+      if (fs.statSync(full).isDirectory()) walk(full);
+      else if (name.endsWith('.js')) {
+        out.push({ file: path.relative(rootDir, full), source: fs.readFileSync(full, 'utf8') });
+      }
+    }
+  };
+  const engineDir = path.join(rootDir, 'engine');
+  if (fs.existsSync(engineDir)) walk(engineDir);
+  return out;
+}
+const appModules = collectAppModules(root);
+const html = htmlRaw + '\n' + appModules
+  .map((m) => '\n/* === ' + m.file + ' === */\n' + m.source)
+  .join('\n');
 
 function fail(message) {
   console.error('check failed:', message);
@@ -35,12 +64,16 @@ function sourceFunctionBody(source, name) {
   fail('function body unterminated: ' + name);
 }
 
-const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/);
-if (!scriptMatch) fail('inline app script missing');
-try {
-  new Function(scriptMatch[1]);
-} catch (err) {
-  fail('inline app script syntax error: ' + err.message);
+if (!/<script src="engine\/world\/[^"]+\.js">/.test(htmlRaw)) {
+  fail('app module scripts missing: expected <script src="engine/world/*.js"> tags');
+}
+if (!appModules.length) fail('inline app script missing');
+for (const mod of appModules) {
+  try {
+    new Function(mod.source);
+  } catch (err) {
+    fail('app script syntax error in ' + mod.file + ': ' + err.message);
+  }
 }
 
 let externalSchema;
@@ -57,10 +90,14 @@ try {
   fail('tinyworld-defaults.json is not valid JSON: ' + err.message);
 }
 
-const schemaStart = html.indexOf('  const WORLD_SCHEMA = ');
-const schemaEnd = html.indexOf('\n\n  // -------- AI generation --------', schemaStart);
+const schemaDecl = '  const WORLD_SCHEMA = ';
+const schemaStart = html.indexOf(schemaDecl);
+// The schema is a top-level (2-space indented) const, so its object literal
+// closes on a line that is exactly "  };". Inner objects close at deeper
+// indentation, so this structural terminator is unambiguous.
+const schemaEnd = schemaStart < 0 ? -1 : html.indexOf('\n  };', schemaStart);
 if (schemaStart < 0 || schemaEnd < 0) fail('embedded WORLD_SCHEMA block missing');
-let embeddedSource = html.slice(schemaStart + '  const WORLD_SCHEMA = '.length, schemaEnd).trim();
+let embeddedSource = html.slice(schemaStart + schemaDecl.length, schemaEnd + '\n  }'.length).trim();
 if (embeddedSource.endsWith(';')) embeddedSource = embeddedSource.slice(0, -1);
 let embeddedSchema;
 try {
@@ -75,7 +112,7 @@ if (JSON.stringify(embeddedSchema) !== JSON.stringify(externalSchema)) {
 const attrPattern = /<(script|link)\b[^>]*\s(?:src|href)=["']([^"']+)["']/gi;
 const missing = [];
 const remoteRuntime = [];
-for (const match of html.matchAll(attrPattern)) {
+for (const match of htmlRaw.matchAll(attrPattern)) {
   const tag = match[1].toLowerCase();
   const ref = match[2];
   if (/^(?:https?:)?\/\//.test(ref)) {
