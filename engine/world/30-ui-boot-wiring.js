@@ -610,6 +610,10 @@
     } else {
       twPerfMark('boot:load-state-restored');
     }
+    // Always open in the non-destructive Select tool, even when loadState
+    // restored a world that had a build tool active — a fresh session should
+    // never start hot, so a stray click can't begin building unexpectedly.
+    selectTool(DEFAULT_TOOL);
     worldHistoryReady = true;
     refreshWorldHistoryUI();
     twPerfMark('boot:scene-ready');

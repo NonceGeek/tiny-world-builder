@@ -36,6 +36,7 @@ Guidance for AI coding agents working in this repo. Read this before touching
   - `.codex/skills/tinyworld-integrations` — API, webhook, SSE, MCP, plugin, and automation examples.
   - `.codex/skills/tinyworld-runtime-state` — persisted localStorage, defaults pipeline (`tinyworld-defaults.json` + `/api/save-defaults`), audio, camera, panel positions, inline-script gotcha.
   - `.codex/skills/tinyworld-island-and-planes` — home island layout, sponsor banner drape, plane/crop-duster flight curves, "front" side conventions.
+  - `.codex/skills/tinyworld-tool-icons-and-modes` — mode indicator, boot-to-Select, Esc-to-Select.
 
 ## House style
 

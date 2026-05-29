@@ -1441,6 +1441,14 @@
       e.preventDefault();
       return;
     }
+    // Esc disarms any build/paint/erase tool back to the safe Select tool, so
+    // there's always a one-key way out of "hot" placement. (Skipped in
+    // first-person walk mode, where Esc exits the camera instead.)
+    if (e.key === 'Escape' && !(typeof fp !== 'undefined' && fp.active) &&
+        selectedTool && !selectedTool.select) {
+      const selTool = TOOLS.find(t => t.id === 'select');
+      if (selTool) { selectTool(selTool); e.preventDefault(); return; }
+    }
     if (e.key === 'Backspace' || e.key === 'Delete') {
       deleteActiveCellIntent();
       e.preventDefault();

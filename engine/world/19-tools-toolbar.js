@@ -1497,10 +1497,37 @@
     rememberSelectedStampTool(t);
     syncModelStampSettingsPanel(t);
     refreshOpenStampBuilderCards();
+    updateModeIndicator();
     // Island tool: snap the hologram to a default free 8-grid slot immediately,
     // so "add island" shows it in place rather than waiting for a click.
     if (t && t.island && typeof onIslandToolSelected === 'function') onIslandToolSelected();
     twPerfMark('selectTool:end:' + (t && t.id ? t.id : 'unknown'));
+  }
+
+  // -------- mode indicator --------
+  // A persistent HUD chip that names the current mode so a click never starts
+  // building by surprise. Select/Move reads calm; any build/paint/erase tool
+  // reads "armed" (coloured) so it's obvious the canvas is hot.
+  function modeDescriptor(t) {
+    if (!t || t.select) return { cls: 'select', label: 'Select / Move', sub: 'Click to inspect — drag to orbit' };
+    if (t.erase) return { cls: 'erase', label: 'Erasing', sub: 'Click a cell to remove' };
+    if (t.auto) return { cls: 'build', label: 'Auto', sub: 'AI suggests placements' };
+    if (t.island) return { cls: 'build', label: 'New Island', sub: 'Click empty space to add land' };
+    if (t.mooring) return { cls: 'build', label: 'Mooring', sub: 'Pin two anchors to link' };
+    const variant = t.activeVariant && t.activeVariant.label ? ' · ' + t.activeVariant.label : '';
+    const noun = t.terrain ? 'Painting' : 'Building';
+    return { cls: 'build', label: noun + ': ' + t.label + variant, sub: 'Esc to return to Select' };
+  }
+  function updateModeIndicator() {
+    const el = document.getElementById('mode-indicator');
+    if (!el) return;
+    const d = modeDescriptor(selectedTool);
+    el.className = 'mode-indicator mode-' + d.cls;
+    const labelEl = el.querySelector('.mode-label');
+    const subEl = el.querySelector('.mode-sub');
+    if (labelEl) labelEl.textContent = d.label;
+    if (subEl) subEl.textContent = d.sub;
+    el.setAttribute('aria-label', d.label + '. ' + d.sub);
   }
 
   function renderToolGroupFlyout(el, group) {
