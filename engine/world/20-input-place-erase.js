@@ -20,7 +20,20 @@
       if (hitIsland) {
         selectEditableIsland(hitIsland);
       } else {
-        createEditableIsland(nextEditableIslandPosition(cell));
+        // Place into the chosen 8-grid slot around the anchor island. Falls
+        // back to the legacy cursor-derived position for the first island
+        // (no anchor) or when every neighbour slot is occupied.
+        const slot = (currentHover && currentHover.__islandSlot) || islandHoverSlot(cell);
+        if (slot) {
+          createEditableIsland({
+            boardX: slot.boardX, boardZ: slot.boardZ,
+            positionX: slot.positionX, positionY: slot.positionY, positionZ: slot.positionZ,
+          });
+        } else {
+          createEditableIsland(nextEditableIslandPosition(cell));
+        }
+        // Re-anchor the hologram on the freshly placed island for the next one.
+        onIslandToolSelected();
       }
       return;
     }
@@ -400,7 +413,84 @@
     updateGhostPlacement();
   }
 
+  // -------- island placement (8-slot grid hologram) --------
+  // When the Island tool is active and at least one editable island exists, the
+  // blank-island hologram snaps to one of the 8 board-neighbour slots around the
+  // anchor island (skipping occupied slots) instead of following the cursor, and
+  // a click places the new island in that slot. The first island (no anchor)
+  // still places via the normal cursor path.
+  const ISLAND_SLOT_DIRS = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]; // S,N,E,W, then diagonals
+  function islandToolActive() { return !!(selectedTool && selectedTool.island); }
+  function islandPlacementAnchor() {
+    return (typeof selectedEditableIsland === 'function' && selectedEditableIsland())
+      || editableIslands[editableIslands.length - 1] || null;
+  }
+  function islandPlacementSlots(anchor) {
+    if (!anchor) return [];
+    const gap = GRID + 1;
+    return ISLAND_SLOT_DIRS.map(([dx, dz]) => ({
+      boardX: anchor.boardX + dx,
+      boardZ: anchor.boardZ + dz,
+      positionX: (anchor.positionX || 0) + dx * gap,
+      positionY: (anchor.positionY || 0),
+      positionZ: (anchor.positionZ || 0) + dz * gap,
+      free: !editableIslandForBoard(anchor.boardX + dx, anchor.boardZ + dz),
+    }));
+  }
+  function freeIslandSlots(anchor) { return islandPlacementSlots(anchor).filter(s => s.free); }
+  function defaultIslandSlot(anchor) { const f = freeIslandSlots(anchor); return f.length ? f[0] : null; }
+  // Pure: nearest free slot to a world point (or first free when off-grid). Exposed for tests.
+  function islandSlotForPoint(anchor, wx, wz) {
+    const slots = freeIslandSlots(anchor);
+    if (!slots.length) return null;
+    if (!Number.isFinite(wx) || !Number.isFinite(wz)) return slots[0];
+    let best = slots[0], bestD = Infinity;
+    for (const s of slots) {
+      const d = (s.positionX - wx) ** 2 + (s.positionZ - wz) ** 2;
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best;
+  }
+  function islandHoverSlot(cell) {
+    const anchor = islandPlacementAnchor();
+    if (!anchor) return null;
+    if (cell && Number.isFinite(cell.worldX)) return islandSlotForPoint(anchor, cell.worldX, cell.worldZ);
+    return defaultIslandSlot(anchor);
+  }
+  function islandSlotHoverCell(slot) {
+    return {
+      x: 0, z: 0, boardX: slot.boardX, boardZ: slot.boardZ,
+      worldX: slot.positionX, worldY: slot.positionY, worldZ: slot.positionZ,
+      __islandSlot: slot, __islandSlotY: slot.positionY,
+    };
+  }
+  // Show the hologram at the default slot the moment the Island tool is picked
+  // (or right after placing, to anchor the next one).
+  function onIslandToolSelected() {
+    if (!islandToolActive()) return;
+    const slot = defaultIslandSlot(islandPlacementAnchor());
+    if (slot) setHoverFromCell(islandSlotHoverCell(slot));
+  }
+  if (typeof window !== 'undefined') {
+    window.__islandPlacement = {
+      anchor: islandPlacementAnchor,
+      slots: islandPlacementSlots,
+      slotForPoint: islandSlotForPoint,
+      defaultSlot: defaultIslandSlot,
+    };
+  }
+
   function setHoverFromCell(cell) {
+    if (islandToolActive()) {
+      const slot = islandHoverSlot(cell);
+      if (slot) {
+        hoverMesh.visible = false; // whole-island placement: no per-tile marker
+        currentHover = islandSlotHoverCell(slot);
+        updateGhostPlacement();
+        return;
+      }
+      // no anchor / no free slot → fall through to normal cursor placement
+    }
     if (cell) {
       hoverMesh.position.set(cell.worldX, hoverHeightForCell(cell), cell.worldZ);
       hoverMesh.visible = true;
@@ -1220,7 +1310,9 @@
   }
 
   function saveAssetTemplates(list) {
-    try { localStorage.setItem(ASSET_TEMPLATES_LS, JSON.stringify((list || []).slice(0, 20))); } catch (_) {}
+    let payload;
+    try { payload = JSON.stringify((list || []).slice(0, 20)); } catch (_) { return; }
+    twSafeSetItem(ASSET_TEMPLATES_LS, payload, 'Asset template');
   }
 
   function assetTemplateCellLabel(cell) {

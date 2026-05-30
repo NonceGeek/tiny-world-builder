@@ -107,12 +107,13 @@
             if (entry) cells.push(entry);
           }
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        twSafeSetItem(STORAGE_KEY, JSON.stringify({
           v: STORAGE_VERSION,
           gridSize: GRID,
           islands: serializeEditableIslands(),
           moorings: serializeMooringCables(),
           cells,
+          voxelBuildStamps: referencedVoxelBuildStamps(cells),
           cameraMode,
           toolId: selectedTool && selectedTool.id,
           useLandscapeEngine,
@@ -122,7 +123,7 @@
           landscapeEngineSeed: landscapeEngineInstance ? landscapeEngineInstance.seed : null,
           landscapeEngineBiome: landscapeEngineInstance ? landscapeEngineInstance.currentBiomeName : null,
           planetLandscape: serializePlanetLandscapeState(),
-        }));
+        }), 'World');
       } catch (_) {}
     }, 200);
   }
@@ -162,8 +163,57 @@
     if (typeof saveCustomVoxelBuildStamps === 'function') { try { saveCustomVoxelBuildStamps(); } catch (_) {} }
   }
 
+  // Saved worlds/builds carry the definitions of any CUSTOM voxel-build stamps
+  // they reference (see referencedVoxelBuildStamps below) so a world opened on
+  // another browser/device isn't left with unresolved voxelBuildId references.
+  // Register any we don't already have, then persist them locally.
+  function registerEmbeddedVoxelBuildStamps(data) {
+    const list = data && data.voxelBuildStamps;
+    if (!Array.isArray(list) || !list.length) return;
+    if (typeof normalizeVoxelBuildStamp !== 'function' || typeof VOXEL_BUILD_STAMPS === 'undefined') return;
+    let added = 0;
+    for (const item of list) {
+      if (!item || typeof item !== 'object') continue;
+      if (item.id && getVoxelBuildStamp(item.id)) continue;
+      let stamp = null;
+      try { stamp = normalizeVoxelBuildStamp(Object.assign({}, item, { custom: true }), item.name); } catch (_) {}
+      if (stamp && !getVoxelBuildStamp(stamp.id)) { VOXEL_BUILD_STAMPS.push(stamp); added++; }
+    }
+    if (added && typeof saveCustomVoxelBuildStamps === 'function') { try { saveCustomVoxelBuildStamps(); } catch (_) {} }
+  }
+
+  // Collect the CUSTOM voxel-build stamp definitions referenced by a serialized
+  // cell list, so they can be embedded in the saved world. Built-in stamps are
+  // omitted (they resolve from code). Returns undefined when there are none, so
+  // the field is simply absent for worlds without custom builds.
+  function referencedVoxelBuildStamps(cells) {
+    if (typeof getVoxelBuildStamp !== 'function' || !Array.isArray(cells)) return undefined;
+    const ids = new Set();
+    for (const entry of cells) {
+      let ap = null;
+      if (Array.isArray(entry)) {
+        // appearance is the lone plain-object tuple member carrying voxelBuildId
+        ap = entry.find(e => e && typeof e === 'object' && !Array.isArray(e) && (e.voxelBuildId || e.voxelBuild));
+      } else if (entry && typeof entry === 'object') {
+        ap = entry.appearance;
+      }
+      const id = ap && (ap.voxelBuildId || ap.voxelBuild);
+      if (id) ids.add(id);
+    }
+    if (!ids.size) return undefined;
+    const out = [];
+    ids.forEach(id => {
+      const s = getVoxelBuildStamp(id);
+      if (s && s.custom) out.push({ id: s.id, name: s.name, voxels: s.voxels, customParts: s.customParts, footprint: s.footprint });
+    });
+    return out.length ? out : undefined;
+  }
+  // Cross-module access (server-build + named-slot saves live in module 30).
+  window.referencedVoxelBuildStamps = referencedVoxelBuildStamps;
+
   function applyState(data, opts = {}) {
     if (!data || !Array.isArray(data.cells)) return false;
+    registerEmbeddedVoxelBuildStamps(data);
     materializeCustomPartCells(data);
     normalizeWorldCells(data);
     const err = validateWorld(data);

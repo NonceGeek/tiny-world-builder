@@ -1497,6 +1497,9 @@
     rememberSelectedStampTool(t);
     syncModelStampSettingsPanel(t);
     refreshOpenStampBuilderCards();
+    // Island tool: snap the hologram to a default free 8-grid slot immediately,
+    // so "add island" shows it in place rather than waiting for a click.
+    if (t && t.island && typeof onIslandToolSelected === 'function') onIslandToolSelected();
     twPerfMark('selectTool:end:' + (t && t.id ? t.id : 'unknown'));
   }
 

@@ -447,6 +447,9 @@
       swatch.position.y = 0.02;
       mesh = new THREE.Group();
       mesh.add(swatch);
+    } else if (tool.island) {
+      // Whole-island placement hologram (snaps to an 8-grid slot via setHoverFromCell).
+      mesh = makeBlankIsland();
     }
     } // end standalone build (skipped when a merged mesh was produced)
     if (!mesh) return null;
@@ -762,6 +765,8 @@
   }
 
   function hoverHeightForCell(cell) {
+    // Island-placement hologram carries its own float height (the slot's group Y).
+    if (cell && cell.__islandSlotY !== undefined) return cell.__islandSlotY;
     if (cell && cell.editableIslandId) {
       const gx = cell.x + (cell.boardX || 0) * GRID;
       const gz = cell.z + (cell.boardZ || 0) * GRID;

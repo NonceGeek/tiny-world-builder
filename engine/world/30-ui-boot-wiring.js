@@ -264,6 +264,9 @@
         islands: serializeEditableIslands(),
         moorings: serializeMooringCables(),
         cells,
+        // Embed referenced custom voxel-build defs so a build opened on another
+        // device isn't left with unresolved voxelBuildId references.
+        voxelBuildStamps: referencedVoxelBuildStamps(cells),
         cameraMode,
         toolId: selectedTool && selectedTool.id,
       };
@@ -1665,7 +1668,7 @@
     } catch (_) { return []; }
   }
   function writeWorldsMeta(list) {
-    try { localStorage.setItem(WORLDS_LS.list, JSON.stringify(list)); } catch (_) {}
+    twSafeSetItem(WORLDS_LS.list, JSON.stringify(list), 'Saved worlds');
   }
   function getActiveWorldId() {
     try { return localStorage.getItem(WORLDS_LS.active) || ''; } catch (_) { return ''; }
@@ -1695,6 +1698,52 @@
     if (diff < 86_400_000) return Math.floor(diff / 3_600_000) + 'h ago';
     if (diff < 7 * 86_400_000) return Math.floor(diff / 86_400_000) + 'd ago';
     try { return new Date(ts).toLocaleDateString(); } catch (_) { return ''; }
+  }
+
+  // Asset library backup: bundle the user's custom voxel builds + saved asset
+  // templates into one portable JSON file (and restore from it). This is the
+  // device-independent escape hatch from localStorage-only persistence.
+  function collectCustomVoxelBuilds() {
+    if (typeof VOXEL_BUILD_STAMPS === 'undefined') return [];
+    return VOXEL_BUILD_STAMPS.filter(s => s.custom).map(s => ({
+      id: s.id, name: s.name, voxels: s.voxels, customParts: s.customParts, footprint: s.footprint,
+    }));
+  }
+  function exportAssetLibrary() {
+    const voxelBuilds = collectCustomVoxelBuilds();
+    const assetTemplates = (typeof loadAssetTemplates === 'function') ? loadAssetTemplates() : [];
+    const count = voxelBuilds.length + assetTemplates.length;
+    if (!count) { twToast('No custom assets to export yet.', null); return; }
+    twDownloadJSON('tinyworld-assets.json', {
+      tinyworldAssets: 1,
+      exportedAt: new Date().toISOString(),
+      voxelBuilds,
+      assetTemplates,
+    });
+    twToast('Exported ' + count + ' asset' + (count === 1 ? '' : 's') + ' → tinyworld-assets.json', 'ok');
+  }
+  function importAssetLibrary(bundle) {
+    if (!bundle || typeof bundle !== 'object') { twToast('Not a valid asset file.', 'err'); return; }
+    const builds = Array.isArray(bundle.voxelBuilds) ? bundle.voxelBuilds
+      : (Array.isArray(bundle.builds) ? bundle.builds : []);
+    let voxelCount = 0;
+    if (builds.length && typeof importVoxelBuildPayload === 'function') {
+      voxelCount = importVoxelBuildPayload(builds, 'Imported Build').length;
+    }
+    let tplCount = 0;
+    if (Array.isArray(bundle.assetTemplates) && bundle.assetTemplates.length
+        && typeof loadAssetTemplates === 'function' && typeof saveAssetTemplates === 'function') {
+      saveAssetTemplates(bundle.assetTemplates.concat(loadAssetTemplates()));
+      tplCount = bundle.assetTemplates.length;
+    }
+    if (typeof buildToolbar === 'function') { try { buildToolbar(); } catch (_) {} }
+    twToast('Imported ' + voxelCount + ' build' + (voxelCount === 1 ? '' : 's')
+      + ' and ' + tplCount + ' template' + (tplCount === 1 ? '' : 's') + '.',
+      (voxelCount + tplCount) ? 'ok' : null);
+  }
+  async function importAssetLibraryViaPicker() {
+    const bundle = await twPickJSONFile();
+    if (bundle) importAssetLibrary(bundle);
   }
 
   (function wireWorldMenu() {
@@ -1985,6 +2034,8 @@
       } });
       items.push({ group: 'World', label: 'Reset world', hint: 'back to the starter scene', run: topBtnAction('reset') });
       items.push({ group: 'World', label: 'Clear to grass', hint: 'wipe to empty grass', run: topBtnAction('clear') });
+      items.push({ group: 'Assets', label: 'Export assets to file', hint: 'back up custom voxel builds + templates as JSON', run: () => exportAssetLibrary() });
+      items.push({ group: 'Assets', label: 'Import assets from file', hint: 'restore custom builds + templates from a .json', run: () => importAssetLibraryViaPicker() });
       items.push({ group: 'World', label: 'Run vehicle seed demo', hint: 'map + cars + targets from ' + VEHICLE_DEMO_DEFAULT_SEED, run: () => {
         runSeededVehicleDemo(VEHICLE_DEMO_DEFAULT_SEED);
       } });

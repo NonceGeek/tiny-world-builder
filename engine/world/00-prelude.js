@@ -23,3 +23,95 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+
+  // Lightweight self-contained toast (no CSS/HTML dependency) for surfacing
+  // things the user must not miss — chiefly silent localStorage failures.
+  let __twToastHost = null;
+  function twToast(message, kind) {
+    try {
+      if (!__twToastHost) {
+        __twToastHost = document.createElement('div');
+        __twToastHost.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none;';
+        document.body.appendChild(__twToastHost);
+      }
+      const el = document.createElement('div');
+      const bg = kind === 'err' ? '#c0392b' : (kind === 'ok' ? '#2e7d32' : '#333');
+      el.style.cssText = 'pointer-events:auto;max-width:min(92vw,420px);padding:10px 14px;border-radius:8px;color:#fff;font:500 13px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.25);background:' + bg + ';opacity:0;transition:opacity .18s ease;';
+      el.textContent = String(message);
+      __twToastHost.appendChild(el);
+      requestAnimationFrame(() => { el.style.opacity = '1'; });
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 220);
+      }, kind === 'err' ? 6000 : 3000);
+    } catch (_) { /* DOM not ready — nothing we can do */ }
+  }
+
+  // localStorage.setItem that does NOT swallow quota/serialization failures.
+  // Returns true on success, false on failure (and warns the user once-ish).
+  // `label` names the thing being saved, for the failure message.
+  let __twStorageWarnedAt = 0;
+  function twSafeSetItem(key, value, label) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (err) {
+      console.error('[tinyworld] localStorage save failed for', key, err);
+      // Rate-limit the visible warning so a churning autosave can't spam it.
+      const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      if (now - __twStorageWarnedAt > 8000) {
+        __twStorageWarnedAt = now;
+        const quota = err && (err.name === 'QuotaExceededError' || err.code === 22 || err.code === 1014);
+        twToast(
+          (label ? label + ' could not be saved' : 'Save failed') +
+          (quota ? ' — browser storage is full. Export your assets/worlds to a file to avoid losing them.' : '.'),
+          'err'
+        );
+      }
+      return false;
+    }
+  }
+
+  // Trigger a client-side download of a JSON object as `filename`.
+  function twDownloadJSON(filename, obj) {
+    try {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return true;
+    } catch (err) {
+      console.error('[tinyworld] download failed', err);
+      twToast('Download failed.', 'err');
+      return false;
+    }
+  }
+
+  // Prompt for a local .json file and resolve its parsed contents.
+  function twPickJSONFile() {
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json,.json';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) { resolve(null); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          try { resolve(JSON.parse(String(reader.result || ''))); }
+          catch (_) { twToast('That file is not valid JSON.', 'err'); resolve(null); }
+        };
+        reader.onerror = () => { twToast('Could not read that file.', 'err'); resolve(null); };
+        reader.readAsText(file);
+      });
+      document.body.appendChild(input);
+      input.click();
+      setTimeout(() => { if (input.parentNode) input.parentNode.removeChild(input); }, 1000);
+    });
+  }

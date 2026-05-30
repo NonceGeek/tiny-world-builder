@@ -321,13 +321,15 @@
     opacityRoots.add(group);
     group.traverse(o => {
       if (!o.isMesh || !o.material) return;
-      // Ghost-board terrain receives shadows but does not cast. Ghost
-      // objects cast/receive shadows so Preview houses/trees/rocks visibly
-      // drop shadows onto Preview ground.
+      // Ghost-board terrain neither casts nor receives shadows: the large flat
+      // tile plates self-shadow into parallel-band acne under the voxel-tuned
+      // shadow bias (sun.shadow.bias/normalBias in 02-cameras-lighting.js are
+      // deliberately tight for small voxel pieces). Ghost objects still
+      // cast/receive so Preview houses/trees/rocks drop shadows on each other.
       if (ghost) {
         if (group.userData.fadeRole === 'tile') {
           o.castShadow = false;
-          o.receiveShadow = true;
+          o.receiveShadow = false;
         } else if (group.userData.fadeRole === 'object') {
           o.castShadow = true;
           o.receiveShadow = true;

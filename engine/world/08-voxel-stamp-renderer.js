@@ -364,16 +364,18 @@
   }
 
   function saveCustomVoxelBuildStamps() {
+    let payload;
     try {
-      localStorage.setItem(VOXEL_BUILD_CUSTOM_LS, JSON.stringify(VOXEL_BUILD_STAMPS.filter(s => s.custom).map(s => ({
+      payload = JSON.stringify(VOXEL_BUILD_STAMPS.filter(s => s.custom).map(s => ({
         id: s.id,
         name: s.name,
         voxels: s.voxels,
         customParts: s.customParts,
         footprint: s.footprint,
         custom: true,
-      }))));
-    } catch (_) {}
+      })));
+    } catch (_) { return; }
+    twSafeSetItem(VOXEL_BUILD_CUSTOM_LS, payload, 'Custom voxel build');
   }
 
   function importVoxelBuildPayload(payload, fallbackName = 'Imported Build') {
