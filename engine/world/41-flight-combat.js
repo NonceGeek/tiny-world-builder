@@ -131,7 +131,78 @@
     shotsFired++;
   }
 
-  function attemptInstantHit(origin, dir) { /* implemented in a later task */ }
+  // ---- hitscan ----
+  const _fcHitToTarget = new THREE.Vector3();
+  const _fcHitNearest = new THREE.Vector3();
+  const _fcHitPos = new THREE.Vector3();
+  const GUN_DAMAGE = 8;
+  let gunHits = 0;
+  function attemptInstantHit(origin, dir) {
+    let best = null, bestAlong = Infinity;
+    for (const tgt of targets) {
+      if (!tgt.isAlive()) continue;
+      tgt.getWorldPos(_fcHitToTarget); _fcHitToTarget.sub(origin);
+      const along = _fcHitToTarget.dot(dir);
+      if (along < 0 || along > 400) continue;
+      _fcHitNearest.copy(dir).multiplyScalar(along).add(origin);
+      tgt.getWorldPos(_fcHitPos);
+      const miss = _fcHitNearest.distanceTo(_fcHitPos);
+      // aim magnet: a locked / locking target is more forgiving to hit
+      const magnet = (tgt.id === lockId ? 1.4 : 0.4) + lockAmount * 1.2;
+      if (miss > tgt.radius + magnet) continue;
+      if (along < bestAlong) { bestAlong = along; best = tgt; }
+    }
+    if (best) {
+      best.getWorldPos(_fcHitPos);
+      best.applyDamage(GUN_DAMAGE, _fcHitPos, 'gun');
+      spawnHitSparks(_fcHitPos);
+      gunHits++;
+    }
+  }
+
+  // ---- hit sparks ----
+  const SPARK_POOL = 40;
+  let sparkGroup = null;
+  const sparks = [];
+  const _fcSparkTmp = new THREE.Vector3();
+  function ensureSparkPool() {
+    if (sparkGroup) return;
+    sparkGroup = new THREE.Group();
+    sparkGroup.name = 'tw_flight_sparks';
+    scene.add(sparkGroup);
+    const mat = new THREE.SpriteMaterial({ color: 0xffd27a, transparent: true,
+      opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (let i = 0; i < SPARK_POOL; i++) {
+      const s = new THREE.Sprite(mat.clone());
+      s.scale.setScalar(0.18);
+      s.visible = false;
+      s.raycast = () => {};
+      sparkGroup.add(s);
+      sparks.push({ sprite: s, vel: new THREE.Vector3(), life: 0, active: false });
+    }
+  }
+  function spawnHitSparks(pos) {
+    let emitted = 0;
+    for (const sp of sparks) {
+      if (sp.active) continue;
+      sp.active = true;
+      sp.life = 0.25;
+      sp.sprite.position.copy(pos);
+      sp.sprite.scale.setScalar(0.18);
+      sp.vel.set((Math.random()-0.5)*6, (Math.random()-0.5)*6, (Math.random()-0.5)*6);
+      sp.sprite.visible = true;
+      if (++emitted >= 8) break;
+    }
+  }
+  function updateSparks(dt) {
+    for (const sp of sparks) {
+      if (!sp.active) continue;
+      sp.life -= dt;
+      if (sp.life <= 0) { sp.active = false; sp.sprite.visible = false; continue; }
+      sp.sprite.position.addScaledVector(sp.vel, dt);
+      sp.sprite.material.opacity = Math.max(0, sp.life / 0.25) * 0.9;
+    }
+  }
 
   // ---- bbox-derived muzzle offsets ----
   // _bbox yields WORLD-space extents. Because fireGuns uses jet.localToWorld
@@ -323,6 +394,7 @@
     fireCooldown = 0;
     shotsFired = 0;
     ensureTracerPool();
+    ensureSparkPool();
     ensureOverlay();
     ensureHudPool();
     reticleState.init = false;
@@ -350,6 +422,7 @@
       fireCooldown = FIRE_COOLDOWN;
     }
     updateTracers(dt);
+    updateSparks(dt);
     updateReticle(dt);
     updateLock(dt);
     updateTargetHud();
@@ -359,7 +432,7 @@
     const dir = (active && window.__flightSceneForward)
       ? window.__flightSceneForward(_fireDir).clone() : null;
     return {
-      active, hasJet: !!jet, shotsFired,
+      active, hasJet: !!jet, shotsFired, gunHits,
       fireDir: dir ? { x: dir.x, y: dir.y, z: dir.z } : null,
       muzzleL: jet ? jet.localToWorld(gunMuzzleL.clone()).toArray() : null,
       muzzleR: jet ? jet.localToWorld(gunMuzzleR.clone()).toArray() : null,
