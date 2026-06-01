@@ -174,6 +174,33 @@
       }
     }
 
+    const SHIELD_HATCH_OPEN_ANGLE = 2.0;   // radians the gunport flap hinges open (out + down)
+    const SHIELD_WEAPON_SPEED = 1.6;        // hatch + cannon deploy speed (after the shield locks)
+
+    // Voxel laser cannon in the shield's own VoxelKit style, barrel pointing +Z
+    // (a panel's outward normal). Added to a panel before optimizeVoxelObjectGroup,
+    // so each cube is flagged noBatch to stay individually transformable (the
+    // cannon slides out). The emitter tip is a glowCube so setModuleGlow lights it
+    // once the shield (and thus the cannon) is fully powered.
+    function buildShieldCannon(kit) {
+      const m = kit.materials;
+      const g = new THREE.Group();
+      const add = (x, y, z, sx, sy, sz, mat) => {
+        const c = kit.cube(g, x, y, z, sx, sy, sz, mat, false);
+        c.userData.noBatch = true;
+        c.userData.noStaticBaseMerge = true;
+        return c;
+      };
+      add(0, 0, -0.22, 0.54, 0.54, 0.5, m.stoneDark);  // breech / mount
+      add(0, 0, 0.16, 0.5, 0.5, 0.26, m.edge);          // collar
+      add(0, 0, 0.5, 0.26, 0.26, 0.72, m.edge);         // barrel
+      add(0, 0, 0.88, 0.34, 0.34, 0.16, m.stoneDark);   // muzzle ring
+      const tip = kit.glowCube(g, 0, 0, 0.98, 0.16, 0.16, 0.12, false, 3.2); // emitter
+      tip.userData.noBatch = true;
+      tip.userData.noStaticBaseMerge = true;
+      return g;
+    }
+
     class BlastPanel extends THREE.Group {
       constructor({
         kit,
@@ -183,6 +210,7 @@
         seed = 1,
         damage = 0.25,
         gap = 0.08,
+        weapon = false,
       } = {}) {
         super();
 
@@ -195,6 +223,7 @@
         this.seed = seed;
         this.damage = damage;
         this.gap = gap;
+        this.weapon = weapon;
 
         this.userData.kind = 'blast-panel';
         this.userData.width = width;
@@ -241,6 +270,38 @@
         // Dimmer, shorter-range point light: a rim accent on the shield edge, not
         // a flood that lights the interior.
         k.addPointGlow(this, 0, height + 0.42, depth / 2 + 0.04, 0.5, 3.5);
+
+        if (this.weapon) {
+          // Weapon gunport on the outer (+Z) face: a dark recessed socket, a flap
+          // that hinges down at its bottom edge, and a voxel cannon retracted
+          // behind it that slides out once the shield is up. Refs stored for the
+          // weapon-deploy animation in ShieldRing.applyWeapons(). noBatch keeps
+          // the moving parts transformable through optimizeVoxelObjectGroup.
+          const midY = height * 0.5;
+          const portW = Math.min(1.5, width * 0.5);
+          const portH = 1.5;
+          const faceZ = depth / 2;
+          const wp = (parent, x, y, z, sx, sy, sz, mat) => {
+            const c = k.cube(parent, x, y, z, sx, sy, sz, mat, false);
+            c.userData.noBatch = true;
+            c.userData.noStaticBaseMerge = true;
+            return c;
+          };
+          wp(this, 0, midY, faceZ + 0.01, portW + 0.18, portH + 0.18, 0.06, m.edge);
+          wp(this, 0, midY, faceZ - 0.01, portW, portH, 0.06, m.slot);
+          const hatchPivot = new THREE.Group();
+          hatchPivot.position.set(0, midY - portH / 2, faceZ + 0.07);
+          wp(hatchPivot, 0, portH / 2, 0, portW, portH, 0.08, m.stoneDark);
+          wp(hatchPivot, 0, portH * 0.82, 0, portW * 0.88, 0.09, 0.11, m.edge);
+          this.add(hatchPivot);
+          const cannon = buildShieldCannon(k);
+          const cannonRetractZ = faceZ - 0.6;
+          const cannonDeployZ = faceZ + 0.6;
+          cannon.position.set(0, midY, cannonRetractZ);
+          cannon.visible = false;
+          this.add(cannon);
+          this.userData.weaponPort = { hatchPivot, cannon, cannonRetractZ, cannonDeployZ };
+        }
       }
     }
 
@@ -334,6 +395,7 @@
         this.emergeFromIsland = emergeFromIsland;
         this.panels = [];
         this.keystones = [];
+        this.weaponProgress = 0;
         this.slots = [];
         this.progress = 0;
         this.targetProgress = 0;
@@ -463,6 +525,8 @@
             seed: side.sideIndex * 100 + cornerIndex * 20 + i,
             damage,
             gap: this.gap,
+            // Arm the middle panel of each corner-segment: a few cannons per side.
+            weapon: i === Math.floor(this.panelsPerCornerSide / 2),
           });
 
           const finalDistance = inset + slotWidth / 2 + i * (slotWidth + this.gap);
@@ -536,6 +600,11 @@
         this.progress = shieldClamp01(progress);
         this.targetProgress = this.progress;
         this.applyDeployment(this.progress, 0);
+        // Instant set (e.g. ?shield=1 boot): match the weapon state to the shield
+        // so a fully-deployed shield comes up with its cannons already out.
+        this.weaponProgress = this.progress > 0.985 ? 1 : 0;
+        this.applyWeapons(this.weaponProgress, 0);
+        this._settled = false;
         notifyVoxelShieldChanged(this);
       }
 
@@ -550,10 +619,32 @@
         // (0.001 < progress < 0.986). Both settled states are time-independent and visually static
         // (closed => glow power 0; fully locked => flicker forced to 1), so once settled we apply one
         // final frame then skip subsequent frames. Mirrors the atmosphere dirty-flag in 39-atmosphere-effects.js.
-        const active = this.progress !== this.targetProgress || (this.progress > 0.001 && this.progress < 0.986);
+        // Weapons deploy ONLY once the shield is fully up (and staying up); they
+        // retract first when it closes. weaponProgress drives the hatch + cannon.
+        const weaponTarget = (this.progress > 0.985 && this.targetProgress > 0.985) ? 1 : 0;
+        this.weaponProgress = shieldLerp(this.weaponProgress, weaponTarget, shieldClamp01(deltaTime * SHIELD_WEAPON_SPEED));
+        if (Math.abs(this.weaponProgress - weaponTarget) < 0.002) this.weaponProgress = weaponTarget;
+        const weaponsMoving = this.weaponProgress !== weaponTarget || (this.weaponProgress > 0.001 && this.weaponProgress < 0.999);
+        const active = this.progress !== this.targetProgress || (this.progress > 0.001 && this.progress < 0.986) || weaponsMoving;
         if (!active && this._settled) return;
         this.applyDeployment(this.progress, time);
+        this.applyWeapons(this.weaponProgress, time);
         this._settled = !active;
+      }
+
+      // Hatches hinge down (weaponProgress 0 -> 0.5), then cannons slide out and
+      // aim (0.45 -> 1). Reverses on retract. Cheap: only the armed panels.
+      applyWeapons(wp, time) {
+        if (!this._weaponPorts) this._weaponPorts = this.panels.filter(p => p.userData.weaponPort);
+        if (!this._weaponPorts.length) return;
+        const hatchOpen = shieldSmoothstep(wp / 0.5);
+        const cannonOut = shieldSmoothstep((wp - 0.45) / 0.55);
+        for (const panel of this._weaponPorts) {
+          const port = panel.userData.weaponPort;
+          port.hatchPivot.rotation.x = SHIELD_HATCH_OPEN_ANGLE * hatchOpen;
+          port.cannon.position.z = shieldLerp(port.cannonRetractZ, port.cannonDeployZ, cannonOut);
+          port.cannon.visible = wp > 0.4;
+        }
       }
 
       applyDeployment(progress, time) {
