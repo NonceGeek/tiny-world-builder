@@ -182,9 +182,10 @@
     const SHIELD_TURRET_SPEED = 1.0;         // corner-turret deploy speed (ramps AFTER the edge guns)
     const SHIELD_TURRET_CUBE = 1.8;          // turret housing cube size (ring-local units)
     const SHIELD_TURRET_RISE = 2.6;          // how far the cannon + housing rise out of the keystone top
-    const SHIELD_TURRET_YAW_SPEED = 0.55;    // continuous yaw scan speed (rad/sec)
-    const SHIELD_TURRET_PITCH_SPEED = 0.9;   // pitch sweep speed
-    const SHIELD_TURRET_PITCH_RANGE = 0.78;  // pitch sweep amplitude (~90 deg total up/down)
+    const SHIELD_TURRET_YAW_SPEED = 0.4;     // horizontal sweep speed (rad/sec of the sin driver)
+    const SHIELD_TURRET_YAW_RANGE = 1.833;   // half of a 210 deg sweep (105 deg each way) around diagonal-out
+    const SHIELD_TURRET_PITCH_SPEED = 0.7;   // vertical sweep speed
+    const SHIELD_TURRET_PITCH_RANGE = 0.3927;// 22.5 deg above + 22.5 below the centre line (45 deg total)
 
     // Voxel laser cannon in the shield's own VoxelKit style, barrel pointing +Z
     // (a panel's outward normal). Added to a panel before optimizeVoxelObjectGroup,
@@ -696,8 +697,10 @@
           const topY = keystone.height * heightScale;   // keystone post top, ring-local
           const turret = this.buildTurretUnit();
           turret.position.set(fp.x, topY, fp.z);
-          turret.rotation.y = keystone.rotation.y;
+          // Aim the rest pose diagonally OUT from the corner (never into the island).
+          turret.rotation.y = Math.atan2(fp.x, fp.z);
           turret.userData.kind = 'shield-corner-turret';
+          turret.userData.keystone = keystone;   // ride the keystone top up + down
           this.add(turret);
           this.turretUnits.push(turret);
         });
@@ -707,29 +710,33 @@
         const k = this.kit;
         const m = k.materials;
         const cube = SHIELD_TURRET_CUBE;
+        const cubeW = cube * 0.9;    // 10% narrower
+        const cubeH = cube * 0.5;    // 50% shorter
+        const axleTop = cubeH + 0.7; // axle pokes up through + above the (shorter) cube
         const free = (c) => { c.userData.noBatch = true; c.userData.noStaticBaseMerge = true; return c; };
         const root = new THREE.Group();
 
-        // Central axle: the keystone extending UP through the cube; the fixed pivot.
+        // Central axle: the keystone extending UP through the cube; the fixed pivot,
+        // light on top (above the cube).
         const axle = new THREE.Group();
-        free(k.cube(axle, 0, cube * 0.65, 0, 0.5, cube * 1.3, 0.5, m.stoneDark, false));
-        free(k.cube(axle, 0, cube * 1.3 + 0.05, 0, 0.62, 0.16, 0.62, m.edge, false));
-        k.glowCube(axle, 0, cube * 1.3 + 0.26, 0, 0.34, 0.18, 0.34, false, 2.8);   // light stays on top
-        k.addPointGlow(axle, 0, cube * 1.3 + 0.28, 0, 0.85, 4.5);
+        free(k.cube(axle, 0, axleTop * 0.5, 0, 0.5, axleTop, 0.5, m.stoneDark, false));
+        free(k.cube(axle, 0, axleTop + 0.05, 0, 0.62, 0.16, 0.62, m.edge, false));
+        k.glowCube(axle, 0, axleTop + 0.26, 0, 0.34, 0.18, 0.34, false, 2.8);
+        k.addPointGlow(axle, 0, axleTop + 0.28, 0, 0.85, 4.5);
         root.add(axle);
 
         // Yaw pivot: rotating housing + cannon around the axle (cube centre).
         const yaw = new THREE.Group();
         const housing = new THREE.Group();
-        free(k.cube(housing, 0, cube * 0.5, 0, cube, cube, cube, m.stone, false));
-        free(k.cube(housing, 0, cube + 0.05, 0, cube + 0.14, 0.14, cube + 0.14, m.edge, false));
-        free(k.cube(housing, 0, 0.05, 0, cube + 0.14, 0.14, cube + 0.14, m.edge, false));
-        k.glowCube(housing, 0, cube * 0.5, cube * 0.5 + 0.05, cube * 0.7, 0.12, 0.06, false, 2.4);
+        free(k.cube(housing, 0, cubeH * 0.5, 0, cubeW, cubeH, cubeW, m.stone, false));
+        free(k.cube(housing, 0, cubeH + 0.05, 0, cubeW + 0.14, 0.14, cubeW + 0.14, m.edge, false));
+        free(k.cube(housing, 0, 0.05, 0, cubeW + 0.14, 0.14, cubeW + 0.14, m.edge, false));
+        k.glowCube(housing, 0, cubeH * 0.5, cubeW * 0.5 + 0.05, cubeW * 0.7, 0.12, 0.06, false, 2.4);
         yaw.add(housing);
 
         // Pitch pivot on the +Z face of the cube; cannon elevates here.
         const pitch = new THREE.Group();
-        pitch.position.set(0, cube * 0.5, cube * 0.5);
+        pitch.position.set(0, cubeH * 0.5, cubeW * 0.5);
         const cannon = buildShieldCannon(k);
         cannon.position.set(0, 0, 0.15);
         pitch.add(cannon);
@@ -746,8 +753,13 @@
         if (!this.turretUnits || !this.turretUnits.length) return;
         const rise = shieldSmoothstep(tp / 0.5);
         const grow = shieldSmoothstep((tp - 0.35) / 0.5);
+        const lightPower = shieldSmoothstep(tp / 0.6);
         for (const turret of this.turretUnits) {
           const t = turret.userData.turret;
+          // Ride the keystone's CURRENT top so the whole turret rises AND retracts
+          // with the corner (otherwise the spindle floats when the shield drops).
+          const ks = turret.userData.keystone;
+          if (ks) turret.position.y = ks.position.y + ks.height * ks.scale.y;
           const dy = shieldLerp(-SHIELD_TURRET_RISE, 0, rise);
           t.axle.position.y = dy;
           t.yaw.position.y = dy;
@@ -755,6 +767,7 @@
           t.housing.scale.setScalar(Math.max(0.0001, grow));
           t.housing.visible = grow > 0.01;
           t.cannon.visible = grow > 0.15;
+          setModuleGlow(turret, lightPower);
           if (tp < 0.9) { t.yaw.rotation.y = 0; t.pitch.rotation.x = 0; }
         }
       }
@@ -764,7 +777,7 @@
       // (time-based) so it keeps sweeping after the deploy settles.
       applyTurretScan(time) {
         if (!this.turretUnits || this.turretProgress < 0.9) return;
-        const yaw = time * SHIELD_TURRET_YAW_SPEED;
+        const yaw = Math.sin(time * SHIELD_TURRET_YAW_SPEED) * SHIELD_TURRET_YAW_RANGE;
         const pitch = Math.sin(time * SHIELD_TURRET_PITCH_SPEED) * SHIELD_TURRET_PITCH_RANGE;
         for (const turret of this.turretUnits) {
           const t = turret.userData.turret;
