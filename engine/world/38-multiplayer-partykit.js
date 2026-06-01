@@ -328,7 +328,12 @@
     }
 
     function sendCellSnapshot(x, z, cell) {
-      if (applyingRemote || !cell) return;
+      // Gate on suppressSave too: it brackets the entire async bulk-apply
+      // window (set before buildOneChunk, cleared in finishApplyState), so a
+      // snapshot load no longer floods the room over peers' live edits.
+      // Interactive single-click edits never set suppressSave, so they still
+      // flow. suppressSave is a shared global declared at 29-persistence-api.js:9.
+      if (applyingRemote || (typeof suppressSave !== 'undefined' && suppressSave) || !cell) return;
       const copy = cleanCellForSend(cell);
       if (!copy) return;
       sendMessage({
@@ -349,6 +354,11 @@
       const x = Math.round(Number(op.x));
       const z = Math.round(Number(op.z));
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+      // Defense-in-depth: mirror the server's coordinate range check (party
+      // index.js MAX_CELL_COORD) so a malicious/buggy server can't grow
+      // world[x][z] without bound. Generous cap keeps sparse ghost-board cells.
+      const maxRemoteCoord = 100000;
+      if (Math.abs(x) > maxRemoteCoord || Math.abs(z) > maxRemoteCoord) return;
       applyingRemote = true;
       const oldHistoryMuted = typeof worldHistoryMuted !== 'undefined' ? worldHistoryMuted : false;
       try {
