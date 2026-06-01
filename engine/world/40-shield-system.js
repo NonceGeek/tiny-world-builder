@@ -177,7 +177,7 @@
     const SHIELD_WEAPON_SPEED = 1.6;        // hatch + cannon deploy speed (after the shield locks)
     const SHIELD_EDGE_HATCH_ANGLE = 1.85;   // radians the perimeter gunport flap drops (out + down)
     const SHIELD_EDGE_GUN_SCALE = 0.5;       // edge guns sized to match the island-edge greebles
-    const SHIELD_EDGE_GUN_Y = 0.0;           // vertical offset from a panel's base down to the greeble line (tune)
+    const SHIELD_EDGE_GUN_WORLD_Y = -0.42;   // target world Y: the greeble LUMP band on the cliff face, below the grass rim (tune)
     const SHIELD_EDGE_GUN_EVERY = 4;         // arm every Nth panel around the ring (a few greebles per side)
 
     // Voxel laser cannon in the shield's own VoxelKit style, barrel pointing +Z
@@ -608,14 +608,17 @@
       // the panels, NOT the ring -> no squish, no shear correction needed). Built
       // after optimiseForTinyWorld so the optimizer never touches the moving parts.
       buildPerimeterBattery() {
+        // Drop each gun from the grass rim down into the greeble LUMP band on the
+        // cliff face. The ring is scaled by fitScale and sits at world y = TOP_H -
+        // 0.08, so convert the desired world Y into this ring-local Y.
+        const fit = (typeof defaultShieldFitScale === 'function' && defaultShieldFitScale()) || 1;
+        const gunLocalY = (SHIELD_EDGE_GUN_WORLD_Y - (TOP_H - 0.08)) / fit;
         this.panels.forEach((panel, idx) => {
           if (idx % SHIELD_EDGE_GUN_EVERY !== 0) return;
           const unit = this.buildEdgeGunUnit();
           unit.scale.setScalar(SHIELD_EDGE_GUN_SCALE);
           const fp = panel.userData.finalPos;
-          // finalPos is the panel base (where it meets the island) = the greeble
-          // line; SHIELD_EDGE_GUN_Y nudges to the exact edge height.
-          unit.position.set(fp.x, fp.y + SHIELD_EDGE_GUN_Y, fp.z);
+          unit.position.set(fp.x, fp.y + gunLocalY, fp.z);
           unit.rotation.y = panel.rotation.y;
           unit.userData.kind = 'shield-edge-gun';
           this.add(unit);
