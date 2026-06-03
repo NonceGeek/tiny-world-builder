@@ -128,7 +128,7 @@
     fog: false,
   });
   const starVaultSphere = new THREE.Mesh(
-    new THREE.SphereGeometry(STAR_VAULT_RADIUS, 64, 32),
+    new THREE.SphereGeometry(STAR_VAULT_RADIUS, 32, 16),
     starVaultMaterial
   );
   starVaultSphere.name = 'star-vault-equirect-sphere';

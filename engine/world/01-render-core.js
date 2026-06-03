@@ -1302,6 +1302,15 @@
         if (topOpacity < 0.999 && lod === 'full') renderCullStats.topHidden++;
       }
     }
+    // Group-cull the decorative distant-worlds ring. Its merged meshes have
+    // frustumCulled=false (scene-spanning AABBs), so they otherwise submit every
+    // frame even when the narrow home fov doesn't include them. Box-cull at the
+    // group level instead (mirrors the editable-island cull above).
+    if (typeof distantWorldGroup !== 'undefined' && distantWorldGroup) {
+      const dwVisible = renderDistantWorlds &&
+        renderCullBoxVisible(-44, -30, -44, 44, 40, 44, xrWorldRoot.matrixWorld);
+      setRenderCullVisible(distantWorldGroup, dwVisible, renderDistantWorlds);
+    }
     updateUnderOcclusionCloudWipe(wipeStrength, wipePhase);
   }
 

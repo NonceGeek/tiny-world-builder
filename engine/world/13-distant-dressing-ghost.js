@@ -359,6 +359,16 @@
     }
   }
 
+  function isEditableIslandEngineNode(node) {
+    let n = node;
+    for (let i = 0; i < 8 && n; i++) {
+      const u = n.userData;
+      if (u && (u.editableIslandEngineId || u.isEditableIslandEnginePropeller ||
+        u.kind === 'voxel-lift-engine' || u.kind === 'editable-island-engine')) return true;
+      n = n.parent;
+    }
+    return false;
+  }
   function prepareHomeBorderForRender(obj) {
     obj.traverse(c => {
       if (c.isMesh) {
@@ -368,8 +378,11 @@
         c.castShadow = false;
         c.receiveShadow = false;
         // Scene-level island culling owns this group. Per-mesh frustum culling
-        // can clip the side/back faces at low or grazing camera angles.
-        c.frustumCulled = false;
+        // can clip the side/back faces at low or grazing camera angles, so the
+        // board side/backing meshes stay unculled. Lift engines, however, are
+        // localized objects that don't span the view — leave their per-mesh
+        // frustum culling at the default (true) so off-screen engines don't submit.
+        if (!isEditableIslandEngineNode(c)) c.frustumCulled = false;
       }
     });
     return obj;
