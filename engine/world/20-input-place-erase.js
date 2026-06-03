@@ -731,6 +731,28 @@
       return;
     }
 
+    // Sub-object part pick: when an object is in part-edit mode, a plain click
+    // selects the sub-part under the cursor (door/window/wall/roof/voxel) rather
+    // than falling through to cell selection on pointerup. Runs before the
+    // engine/cell paths and marks the drag so pointerup doesn't clobber it.
+    const sub = window.__tinyworldSubEdit;
+    const subHit = (e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey && mpEditAllowed()
+        && sub && sub.isActive && sub.isActive() && sub._pick)
+      ? sub._pick(e.clientX, e.clientY)
+      : null;
+    if (subHit) {
+      sub.selectPart(subHit.partKey);
+      dragMode = 'subpart-select';
+      pointerDown = { x: e.clientX, y: e.clientY };
+      lastPointer = { x: e.clientX, y: e.clientY };
+      didDrag = false;
+      hoverMesh.visible = false;
+      currentHover = null;
+      renderer.domElement.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+
     const engineHit = e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey && mpEditAllowed()
       ? pickEditableIslandEngine(e.clientX, e.clientY)
       : null;
@@ -936,7 +958,8 @@
     // selects with the Select tool, otherwise applies the active tool.
     if (pointerDown && !didDrag
         && dragMode !== 'pan' && dragMode !== 'draw' && dragMode !== 'mooring'
-        && dragMode !== 'pinch' && dragMode !== 'engine-select' && dragMode !== 'transform-gizmo') {
+        && dragMode !== 'pinch' && dragMode !== 'engine-select' && dragMode !== 'transform-gizmo'
+        && dragMode !== 'subpart-select') {
       const hit = pointerDownHit;
       const mods = pointerDownMods;
       // A placed plane is interactive: a plain (unmodified) click on it opens

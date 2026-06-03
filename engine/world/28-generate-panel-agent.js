@@ -2411,6 +2411,10 @@
       // canvas-first flow; multi-cell edits open the durable property surface.
       if (summary.cellCount > 1) openSelectionPropertiesInLayers();
     }
+    // Exposed so the sub-object edit module (file 44) + radial menu can rebuild
+    // the selection panel after a part select (renderSelection is otherwise
+    // private to this IIFE).
+    window.renderSelection = renderSelection;
     window.addEventListener('tinyworld:selection-changed', renderSelection);
     window.addEventListener('tinyworld:history-changed', () => {
       if (previewBox && !previewBox.hidden) renderSelection();

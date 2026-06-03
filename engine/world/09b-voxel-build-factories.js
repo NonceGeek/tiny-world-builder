@@ -1464,7 +1464,15 @@
     const wallMesh = vbox(house, bodyW, wallH, bodyD, 0, wallH / 2, 0, wallMat);
     wallMesh.userData.partKey = 'wall';
     vbox(house, bodyW + 0.04, 0.06, bodyD + 0.04, 0, 0.03, 0, wallDark);
-    voxelSteppedRoof(house, bodyW, bodyD, wallH, roofMat, roofDark, 'z');
+    // Roof in its own group so it's a selectable/movable sub-part. Group sits at
+    // y=wallH and the stepped roof builds at y=0 inside it → world Y unchanged.
+    // (Wrapper at the call site, NOT inside voxelSteppedRoof, which is shared with
+    // the batched makeVoxelBridge where the marker would be discarded.)
+    const roofGroup = new THREE.Group();
+    roofGroup.position.set(0, wallH, 0);
+    roofGroup.userData.roofPart = true;
+    voxelSteppedRoof(roofGroup, bodyW, bodyD, 0, roofMat, roofDark, 'z');
+    house.add(roofGroup);
 
     const frontZ = bodyD / 2 + 0.026;
     const backZ = -bodyD / 2 - 0.026;
@@ -1522,6 +1530,7 @@
       if (!ch.userData) continue;
       if (ch.userData.windowFace !== undefined) ch.userData.partKey = 'window:' + (wi++);
       else if (ch.userData.doorPart) ch.userData.partKey = 'door';
+      else if (ch.userData.roofPart) ch.userData.partKey = 'roof';
     }
     const a = (typeof normalizeAppearance === 'function') ? normalizeAppearance(appearance) : appearance;
     const parts = a && a.parts;

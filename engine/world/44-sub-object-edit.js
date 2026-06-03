@@ -132,11 +132,6 @@
     // refresh inspector so per-part transform rows appear
     if (typeof renderSelection === 'function') { try { renderSelection(); } catch (_) {} }
   }
-  function onSubEditPointerDown(e) {
-    if (!subEditActive() || e.button !== 0) return;
-    const hit = pickSubPart(e.clientX, e.clientY);
-    if (hit) selectPart(hit.partKey);
-  }
 
   // Mutate the selected part's override on the real cell appearance and re-render
   // (which reapplies overrides), then re-acquire + re-highlight the part.
@@ -302,7 +297,9 @@
 
   if (typeof renderer !== 'undefined' && renderer && renderer.domElement) {
     renderer.domElement.addEventListener('pointermove', onSubEditPointerMove);
-    renderer.domElement.addEventListener('pointerdown', onSubEditPointerDown);
+    // NOTE: part SELECTION on click is handled in 20-input-place-erase.js's
+    // pointerdown (dragMode 'subpart-select') so it isn't clobbered by the
+    // pointerup cell-reselect. We only keep the hover listener here.
   }
 
   window.__tinyworldSubEdit = {
