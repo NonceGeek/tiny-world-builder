@@ -2397,7 +2397,9 @@
     clearMooringCables();
     clearEditableIslands();
     clearGhostWorld();
-    loadInitialScene();
+    // Reset returns to the bundled default island; fall back to the procedural
+    // starter scene only if default_island.json is unavailable.
+    if (!(typeof applyDefaultIslandState === 'function' && applyDefaultIslandState())) loadInitialScene();
     resetCameraDefaults();
     // Re-enqueue ghost boards now that the world is fresh — they'll
     // build with all cells starting at opacity 0 (outside the visible

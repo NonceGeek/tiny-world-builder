@@ -63,6 +63,11 @@ if [[ -f tinyworld-defaults.json ]]; then
   cp tinyworld-defaults.json "$DIST/tinyworld-defaults.json"
 fi
 
+# Default island — the starter world loaded for a fresh session + Reset.
+if [[ -f default_island.json ]]; then
+  cp default_island.json "$DIST/default_island.json"
+fi
+
 # LandscapeEngine mixin modules referenced via engine/landscape/*.js script tags.
 if [[ -d engine ]]; then
   mkdir -p "$DIST/engine"

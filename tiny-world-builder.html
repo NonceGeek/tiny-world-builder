@@ -1510,6 +1510,26 @@
     }
   })();
   </script>
+  <script id="tinyworld-default-island-bootstrap">
+  /* =====================================================================
+     Default island bootstrap — caches default_island.json on window so a
+     fresh session (no saved world) and Reset both load it instead of the
+     procedural starter scene. Falls back to the built-in scene if the file
+     is missing/invalid. Fetched once; the browser caches it.
+     ===================================================================== */
+  (function tinyworldDefaultIslandBootstrap() {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'default_island.json', false);
+      xhr.send(null);
+      if (xhr.status < 200 || xhr.status >= 300) return;
+      var data = JSON.parse(xhr.responseText || 'null');
+      if (data && Array.isArray(data.cells)) window.__tinyworldDefaultIsland = data;
+    } catch (_) {
+      // Missing file / invalid JSON / blocked fetch — fall back to loadInitialScene().
+    }
+  })();
+  </script>
   <script id="tinyworld-auth-bootstrap">
   (function tinyworldAuthBootstrap() {
     window.__tinyworldAuthReady = new Promise(function (resolve) {

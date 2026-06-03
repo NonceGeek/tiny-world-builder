@@ -1045,6 +1045,15 @@
     }
   }
 
+  // Apply the bundled default island (default_island.json, cached on window by
+  // the HTML bootstrap). Used for a fresh session + Reset. Returns false if the
+  // file was missing/invalid so callers fall back to loadInitialScene().
+  function applyDefaultIslandState(opts) {
+    const d = window.__tinyworldDefaultIsland;
+    if (!d || !Array.isArray(d.cells)) return false;
+    return applyState(d, opts || { keepCamera: false });
+  }
+
   function loadState() {
     let data;
     try {

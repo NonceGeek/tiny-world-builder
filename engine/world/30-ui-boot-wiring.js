@@ -1206,7 +1206,9 @@
       });
     } else if (!loadState()) {
       twPerfMark('boot:load-state-empty');
-      loadInitialScene();
+      // Fresh session: load the bundled default island; fall back to the
+      // procedural starter scene only if default_island.json is unavailable.
+      if (!(typeof applyDefaultIslandState === 'function' && applyDefaultIslandState())) loadInitialScene();
       resetCameraDefaults();
     } else {
       twPerfMark('boot:load-state-restored');
