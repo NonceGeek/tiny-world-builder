@@ -57,6 +57,14 @@ test('parts: valid voxel-key override is kept + clamped', () => {
   assert.deepEqual(a.parts['v:1,2,3'], { ox: 0.5, oy: 8, oz: 0, sx: 0.1, sy: 1, sz: 2 });
 });
 
+test('parts: rotations are kept only when non-default', () => {
+  assert.deepEqual(
+    normalizeAppearance({ parts: { head: { rx: 0.5, ry: 99, rz: -0.25 } } }).parts.head,
+    { ox: 0, oy: 0, oz: 0, sx: 1, sy: 1, sz: 1, rx: 0.5, ry: +(Math.PI * 2).toFixed(3), rz: -0.25 }
+  );
+  assert.equal(normalizeAppearance({ parts: { head: { rx: 0, ry: 0, rz: 0 } } }), null);
+});
+
 test('parts: identity override is dropped, invalid keys rejected', () => {
   assert.equal(normalizeAppearance({ parts: { 'v:0,0,0': { ox: 0, sx: 1 } } }), null);
   assert.equal(normalizeAppearance({ parts: { 'bad key': { ox: 1 } } }), null);

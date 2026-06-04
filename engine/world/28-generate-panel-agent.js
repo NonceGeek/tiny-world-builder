@@ -1706,6 +1706,19 @@
         if (se && se.scalePart) se.scalePart(value === 'down' ? 0.85 : 1.18);
         return;
       }
+      if (rowKey === 'partRotate') {
+        const se = window.__tinyworldSubEdit;
+        const step = Math.PI / 18;
+        if (se && se.rotatePart) {
+          if (value === 'x-') se.rotatePart('x', -step);
+          else if (value === 'x+') se.rotatePart('x', step);
+          else if (value === 'y-') se.rotatePart('y', -step);
+          else if (value === 'y+') se.rotatePart('y', step);
+          else if (value === 'z-') se.rotatePart('z', -step);
+          else if (value === 'z+') se.rotatePart('z', step);
+        }
+        return;
+      }
       if (rowKey === 'voxelSculpt') {
         const se = window.__tinyworldSubEdit;
         if (se) { if (value === 'remove' && se.removeVoxel) se.removeVoxel(); else if (value === 'smooth' && se.smoothVoxel) se.smoothVoxel(); }
@@ -2036,7 +2049,7 @@
             { label: 'Voxel', value: 'voxel' },
           ] });
         }
-        if (window.__tinyworldFlags && window.__tinyworldFlags.inspectorV2) {
+        {
           const ap = cell => normalizeAppearance(cell.appearance) || {};
           // Sub-object part editing works on home-board objects that expose keyed
           // parts: voxel-builds with a voxel-based stamp, and cottage houses
@@ -2054,7 +2067,8 @@
           })();
           const isHouse = !!(subT && subT.cell.kind === 'house');
           const isTree = !!(subT && subT.cell.kind === 'tree');
-          const subSupported = onHome && (isVoxelStampObj || isHouse || isTree);
+          const isLight = !!(subT && (subT.cell.kind === 'lamp-post' || subT.cell.kind === 'spotlight'));
+          const subSupported = onHome && (isVoxelStampObj || isHouse || isTree || isLight);
           if (objectCells.length === 1 && subSupported) {
             const editing = !!(window.__tinyworldSubEdit && window.__tinyworldSubEdit.isActive && window.__tinyworldSubEdit.isActive());
             addRow('Edit', { key: 'subEdit', label: 'Parts', control: 'actions', options: [
@@ -2075,6 +2089,11 @@
               ] });
               addRow('Transform', { key: 'partScale', label: 'Part size', control: 'stepper', options: [
                 { label: 'Down', value: 'down' }, { label: 'Up', value: 'up' },
+              ] });
+              addRow('Transform', { key: 'partRotate', label: 'Part angle', control: 'move', options: [
+                { label: 'Pitch-', value: 'x-' }, { label: 'Pitch+', value: 'x+' },
+                { label: 'Yaw-', value: 'y-' }, { label: 'Yaw+', value: 'y+' },
+                { label: 'Roll-', value: 'z-' }, { label: 'Roll+', value: 'z+' },
               ] });
               addRow('Edit', { key: 'voxelSculpt', label: 'Voxel', control: 'actions', options: [
                 { label: 'Remove', value: 'remove' }, { label: 'Smooth', value: 'smooth' },

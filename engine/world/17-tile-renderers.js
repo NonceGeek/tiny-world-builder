@@ -202,7 +202,7 @@
     else if (kind === 'pumpkin')   mesh = (level >= MAX_FLOORS && isCarriagePumpkin(x, z)) ? makePumpkinCarriage() : makePumpkin();
     else if (kind === 'carrot')    mesh = makeCarrot();
     else if (kind === 'sunflower') mesh = makeSunflower();
-    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level);
+    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level, { appearance: cell.appearance });
     else if (kind === 'fence') {
       const fenceStyle = typeof fenceStyleForCell === 'function' ? fenceStyleForCell(cell) : 'wood';
       if (cell.terrain === 'path') {

@@ -10,6 +10,12 @@ description: Use when changing Tiny World Builder's mode indicator, boot tool se
 - Boot always ends on the Select tool: `bootApp` calls
   `selectTool(DEFAULT_TOOL)` *after* `loadState()`, so a restored world's saved
   `toolId` never leaves a fresh session "armed" for building.
+- Build/Play mode is separate from Showcase. `#build-play-mode` toggles
+  `body.tw-play-mode`, persists `tinyworld:build-play-mode.v1`, and exposes
+  `window.__tinyworldIsPlayMode()` / `window.__tinyworldMode`. In PLAY mode,
+  build panels and edit radials are hidden, selection/sub-edit state is cleared,
+  and mutation paths should be gated through the same edit checks that call
+  `mpEditAllowed()`.
 - `#mode-indicator` (HUD chip, updated in `updateModeIndicator` in
   `19-tools-toolbar.js`) names the current mode and colours itself: calm
   `mode-select`, amber `mode-build`, red `mode-erase`. Keep it

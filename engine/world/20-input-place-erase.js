@@ -7,6 +7,7 @@
   }
 
   function applyToolToCell(cell, opts = {}) {
+    if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) return;
     // Island tool: clicking a hovered placement hologram places there directly,
     // regardless of whatever island sits under the click ray.
     if (selectedTool && selectedTool.island && typeof islandPlacementHoloHoveredSlot === 'function') {
@@ -110,6 +111,7 @@
   }
 
   function applySelectedToolToSelection() {
+    if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) return false;
     const sel = window.__tinyworldSelection;
     if (!sel || !sel.cells || !sel.cells.size) return false;
     if (!selectedTool || selectedTool.select || selectedTool.auto || selectedTool.island || selectedTool.mooring) return false;
@@ -161,12 +163,14 @@
   // True unless a shared-room role forbids editing entirely (viewer/player).
   // Gates the non-per-cell edit paths (clipboard, keyboard shortcuts).
   function mpEditAllowed() {
+    if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) return false;
     const mp = window.__tinyworldMultiplayer;
     return !mp || typeof mp.canEditAny !== 'function' || mp.canEditAny();
   }
 
   function applyTool(x, z, opts = {}) {
     if (window.__flightActive) return;
+    if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) return;
     // Multiplayer role gate: in a shared room a viewer/player cannot edit at
     // all, and an editor only within its granted island bounds. We gate the
     // LOCAL mutation here (not just the broadcast) so a restricted client can't
@@ -714,7 +718,10 @@
       return;
     }
 
-    const gizmoHit = e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey && mpEditAllowed()
+    const subGizmoActive = window.__tinyworldSubEdit && window.__tinyworldSubEdit.selectedGizmoTarget
+      ? window.__tinyworldSubEdit.selectedGizmoTarget()
+      : null;
+    const gizmoHit = e.button === 0 && !spaceDown && !e.metaKey && !e.ctrlKey && mpEditAllowed() && (!e.shiftKey || subGizmoActive)
       ? pickTransformGizmo(e.clientX, e.clientY)
       : null;
     if (gizmoHit) {
@@ -844,7 +851,7 @@
       const ddx = e.clientX - transformGizmoDrag.x;
       const ddy = e.clientY - transformGizmoDrag.y;
       if (Math.abs(ddx) + Math.abs(ddy) > 0) {
-        applyTransformGizmoDrag(transformGizmoDrag.action, ddx, ddy);
+        applyTransformGizmoDrag(transformGizmoDrag.action, ddx, ddy, { shiftKey: e.shiftKey, altKey: e.altKey });
         transformGizmoDrag.x = e.clientX;
         transformGizmoDrag.y = e.clientY;
         didDrag = true;
@@ -1628,6 +1635,10 @@
     }
     const shortcutTool = TOOLS.find(x => !x.hidden && x.shortcut && x.shortcut.toLowerCase() === k);
     if (shortcutTool) {
+      if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) {
+        e.preventDefault();
+        return;
+      }
       selectTool(shortcutTool);
       return;
     }
@@ -1896,6 +1907,7 @@
   // current cell under the hover indicator, clamped 1..8 to match the
   // schema's terrainFloors range.  No-op if nothing is hovered.
   function adjustHoverTerrainHeight(delta) {
+    if (window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode()) return;
     if (!currentHover) return;
     const x = currentHover.x + (currentHover.boardX || 0) * GRID;
     const z = currentHover.z + (currentHover.boardZ || 0) * GRID;

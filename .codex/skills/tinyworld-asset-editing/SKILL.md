@@ -70,6 +70,13 @@ Selection properties:
   cells through `window.__tinyworldSelection.replaceWorldCoords()`, not by
   mutating selection internals, and should refresh from `tinyworld:selection-changed`,
   `tinyworld:world-changed`, and `tinyworld:grid-changed` events.
+- Sub-object editing is surfaced through `window.__tinyworldSubEdit`, not a
+  parallel inspector state. Layers should show part rows from
+  `__tinyworldSubEdit.hierarchy()`, select them with `selectPart(partKey)`, and
+  refresh from `tinyworld:sub-selection-changed`. The shared transform gizmo can
+  target `__tinyworldSubEdit.selectedGizmoTarget()`; use `movePart(..., { snap:
+  !shiftKey })`, `scalePart()`, and `rotatePart()` so keyboard, Properties, and
+  in-scene handles stay consistent.
 - Model stamps should expose All material / All mat scale controls, but Body/Top material controls should be limited to selected asset kinds with known Tiny World material buckets; mixed selections must not write part-material fields onto model stamps.
 - Generated `voxel-build` / customParts objects are editable through the same
   Layers / Properties appearance rows as built-ins: All material, Body material,

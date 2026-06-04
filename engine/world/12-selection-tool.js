@@ -127,6 +127,19 @@
   }
 
   function updateTransformGizmo(target) {
+    const subGizmoTarget = window.__tinyworldSubEdit && window.__tinyworldSubEdit.selectedGizmoTarget
+      ? window.__tinyworldSubEdit.selectedGizmoTarget()
+      : null;
+    if (subGizmoTarget && subGizmoTarget.position) {
+      selectedTransformGizmoTarget = null;
+      selectedTransformGizmoIsland = null;
+      transformGizmoGroup.position.copy(subGizmoTarget.position);
+      const s = Math.max(0.62, Math.min(1.10, viewSize / 11));
+      transformGizmoGroup.scale.setScalar(s);
+      setTransformGizmoHandleVisible('scale', true);
+      transformGizmoGroup.visible = true;
+      return;
+    }
     selectedTransformGizmoTarget = target && target.cell && target.cell.kind ? target : null;
     selectedTransformGizmoIsland = null;
     if (typeof selectedEditableIslandEngineTarget === 'function' && selectedEditableIslandEngineTarget()) {
@@ -170,7 +183,10 @@
   }
 
   function pickTransformGizmo(clientX, clientY) {
-    if (!transformGizmoGroup.visible || (!selectedTransformGizmoTarget && !selectedTransformGizmoIsland)) return null;
+    const subGizmoTarget = window.__tinyworldSubEdit && window.__tinyworldSubEdit.selectedGizmoTarget
+      ? window.__tinyworldSubEdit.selectedGizmoTarget()
+      : null;
+    if (!transformGizmoGroup.visible || (!selectedTransformGizmoTarget && !selectedTransformGizmoIsland && !subGizmoTarget)) return null;
     ndc.x = (clientX / window.innerWidth) * 2 - 1;
     ndc.y = -(clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(ndc, camera);
@@ -185,8 +201,20 @@
     return null;
   }
 
-  function applyTransformGizmoDrag(action, dx, dy) {
+  function applyTransformGizmoDrag(action, dx, dy, opts = {}) {
     const unit = Math.max(0.018, viewSize * 0.0032);
+    const sub = window.__tinyworldSubEdit;
+    const subGizmoTarget = sub && sub.selectedGizmoTarget ? sub.selectedGizmoTarget() : null;
+    if (subGizmoTarget) {
+      if (action === 'move-x') sub.movePart(dx * unit, 0, 0, { snap: !opts.shiftKey });
+      else if (action === 'move-y') sub.movePart(0, -dy * unit, 0, { snap: !opts.shiftKey });
+      else if (action === 'move-z') sub.movePart(0, 0, dx * unit, { snap: !opts.shiftKey });
+      else if (action === 'rotate-y') sub.rotatePart(opts.altKey ? 'x' : 'y', dx * 0.018);
+      else if (action === 'scale') sub.scalePart(Math.max(0.82, Math.min(1.22, 1 - dy * 0.006)));
+      else return;
+      updateTransformGizmo(null);
+      return;
+    }
     if (selectedTransformGizmoIsland) {
       const island = selectedTransformGizmoIsland;
       if (action === 'move-x') island.positionX += dx * unit;

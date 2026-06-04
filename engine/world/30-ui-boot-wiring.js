@@ -2263,6 +2263,59 @@
       syncDevState();
     }
 
+    // -- Build / Play mode --
+    // PLAY mode is not Showcase: it keeps camera/play interactions available
+    // while hiding and disabling build/edit surfaces.
+    const BUILD_PLAY_LS = 'tinyworld:build-play-mode.v1';
+    const buildPlayBtn = document.getElementById('build-play-mode');
+    const buildPlayLabel = document.getElementById('build-play-mode-label');
+    let playModeActive = false;
+
+    function syncBuildPlayButton() {
+      if (buildPlayBtn) {
+        buildPlayBtn.classList.toggle('on', playModeActive);
+        buildPlayBtn.setAttribute('aria-pressed', playModeActive ? 'true' : 'false');
+        buildPlayBtn.setAttribute('aria-label', playModeActive ? 'Switch to build mode' : 'Switch to play mode');
+        buildPlayBtn.setAttribute('data-tooltip', playModeActive ? 'Switch to build mode' : 'Switch to play mode');
+        buildPlayBtn.title = playModeActive ? 'Switch to build mode' : 'Switch to play mode';
+      }
+      if (buildPlayLabel) buildPlayLabel.textContent = playModeActive ? 'Play' : 'Build';
+    }
+
+    function setPlayModeActive(on, opts = {}) {
+      playModeActive = !!on;
+      document.body.classList.toggle('tw-play-mode', playModeActive);
+      syncBuildPlayButton();
+      try { localStorage.setItem(BUILD_PLAY_LS, playModeActive ? 'play' : 'build'); } catch (_) {}
+      if (playModeActive && !opts.skipEditorCleanup) {
+        try {
+          if (window.__tinyworldSubEdit && window.__tinyworldSubEdit.exit) window.__tinyworldSubEdit.exit();
+          if (window.__tinyworldSelection && window.__tinyworldSelection.clear) window.__tinyworldSelection.clear();
+          if (window.__tinyworldLayersPanel && window.__tinyworldLayersPanel.close) window.__tinyworldLayersPanel.close();
+          if (typeof selectTool === 'function' && typeof DEFAULT_TOOL !== 'undefined') selectTool(DEFAULT_TOOL);
+        } catch (_) {}
+      }
+      window.dispatchEvent(new CustomEvent('tinyworld:mode-changed', {
+        detail: { mode: playModeActive ? 'play' : 'build' },
+      }));
+    }
+
+    try {
+      playModeActive = localStorage.getItem(BUILD_PLAY_LS) === 'play';
+    } catch (_) {
+      playModeActive = false;
+    }
+    window.__tinyworldIsPlayMode = () => playModeActive;
+    window.__tinyworldMode = {
+      isPlay: () => playModeActive,
+      isBuild: () => !playModeActive,
+      setPlay: () => setPlayModeActive(true),
+      setBuild: () => setPlayModeActive(false),
+      toggle: () => setPlayModeActive(!playModeActive),
+    };
+    if (buildPlayBtn) buildPlayBtn.addEventListener('click', () => setPlayModeActive(!playModeActive));
+    setPlayModeActive(playModeActive, { skipEditorCleanup: true });
+
     // -- raise / lower terrain (visible buttons matching R/F keys) --
     const raiseBtn = document.getElementById('raise-terrain');
     const lowerBtn = document.getElementById('lower-terrain');

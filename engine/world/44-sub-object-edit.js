@@ -1,11 +1,8 @@
   // -------- sub-object editing (reqs 6-9) --------
-  // Slice 3: web-inspector-style hover highlight on the editable sub-parts of the
-  // object currently in "edit parts" mode. The edited cell renders un-batched +
-  // part-keyed (see makeVoxelBuildStamp editable path); here we raycast its child
-  // meshes on pointermove and outline the hovered part. All gated by inspectorV2.
-  //
-  // Later slices grow this module: sub-part select+transform (9), explode (7),
-  // voxel sculpt (8). Exposed via window.__tinyworldSubEdit.
+  // Assisted part editing for the object currently in "edit parts" mode. The
+  // edited cell renders un-batched + part-keyed (see makeVoxelBuildStamp and
+  // keyed voxel factories); here we raycast child meshes, select parts, expose
+  // hierarchy metadata for Layers, and route per-part transforms.
 
   const subEditHoverGroup = new THREE.Group();
   subEditHoverGroup.name = 'sub-edit-hover';
@@ -31,10 +28,11 @@
   let subEditCellX = null, subEditCellZ = null;     // cell currently in edit mode
   let currentHoverPart = null;                       // { mesh, partKey, voxelCoord }
   let selectedPartKey = null;                        // locked-in selected part key
+  let lastSnapLabel = null;
   const _subEditNdc = new THREE.Vector2();
 
   function subEditActive() {
-    return !!(window.__tinyworldFlags && window.__tinyworldFlags.inspectorV2) && subEditCellX !== null;
+    return subEditCellX !== null && !(window.__tinyworldIsPlayMode && window.__tinyworldIsPlayMode());
   }
 
   // The rendered Object3D for the edited cell. Home board lives in cellMeshes;
@@ -122,33 +120,157 @@
     obj.traverse(o => { if (!found && o.userData && o.userData.partKey === partKey) found = o; });
     return found;
   }
+  function titleCasePart(value) {
+    return String(value || '')
+      .replace(/^v:/, 'voxel:')
+      .replace(/^p:/, '')
+      .replace(/[-_:,]+/g, ' ')
+      .replace(/\b\w/g, ch => ch.toUpperCase());
+  }
+  function labelForPartKey(partKey, mesh) {
+    if (mesh && mesh.userData && mesh.userData.partLabel) return mesh.userData.partLabel;
+    if (/^v:/.test(partKey || '')) return 'Voxel ' + String(partKey).slice(2);
+    if (/^window/.test(partKey || '')) return 'Window ' + String(partKey).split(':')[1];
+    if (partKey === 'door') return 'Door';
+    if (partKey === 'roof') return 'Roof';
+    if (partKey === 'wall') return 'Wall';
+    if (partKey === 'head') return 'Light head';
+    return titleCasePart(partKey);
+  }
+  function partPathForMesh(mesh) {
+    const path = [];
+    let n = mesh;
+    const obj = subEditObject();
+    while (n && n !== obj) {
+      if (n.userData && n.userData.partKey) path.push(labelForPartKey(n.userData.partKey, n));
+      n = n.parent;
+    }
+    return path.reverse();
+  }
+  function selectedPartInfo() {
+    if (!selectedPartKey) return null;
+    const mesh = findPartMesh(selectedPartKey);
+    return {
+      partKey: selectedPartKey,
+      label: labelForPartKey(selectedPartKey, mesh),
+      path: partPathForMesh(mesh),
+      snap: lastSnapLabel,
+    };
+  }
+  function collectPartHierarchy() {
+    const obj = subEditObject();
+    if (!obj) return [];
+    const seen = new Set();
+    const rows = [];
+    obj.traverse(node => {
+      const key = node.userData && node.userData.partKey;
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      rows.push({
+        partKey: key,
+        label: labelForPartKey(key, node),
+        path: partPathForMesh(node),
+        selected: key === selectedPartKey,
+        hovered: !!(currentHoverPart && currentHoverPart.partKey === key),
+      });
+    });
+    return rows;
+  }
   function reHighlightSelection() {
     if (!selectedPartKey) { clearSelMeshes(); return; }
     highlightSelectedMesh(findPartMesh(selectedPartKey));
   }
+  function notifySubSelectionChanged() {
+    reHighlightSelection();
+    if (typeof updateTransformGizmo === 'function') {
+      try { updateTransformGizmo(null); } catch (_) {}
+    }
+    if (typeof renderSelection === 'function') {
+      try { renderSelection(); } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('tinyworld:sub-selection-changed', {
+      detail: {
+        cell: subEditCellX === null ? null : { x: subEditCellX, z: subEditCellZ },
+        selected: selectedPartInfo(),
+      },
+    }));
+  }
   function selectPart(partKey) {
     selectedPartKey = partKey || null;
-    reHighlightSelection();
-    // refresh inspector so per-part transform rows appear
-    if (typeof renderSelection === 'function') { try { renderSelection(); } catch (_) {} }
+    lastSnapLabel = null;
+    notifySubSelectionChanged();
   }
 
   // Mutate the selected part's override on the real cell appearance and re-render
   // (which reapplies overrides), then re-acquire + re-highlight the part.
-  function mutateSelectedPart(fn) {
+  function localBoxForNode(node, root) {
+    if (!node || !root) return null;
+    const worldBox = new THREE.Box3().setFromObject(node);
+    if (worldBox.isEmpty()) return null;
+    const pts = [
+      [worldBox.min.x, worldBox.min.y, worldBox.min.z],
+      [worldBox.min.x, worldBox.min.y, worldBox.max.z],
+      [worldBox.min.x, worldBox.max.y, worldBox.min.z],
+      [worldBox.min.x, worldBox.max.y, worldBox.max.z],
+      [worldBox.max.x, worldBox.min.y, worldBox.min.z],
+      [worldBox.max.x, worldBox.min.y, worldBox.max.z],
+      [worldBox.max.x, worldBox.max.y, worldBox.min.z],
+      [worldBox.max.x, worldBox.max.y, worldBox.max.z],
+    ];
+    const box = new THREE.Box3();
+    pts.forEach(p => box.expandByPoint(root.worldToLocal(new THREE.Vector3(p[0], p[1], p[2]))));
+    return box;
+  }
+
+  function snapSelectedPartOverride(partKey, before, cur) {
+    if (!partKey || !/(window|door|head|lamp|light)/i.test(partKey)) return null;
+    const obj = subEditObject();
+    const mesh = findPartMesh(partKey);
+    if (!obj || !mesh) return null;
+    obj.updateMatrixWorld(true);
+    const partBox = localBoxForNode(mesh, obj);
+    const objBox = localBoxForNode(obj, obj);
+    if (!partBox || !objBox || partBox.isEmpty() || objBox.isEmpty()) return null;
+    const partSize = partBox.getSize(new THREE.Vector3());
+    const center = partBox.getCenter(new THREE.Vector3());
+    center.x += (cur.ox || 0) - (before.ox || 0);
+    center.y += (cur.oy || 0) - (before.oy || 0);
+    center.z += (cur.oz || 0) - (before.oz || 0);
+    const threshold = /head|lamp|light/i.test(partKey) ? 0.08 : 0.16;
+    const candidates = [
+      { axis: 'x', value: objBox.min.x - partSize.x * 0.5, label: 'left face' },
+      { axis: 'x', value: objBox.max.x + partSize.x * 0.5, label: 'right face' },
+      { axis: 'z', value: objBox.min.z - partSize.z * 0.5, label: 'back face' },
+      { axis: 'z', value: objBox.max.z + partSize.z * 0.5, label: 'front face' },
+    ];
+    let best = null;
+    for (const c of candidates) {
+      const d = Math.abs(center[c.axis] - c.value);
+      if (d <= threshold && (!best || d < best.d)) best = Object.assign({ d }, c);
+    }
+    if (!best) return null;
+    if (best.axis === 'x') cur.ox += best.value - center.x;
+    else cur.oz += best.value - center.z;
+    return best.label;
+  }
+
+  function mutateSelectedPart(fn, opts = {}) {
     if (selectedPartKey === null || subEditCellX === null) return false;
     if (typeof getWorldCell !== 'function' || typeof setCell !== 'function') return false;
     const cell = getWorldCell(subEditCellX, subEditCellZ);
     if (!cell) return false;
     const appearance = Object.assign({}, (typeof normalizeAppearance === 'function' ? normalizeAppearance(cell.appearance) : cell.appearance) || {});
     const parts = Object.assign({}, appearance.parts || {});
-    const cur = Object.assign({ ox: 0, oy: 0, oz: 0, sx: 1, sy: 1, sz: 1 }, parts[selectedPartKey] || {});
+    const cur = Object.assign({ ox: 0, oy: 0, oz: 0, sx: 1, sy: 1, sz: 1, rx: 0, ry: 0, rz: 0 }, parts[selectedPartKey] || {});
+    const before = Object.assign({}, cur);
     fn(cur);
+    lastSnapLabel = null;
+    if (opts.snap !== false) lastSnapLabel = snapSelectedPartOverride(selectedPartKey, before, cur);
     parts[selectedPartKey] = cur;
     appearance.parts = parts;
     setCell(subEditCellX, subEditCellZ, Object.assign({}, cell, { appearance, animate: false, impactDust: false }));
     resyncExplodeAfterRerender();
-    reHighlightSelection();
+    notifySubSelectionChanged();
     return true;
   }
   // A part mutation re-renders the object (new meshes), so the explode capture
@@ -160,12 +282,36 @@
       applyExplode(explodeProgress);
     }
   }
-  function movePart(dx, dy, dz) {
-    return mutateSelectedPart(c => { c.ox += dx || 0; c.oy += dy || 0; c.oz += dz || 0; });
+  function movePart(dx, dy, dz, opts = {}) {
+    return mutateSelectedPart(c => { c.ox += dx || 0; c.oy += dy || 0; c.oz += dz || 0; }, opts);
   }
-  function scalePart(factor) {
+  function scalePart(factor, axis) {
     const f = Number(factor) || 1;
-    return mutateSelectedPart(c => { c.sx *= f; c.sy *= f; c.sz *= f; });
+    return mutateSelectedPart(c => {
+      if (axis === 'x') c.sx *= f;
+      else if (axis === 'y') c.sy *= f;
+      else if (axis === 'z') c.sz *= f;
+      else { c.sx *= f; c.sy *= f; c.sz *= f; }
+    }, { snap: false });
+  }
+  function rotatePart(axis, amount) {
+    const a = Number(amount) || 0;
+    const key = axis === 'x' ? 'rx' : axis === 'z' ? 'rz' : 'ry';
+    return mutateSelectedPart(c => { c[key] += a; }, { snap: false });
+  }
+  function selectedGizmoTarget() {
+    if (!subEditActive() || !selectedPartKey) return null;
+    const mesh = findPartMesh(selectedPartKey);
+    if (!mesh) return null;
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) return null;
+    const p = box.getCenter(new THREE.Vector3());
+    if (typeof xrWorldRoot !== 'undefined' && xrWorldRoot) xrWorldRoot.worldToLocal(p);
+    return {
+      partKey: selectedPartKey,
+      label: labelForPartKey(selectedPartKey, mesh),
+      position: p,
+    };
   }
 
   // --- voxel sculpting (req 8, option a): add / remove / smooth on voxel-builds.
@@ -196,7 +342,7 @@
       if (ap.parts) { const p = Object.assign({}, ap.parts); delete p[selectedPartKey]; ap.parts = Object.keys(p).length ? p : undefined; }
     });
     selectedPartKey = null; clearSelMeshes();
-    if (typeof renderSelection === 'function') { try { renderSelection(); } catch (_) {} }
+    notifySubSelectionChanged();
     return ok;
   }
   function addVoxelFromSelected(dx, dy, dz) {
@@ -250,6 +396,7 @@
     clearHoverPart(); selectedPartKey = null; clearSelMeshes();
     explodeTarget = 0; explodeProgress = 0; explodeParts = [];
     if (typeof renderCellObject === 'function') renderCellObject(x, z, { animate: false });
+    notifySubSelectionChanged();
     return true;
   }
 
@@ -261,6 +408,7 @@
     if (typeof setVoxelSubEditCell === 'function') setVoxelSubEditCell(null, null);
     clearHoverPart();
     if (hadX !== null && typeof renderCellObject === 'function') renderCellObject(hadX, hadZ, { animate: false });
+    notifySubSelectionChanged();
   }
 
   // --- explode view (req 7): push parts radially outward + up into a sphere
@@ -323,22 +471,58 @@
     applyExplode(eased);
   }
 
+  function subEditKeyTargetBlocked(target) {
+    if (!target) return false;
+    const tag = target.tagName ? target.tagName.toLowerCase() : '';
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable;
+  }
+
+  function onSubEditKeyDown(e) {
+    if (!subEditActive() || !selectedPartKey || subEditKeyTargetBlocked(e.target)) return;
+    if (e.metaKey || e.ctrlKey) return;
+    const fine = e.altKey;
+    const moveStep = fine ? 0.025 : 0.08;
+    const scaleStep = fine ? 1.035 : 1.10;
+    const rotStep = fine ? Math.PI / 90 : Math.PI / 24;
+    let handled = true;
+    if (e.key === 'ArrowLeft') movePart(-moveStep, 0, 0, { snap: !e.shiftKey });
+    else if (e.key === 'ArrowRight') movePart(moveStep, 0, 0, { snap: !e.shiftKey });
+    else if (e.key === 'ArrowUp') movePart(0, 0, -moveStep, { snap: !e.shiftKey });
+    else if (e.key === 'ArrowDown') movePart(0, 0, moveStep, { snap: !e.shiftKey });
+    else if (e.key === 'PageUp') movePart(0, moveStep, 0, { snap: !e.shiftKey });
+    else if (e.key === 'PageDown') movePart(0, -moveStep, 0, { snap: !e.shiftKey });
+    else if (e.key === '[') scalePart(1 / scaleStep);
+    else if (e.key === ']') scalePart(scaleStep);
+    else if (e.key === ',') rotatePart(e.shiftKey ? 'x' : 'y', -rotStep);
+    else if (e.key === '.') rotatePart(e.shiftKey ? 'x' : 'y', rotStep);
+    else handled = false;
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }
+
   if (typeof renderer !== 'undefined' && renderer && renderer.domElement) {
     renderer.domElement.addEventListener('pointermove', onSubEditPointerMove);
     // NOTE: part SELECTION on click is handled in 20-input-place-erase.js's
     // pointerdown (dragMode 'subpart-select') so it isn't clobbered by the
     // pointerup cell-reselect. We only keep the hover listener here.
   }
+  window.addEventListener('keydown', onSubEditKeyDown, true);
 
   window.__tinyworldSubEdit = {
     enter: enterSubEdit,
     exit: exitSubEdit,
     isActive: subEditActive,
+    cell: () => subEditCellX === null ? null : { x: subEditCellX, z: subEditCellZ },
     hoverInfo: () => currentHoverPart ? { partKey: currentHoverPart.partKey, voxelCoord: currentHoverPart.voxelCoord } : null,
     selectPart,
-    selectedInfo: () => selectedPartKey ? { partKey: selectedPartKey } : null,
+    selectedInfo: selectedPartInfo,
+    hierarchy: collectPartHierarchy,
+    selectedGizmoTarget,
     movePart,
     scalePart,
+    rotatePart,
     recolorPart,
     removeVoxel: removeSelectedVoxel,
     addVoxel: addVoxelFromSelected,

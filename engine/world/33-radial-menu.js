@@ -43,6 +43,10 @@
     const RADIUS = 116;
     const TOP_ANGLE = 270;
     const radialProjectPoint = new THREE.Vector3();
+    const radialBoxCorners = [
+      new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
+      new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
+    ];
 
     // Islands are transformed as a whole (move x/y/z + rotate-y via the gizmo),
     // so the cell-object actions (Color/Style/Size/Duplicate/More) don't apply.
@@ -65,12 +69,22 @@
       try { return (typeof selectedBoardObjectTargets === 'function') ? (selectedBoardObjectTargets()[0] || null) : null; }
       catch (_) { return null; }
     }
+    function selectedRadialObject3D() {
+      const se = subEdit();
+      if (se && se.isActive && se.isActive() && se._object) return se._object();
+      const island = selectedRadialIsland();
+      if (island && island.contentGroup) return island.contentGroup;
+      const t = subEditTargetCell();
+      if (!t || typeof cellMeshes === 'undefined') return null;
+      const entry = cellMeshes[t.x + ',' + t.z];
+      return entry && entry.object ? entry.object : null;
+    }
     // Mirrors the inspector gate (28): home-board cottages + voxel-based stamps.
     function subEditSupported() {
       const t = subEditTargetCell();
       if (!t || !t.cell) return false;
       if (typeof isOutsideHomeGrid === 'function' && isOutsideHomeGrid(t.x, t.z)) return false;
-      if (t.cell.kind === 'house' || t.cell.kind === 'tree') return true;
+      if (t.cell.kind === 'house' || t.cell.kind === 'tree' || t.cell.kind === 'lamp-post' || t.cell.kind === 'spotlight') return true;
       if (t.cell.kind === 'voxel-build') {
         const st = (typeof getVoxelBuildStamp === 'function')
           ? getVoxelBuildStamp(t.cell.appearance && t.cell.appearance.voxelBuildId) : null;
@@ -297,6 +311,53 @@
       } catch (err) { console.warn('[radial] action failed', id, err); }
     }
 
+    function projectObjectBounds(obj, cam, rect) {
+      if (!obj) return null;
+      obj.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(obj);
+      if (box.isEmpty()) return null;
+      const min = box.min, max = box.max;
+      radialBoxCorners[0].set(min.x, min.y, min.z);
+      radialBoxCorners[1].set(min.x, min.y, max.z);
+      radialBoxCorners[2].set(min.x, max.y, min.z);
+      radialBoxCorners[3].set(min.x, max.y, max.z);
+      radialBoxCorners[4].set(max.x, min.y, min.z);
+      radialBoxCorners[5].set(max.x, min.y, max.z);
+      radialBoxCorners[6].set(max.x, max.y, min.z);
+      radialBoxCorners[7].set(max.x, max.y, max.z);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let visible = false;
+      for (const p of radialBoxCorners) {
+        p.project(cam);
+        if (p.z > 1) continue;
+        visible = true;
+        const sx = rect.left + (p.x * 0.5 + 0.5) * rect.width;
+        const sy = rect.top + (-p.y * 0.5 + 0.5) * rect.height;
+        minX = Math.min(minX, sx); minY = Math.min(minY, sy);
+        maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy);
+      }
+      if (!visible) return null;
+      return { minX, minY, maxX, maxY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+    }
+
+    function radialCenterAroundBounds(bounds, fallbackX, fallbackY, margin) {
+      if (!bounds) return { x: fallbackX, y: fallbackY };
+      const gap = RADIUS + 46;
+      const candidates = [
+        { x: bounds.maxX + gap, y: bounds.cy, clear: window.innerWidth - bounds.maxX, rank: 0 },
+        { x: bounds.minX - gap, y: bounds.cy, clear: bounds.minX, rank: 1 },
+        { x: bounds.cx, y: bounds.maxY + gap, clear: window.innerHeight - bounds.maxY, rank: 2 },
+        { x: bounds.cx, y: bounds.minY - gap, clear: bounds.minY, rank: 3 },
+      ];
+      candidates.sort((a, b) => (b.clear - a.clear) || (a.rank - b.rank));
+      for (const c of candidates) {
+        if (c.x >= margin && c.x <= window.innerWidth - margin && c.y >= margin && c.y <= window.innerHeight - margin) {
+          return c;
+        }
+      }
+      return candidates[0] || { x: fallbackX, y: fallbackY };
+    }
+
     function tickRadialMenu() {
       const gizmo = typeof transformGizmoGroup !== 'undefined' ? transformGizmoGroup : null;
       const cam = typeof camera !== 'undefined' ? camera : null;
@@ -318,10 +379,12 @@
       const sx = rect.left + (p.x * 0.5 + 0.5) * rect.width;
       const sy = rect.top + (-p.y * 0.5 + 0.5) * rect.height;
       const m = RADIUS + 52;
+      const bounds = projectObjectBounds(selectedRadialObject3D(), cam, rect);
+      const around = radialCenterAroundBounds(bounds, sx, sy, m);
       // translate3d (subpixel, GPU-composited) instead of left/top so the menu
       // tracks the object smoothly without per-frame layout or pixel snapping.
-      const cx = Math.max(m, Math.min(window.innerWidth - m, sx));
-      const cy = Math.max(m, Math.min(window.innerHeight - m, sy));
+      const cx = Math.max(m, Math.min(window.innerWidth - m, around.x));
+      const cy = Math.max(m, Math.min(window.innerHeight - m, around.y));
       root.style.transform = 'translate3d(' + cx + 'px,' + cy + 'px,0)';
       const islandMode = !!selectedRadialIsland();
       if (root.hidden) {

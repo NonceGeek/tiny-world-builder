@@ -179,6 +179,10 @@
     }
     function collectIslandCells(board, selectedCoords) {
       const cells = [];
+      const sub = window.__tinyworldSubEdit;
+      const subEditing = !!(sub && sub.isActive && sub.isActive());
+      const subCell = subEditing && sub.cell ? sub.cell() : null;
+      const subParts = subEditing && sub.hierarchy ? sub.hierarchy() : [];
       const size = Number.isFinite(GRID) ? GRID : 0;
       for (let lx = 0; lx < size; lx++) {
         for (let lz = 0; lz < size; lz++) {
@@ -193,13 +197,15 @@
           if (cell.kind) {
             const base = toolLabelFor('kind', cell.kind);
             const side = cell.kind === 'fence' && cell.fenceSide ? ' (' + fenceSideLabel(cell.fenceSide) + ')' : '';
+            const partRows = subCell && subCell.x === x && subCell.z === z ? subParts : [];
             children.push({
               id: cellLayerId('object', x, z),
               type: 'object',
               label: base + side,
               detail: objectDetail(cell) || 'placed object',
               icon: iconFor(cell.kind),
-              search: [cell.kind, base, objectDetail(cell)].join(' '),
+              parts: partRows,
+              search: [cell.kind, base, objectDetail(cell)].concat(partRows.map(p => p.label + ' ' + p.partKey)).join(' '),
             });
           }
           if (Array.isArray(cell.extras)) {
@@ -250,9 +256,23 @@
 
     function renderChildRow(child, x, z, selectedCoords) {
       const isSelected = activeLayerId === child.id || rowIsSelected(x, z, selectedCoords);
-      return '<button type="button" class="layers-row' + (isSelected ? ' is-selected' : '') + '" role="treeitem" data-layer-id="' + esc(child.id) + '" data-layer-type="' + esc(child.type) + '" data-x="' + x + '" data-z="' + z + '">'
+      const row = '<button type="button" class="layers-row' + (isSelected ? ' is-selected' : '') + '" role="treeitem" data-layer-id="' + esc(child.id) + '" data-layer-type="' + esc(child.type) + '" data-x="' + x + '" data-z="' + z + '">'
         + '<span class="layers-row-icon" aria-hidden="true">' + esc(child.icon) + '</span>'
         + '<span class="layers-row-main"><strong>' + esc(child.label) + '</strong><em>' + esc(child.detail) + '</em></span>'
+        + '</button>';
+      const parts = Array.isArray(child.parts) ? child.parts : [];
+      if (!parts.length) return row;
+      return row + '<div class="layers-branch layers-subparts">'
+        + parts.map(part => renderPartRow(part, x, z, child.id)).join('')
+        + '</div>';
+    }
+
+    function renderPartRow(part, x, z, parentId) {
+      const id = parentId + ':part:' + part.partKey;
+      const detail = (part.path && part.path.length > 1) ? part.path.join(' / ') : 'selectable part';
+      return '<button type="button" class="layers-row layers-part-row' + (part.selected ? ' is-selected' : '') + '" role="treeitem" data-layer-id="' + esc(id) + '" data-layer-type="part" data-part-key="' + esc(part.partKey) + '" data-x="' + x + '" data-z="' + z + '">'
+        + '<span class="layers-row-icon" aria-hidden="true">-</span>'
+        + '<span class="layers-row-main"><strong>' + esc(part.label) + '</strong><em>' + esc(detail) + '</em></span>'
         + '</button>';
     }
 
@@ -487,12 +507,25 @@
       const z = Number(row.getAttribute('data-z'));
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
       activeLayerId = row.getAttribute('data-layer-id') || null;
+      if (row.getAttribute('data-layer-type') === 'part') {
+        const partKey = row.getAttribute('data-part-key');
+        const sub = window.__tinyworldSubEdit;
+        selectLayerCell(x, z);
+        if (sub && sub.enter && sub.selectPart) {
+          if (!sub.isActive || !sub.isActive()) sub.enter(x, z);
+          sub.selectPart(partKey);
+        }
+        renderLayersPanel();
+        setLayersTab('properties');
+        return;
+      }
       selectLayerCell(x, z);
       renderLayersPanel();
       setLayersTab('properties');
     });
 
     window.addEventListener('tinyworld:selection-changed', scheduleLayersRefresh);
+    window.addEventListener('tinyworld:sub-selection-changed', scheduleLayersRefresh);
     window.addEventListener('tinyworld:selection-properties-rendered', () => {
       if (panel.hidden || layersActiveTab !== 'properties') return;
       moveSelPropsIntoLayers();

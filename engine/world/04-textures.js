@@ -2066,13 +2066,13 @@
       }
     }
     // Per-part overrides (sub-object editing, req 9): map of stable partKey →
-    // { ox,oy,oz, sx,sy,sz } (offset in voxel units, scale multipliers). Keys are
+    // { ox,oy,oz, sx,sy,sz, rx,ry,rz } (offset, scale, rotation). Keys are
     // validated to the partKey shapes; values clamped. Reattaches by key on reload.
     let parts = null;
     if (value.parts && typeof value.parts === 'object') {
       // Accept voxel grid keys (v:x,y,z), customParts ids (p:id), and house role
       // keys (wall, roof, door, window:0, chimney:1, ...).
-      const keyOk = k => typeof k === 'string' && /^(v:-?\d+,-?\d+,-?\d+|p:[a-z0-9_-]{1,64}|[a-z][a-z0-9_-]{0,31}(:\d+)?)$/i.test(k);
+      const keyOk = k => typeof k === 'string' && /^(v:-?\d+,-?\d+,-?\d+|p:[a-z0-9_-]{1,64}|[a-z][a-z0-9_-]{0,31}(:[a-z0-9_-]{1,64})?)$/i.test(k);
       const num = (raw, lo, hi, dflt) => {
         const n = Number(raw);
         return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
@@ -2081,13 +2081,19 @@
       for (const k of Object.keys(value.parts)) {
         if (!keyOk(k)) continue;
         const p = value.parts[k] || {};
+        const rx = +num(p.rx, -Math.PI * 2, Math.PI * 2, 0).toFixed(3);
+        const ry = +num(p.ry, -Math.PI * 2, Math.PI * 2, 0).toFixed(3);
+        const rz = +num(p.rz, -Math.PI * 2, Math.PI * 2, 0).toFixed(3);
         const entry = {
           ox: +num(p.ox, -8, 8, 0).toFixed(3), oy: +num(p.oy, -8, 8, 0).toFixed(3), oz: +num(p.oz, -8, 8, 0).toFixed(3),
           sx: +num(p.sx, 0.1, 8, 1).toFixed(3), sy: +num(p.sy, 0.1, 8, 1).toFixed(3), sz: +num(p.sz, 0.1, 8, 1).toFixed(3),
         };
+        if (rx) entry.rx = rx;
+        if (ry) entry.ry = ry;
+        if (rz) entry.rz = rz;
         const col = normalizeHexColor(p.col);
         if (col) entry.col = col;
-        const isIdentity = !entry.col && !entry.ox && !entry.oy && !entry.oz && entry.sx === 1 && entry.sy === 1 && entry.sz === 1;
+        const isIdentity = !entry.col && !entry.ox && !entry.oy && !entry.oz && entry.sx === 1 && entry.sy === 1 && entry.sz === 1 && !entry.rx && !entry.ry && !entry.rz;
         if (!isIdentity) acc[k] = entry;
       }
       if (Object.keys(acc).length) parts = acc;

@@ -401,6 +401,11 @@
       let voxMat = mat;
       if (ov && ov.col) { voxMat = mat.clone(); voxMat.color.set(ov.col); }
       const vm = vbox(g, unit * sx, unit * sy, unit * sz, x, y, z, voxMat);
+      if (ov && vm && (ov.rx || ov.ry || ov.rz)) {
+        vm.rotation.x += ov.rx || 0;
+        vm.rotation.y += ov.ry || 0;
+        vm.rotation.z += ov.rz || 0;
+      }
       if (opts.editable && vm) {
         // Stable per-voxel identity for sub-object hover/select/sculpt. Keyed on
         // grid coord (NOT array index) so overrides survive add/remove + reload.
@@ -1548,6 +1553,11 @@
       n.position.y += (ov.oy || 0);
       n.position.z += (ov.oz || 0);
       if (ov.sx !== 1 || ov.sy !== 1 || ov.sz !== 1) n.scale.set(n.scale.x * (ov.sx || 1), n.scale.y * (ov.sy || 1), n.scale.z * (ov.sz || 1));
+      if (ov.rx || ov.ry || ov.rz) {
+        n.rotation.x += ov.rx || 0;
+        n.rotation.y += ov.ry || 0;
+        n.rotation.z += ov.rz || 0;
+      }
       if (ov.col) {
         // Clone each mesh material before tinting — house materials (M.*) are
         // shared singletons; mutating them would recolour every house.
@@ -2173,7 +2183,7 @@
     return mesh;
   }
 
-  function makeVoxelLightSource(kind, level = 1) {
+  function makeVoxelLightSource(kind, level = 1, opts = {}) {
     const g = new THREE.Group();
     const lv = Math.max(1, Math.min(MAX_FLOORS, level || 1));
     const isSpot = kind === 'spotlight';
@@ -2183,72 +2193,83 @@
       vbox(g, 0.46, 0.08, 0.34, 0, 0.04, -0.03, M.lampMetal);
       vbox(g, 0.34, 0.06, 0.22, 0, 0.10, -0.03, M.lampTrim);
       vbox(g, 0.10, 0.18, 0.10, -0.12, 0.19, -0.08, M.lampMetal);
-      vbox(g, 0.26, 0.16, 0.22, 0.05, 0.28, 0.07, M.lampMetal, { rx: -0.34 });
-      vbox(g, 0.18, 0.10, 0.08, 0.09, 0.27, 0.20, M.lampGlass, { rx: -0.34, noShadow: true });
+      const head = new THREE.Group();
+      head.userData.partKey = 'head';
+      head.userData.partLabel = 'Lamp head';
+      head.position.set(0.02, 0.23, 0.03);
+      vbox(head, 0.26, 0.16, 0.22, 0.03, 0.05, 0.04, M.lampMetal, { rx: -0.34 });
+      vbox(head, 0.18, 0.10, 0.08, 0.07, 0.04, 0.17, M.lampGlass, { rx: -0.34, noShadow: true });
       const cone = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.92, 14, 1, true), M.lampCone);
-      cone.position.set(0.10, 0.18, 0.58);
+      cone.position.set(0.08, -0.05, 0.55);
       // ConeGeometry points toward +Y; rotate so the tip sits at the lamp
       // and the wide haze opens forward/down onto the ground.
       cone.rotation.x = -Math.PI / 2 + 0.23;
       cone.userData.noShadow = true;
       cone.userData.lightVisual = true;
-      g.add(cone);
+      head.add(cone);
       g.add(makeVoxelLightDecal(0.95, 1.65, M.spotPool, 0.08, 0.025, 0.72, 0));
       const glow = new THREE.Mesh(getDodecahedronGeometry(0.14), M.lampGlow);
-      glow.position.set(0.09, 0.27, 0.20);
+      glow.position.set(0.07, 0.04, 0.17);
       glow.userData.noShadow = true;
       glow.userData.lightVisual = true;
-      g.add(glow);
+      head.add(glow);
       const haze = new THREE.Sprite(M.lampHazeSprite);
-      haze.position.set(0.09, 0.30, 0.20);
+      haze.position.set(0.07, 0.07, 0.17);
       haze.scale.set(0.64, 0.64, 0.64);
       haze.userData.noShadow = true;
       haze.userData.lightVisual = true;
-      g.add(haze);
+      head.add(haze);
       const targetObj = new THREE.Object3D();
-      targetObj.position.set(0.08, 0.08, 0.86);
-      g.add(targetObj);
+      targetObj.position.set(0.06, -0.15, 0.83);
+      head.add(targetObj);
       const spot = new THREE.SpotLight(0xffbd72, 0, 5.2, Math.PI / 5.4, 0.54, 1.32);
-      spot.position.set(0.09, 0.29, 0.18);
+      spot.position.set(0.07, 0.06, 0.15);
       spot.target = targetObj;
       spot.castShadow = false;
       spot.visible = false;
       spot.userData.placeableLight = true;
       spot.userData.baseIntensity = 1.12;
-      g.add(spot);
+      head.add(spot);
+      g.add(head);
     } else {
       vbox(g, 0.18, 0.08, 0.18, 0, 0.04, 0, M.lampMetal);
       vcylinder(g, 0.045, 0.66 + lv * 0.025, 0, 0.38 + lv * 0.012, 0, M.lampMetal, 10);
       vbox(g, 0.22, 0.05, 0.22, 0, 0.73 + lv * 0.025, 0, M.lampTrim);
+      const head = new THREE.Group();
+      head.userData.partKey = 'head';
+      head.userData.partLabel = 'Lamp head';
+      head.position.set(0, 0.84 + lv * 0.025, 0);
       const glass = new THREE.Mesh(getDodecahedronGeometry(0.15), M.lampGlass);
-      glass.position.set(0, 0.84 + lv * 0.025, 0);
+      glass.position.set(0, 0, 0);
       glass.scale.y = 0.92;
       glass.userData.noShadow = true;
-      g.add(glass);
+      head.add(glass);
       const cap = new THREE.Mesh(getCylinderGeometry(0.13, 0.055, 10), M.lampMetal);
-      cap.position.set(0, 0.99 + lv * 0.025, 0);
-      g.add(cap);
+      cap.position.set(0, 0.15, 0);
+      head.add(cap);
       const glow = new THREE.Mesh(getDodecahedronGeometry(0.26), M.lampGlow);
       glow.position.copy(glass.position);
       glow.userData.noShadow = true;
       glow.userData.lightVisual = true;
-      g.add(glow);
+      head.add(glow);
       g.add(makeVoxelLightDecal(1.45, 1.45, M.lampPool, 0, 0.025, 0, 0));
       const haze = new THREE.Sprite(M.lampHazeSprite);
       haze.position.copy(glass.position);
       haze.scale.set(0.82, 0.82, 0.82);
       haze.userData.noShadow = true;
       haze.userData.lightVisual = true;
-      g.add(haze);
+      head.add(haze);
       const point = new THREE.PointLight(0xffbf70, 0, 4.8, 1.42);
       point.position.copy(glass.position);
       point.castShadow = false;
       point.visible = false;
       point.userData.placeableLight = true;
       point.userData.baseIntensity = 1.08;
-      g.add(point);
+      head.add(point);
+      g.add(head);
     }
 
+    keyAndApplyHouseParts(g, opts.appearance);
     castReceive(g);
     return g;
   }
@@ -2309,7 +2330,7 @@
     else if (kind === 'tuft' || kind === 'flower' || kind === 'bush' || kind === 'crop' || kind === 'corn' || kind === 'wheat' || kind === 'carrot' || kind === 'sunflower') mesh = makeVoxelCropKind(kind, level);
     else if (kind === 'pumpkin') mesh = (level >= MAX_FLOORS && isCarriagePumpkin(x, z)) ? makeVoxelPumpkinCarriage() : makeVoxelCropKind('pumpkin', level);
     else if (kind === 'cow' || kind === 'sheep') mesh = makeVoxelAnimal(kind);
-    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level);
+    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level, { appearance: cell.appearance, editable: subEditable });
     else if (kind === 'chimney' || kind === 'ripple' || kind === 'shrub' || kind === 'stone' || kind === 'pebble' || kind === 'bridge-rail') mesh = makeVoxelMicroKind(kind, level, x, z);
     else if (kind === 'fence') {
       const fenceStyle = typeof fenceStyleForCell === 'function' ? fenceStyleForCell(cell) : 'wood';
