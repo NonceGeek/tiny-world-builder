@@ -743,13 +743,26 @@
     // than falling through to cell selection on pointerup. Runs before the
     // engine/cell paths and marks the drag so pointerup doesn't clobber it.
     const sub = window.__tinyworldSubEdit;
-    const subHit = (e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey && mpEditAllowed()
-        && sub && sub.isActive && sub.isActive() && sub._pick)
+    const subPlainClick = e.button === 0 && !spaceDown && !e.shiftKey && !e.metaKey && !e.ctrlKey && mpEditAllowed()
+      && sub && sub.isActive && sub.isActive();
+    const subHit = (subPlainClick && sub._pick)
       ? sub._pick(e.clientX, e.clientY)
       : null;
     if (subHit) {
       sub.selectPart(subHit.partKey);
       dragMode = 'subpart-select';
+      pointerDown = { x: e.clientX, y: e.clientY };
+      lastPointer = { x: e.clientX, y: e.clientY };
+      didDrag = false;
+      hoverMesh.visible = false;
+      currentHover = null;
+      renderer.domElement.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+    if (subPlainClick) {
+      if (sub.exit) sub.exit();
+      dragMode = 'subpart-cancel';
       pointerDown = { x: e.clientX, y: e.clientY };
       lastPointer = { x: e.clientX, y: e.clientY };
       didDrag = false;
@@ -966,7 +979,7 @@
     if (pointerDown && !didDrag
         && dragMode !== 'pan' && dragMode !== 'draw' && dragMode !== 'mooring'
         && dragMode !== 'pinch' && dragMode !== 'engine-select' && dragMode !== 'transform-gizmo'
-        && dragMode !== 'subpart-select') {
+        && dragMode !== 'subpart-select' && dragMode !== 'subpart-cancel') {
       const hit = pointerDownHit;
       const mods = pointerDownMods;
       // A placed plane is interactive: a plain (unmodified) click on it opens

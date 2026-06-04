@@ -77,6 +77,14 @@ Selection properties:
   target `__tinyworldSubEdit.selectedGizmoTarget()`; use `movePart(..., { snap:
   !shiftKey })`, `scalePart()`, and `rotatePart()` so keyboard, Properties, and
   in-scene handles stay consistent.
+- Sub-object edit eligibility is centralized in `isVoxelSubEditableKind()`.
+  Radial menu and Properties must use that helper instead of maintaining
+  separate kind lists. When a supported built-in object enters sub-edit,
+  `renderCellObjectImpl()` forces the voxel renderer for that active cell so
+  rock/fence/crop/animal/micro voxel objects get real part keys. Entering edit
+  should not auto-explode; explicit Explode remains a user action. A plain
+  canvas click that misses a selectable part exits sub-edit and must not fall
+  through to cell selection or placement on the same click.
 - Model stamps should expose All material / All mat scale controls, but Body/Top material controls should be limited to selected asset kinds with known Tiny World material buckets; mixed selections must not write part-material fields onto model stamps.
 - Generated `voxel-build` / customParts objects are editable through the same
   Layers / Properties appearance rows as built-ins: All material, Body material,

@@ -168,7 +168,12 @@
     const level = cell.floors || 1;
     const appearanceForRender = normalizeAppearance(cell.appearance);
     const renderStyle = appearanceForRender && appearanceForRender.objectStyle;
-    const useVoxelRender = kind === 'voxel-build' ||
+    const forceSubEditVoxelRender = typeof isVoxelSubEditCell === 'function'
+      && isVoxelSubEditCell(x, z)
+      && typeof isVoxelSubEditableKind === 'function'
+      && isVoxelSubEditableKind(kind, cell);
+    const useVoxelRender = forceSubEditVoxelRender ||
+                           kind === 'voxel-build' ||
                            kind === 'model-stamp' ||
                            (renderStyle === 'voxel') ||
                            (renderVoxelTerrain && renderStyle !== 'normal');

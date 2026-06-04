@@ -791,6 +791,7 @@
 
   const ISLAND_ROCKET_FLAME_SPEED = 3;
   const UNDER_ISLAND_EFFECT_RENDER_ORDER = -24;
+  const ISLAND_ROCKET_PLUME_CAMERA_GATE_Y = 1.15;
   let islandRocketFlames = new Set();
   let islandRocketEngines = new Set();
   let islandRocketSmokeTimer = 0;
@@ -930,9 +931,9 @@
 
   function addIslandRocketPlume(parent, seed = 0) {
     const specs = [
-      { kind: 'flame', y: -1.45, w: 0.92, h: 1.82, travel: 0.10, phase: 0.2 },
-      { kind: 'core',  y: -1.28, w: 0.48, h: 1.42, travel: 0.07, phase: 1.7 },
-      { kind: 'smoke', y: -2.05, w: 1.04, h: 1.32, travel: 0.16, phase: 3.1 },
+      { kind: 'flame', y: -1.52, w: 0.70, h: 1.36, travel: 0.08, phase: 0.2 },
+      { kind: 'core',  y: -1.36, w: 0.34, h: 1.04, travel: 0.05, phase: 1.7 },
+      { kind: 'smoke', y: -2.12, w: 0.78, h: 1.00, travel: 0.12, phase: 3.1 },
     ];
     const xFlip = cellRand(seed, GRID, 8140) < 0.5 ? -1 : 1;
     specs.forEach((spec, index) => {
@@ -957,10 +958,15 @@
     });
   }
 
-  function updateIslandRocketPlumeFacing(mesh) {
-    if (!mesh || !mesh.parent || !mesh.userData || !mesh.userData.rocketPlumeSheet) return;
+  function islandRocketPlumeVisibleFromCamera(mesh) {
+    if (!mesh || !mesh.parent || typeof camera === 'undefined') return false;
     islandRocketPlumeCameraLocal.copy(camera.position);
     mesh.parent.worldToLocal(islandRocketPlumeCameraLocal);
+    return islandRocketPlumeCameraLocal.y <= ISLAND_ROCKET_PLUME_CAMERA_GATE_Y;
+  }
+
+  function updateIslandRocketPlumeFacing(mesh) {
+    if (!mesh || !mesh.parent || !mesh.userData || !mesh.userData.rocketPlumeSheet) return;
     const dx = islandRocketPlumeCameraLocal.x - mesh.position.x;
     const dz = islandRocketPlumeCameraLocal.z - mesh.position.z;
     if (Math.abs(dx) + Math.abs(dz) < 0.0001) return;
@@ -1417,6 +1423,9 @@
       }
       const phase = mesh.userData.flamePhase || 0;
       if (mesh.userData && mesh.userData.rocketPlumeSheet) {
+        const plumeVisible = islandRocketPlumeVisibleFromCamera(mesh);
+        mesh.visible = plumeVisible;
+        if (!plumeVisible) continue;
         const pulse = 0.5 + Math.sin(t * 10.5 * ISLAND_ROCKET_FLAME_SPEED + phase) * 0.5;
         const drift = Math.sin(t * 3.0 * ISLAND_ROCKET_FLAME_SPEED + phase * 0.37);
         const smoke = mesh.userData.plumeKind === 'smoke';
@@ -1915,7 +1924,7 @@
     if (opts && opts.editable) g.userData.noVoxelBatch = true;
   }
 
-  function makeVoxelRock(neighbors, level = 1, seedX = 0, seedZ = 0, inWater = false) {
+  function makeVoxelRock(neighbors, level = 1, seedX = 0, seedZ = 0, inWater = false, opts = {}) {
     const g = new THREE.Group();
     const extra = Math.max(0, Math.min(MAX_FLOORS, level || 1) - 1);
     const count = 4 + Math.min(extra, 5);
@@ -1935,11 +1944,12 @@
     }
     g.userData = { kind: 'rock' };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-rock' });
     return g;
   }
 
-  function makeVoxelBridge(orientation, level = 1) {
+  function makeVoxelBridge(orientation, level = 1, opts = {}) {
     const g = new THREE.Group();
     const lv = Math.max(1, Math.min(4, level || 1));
     const stone = lv >= 3;
@@ -1956,11 +1966,12 @@
     if (orientation === 'z') g.rotation.y = Math.PI / 2;
     g.userData = { kind: 'bridge', level: lv };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-bridge' });
     return g;
   }
 
-  function makeVoxelFence(side = 'n', level = 1, castle = false, roadGate = false, pathOrientation = 'x', style = 'wood') {
+  function makeVoxelFence(side = 'n', level = 1, castle = false, roadGate = false, pathOrientation = 'x', style = 'wood', opts = {}) {
     const g = new THREE.Group();
     const lv = Math.max(1, Math.min(MAX_FLOORS, level || 1));
     const normalized = FENCE_SIDES.has(side) ? side : 'n';
@@ -2018,13 +2029,14 @@
     }
     g.userData = { kind: 'fence', level: lv, side: normalized, fenceStyle };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-fence' });
     return g;
   }
 
-  function makeVoxelFenceSpan(side = 'n', level = 1, length = 1, style = 'wood') {
+  function makeVoxelFenceSpan(side = 'n', level = 1, length = 1, style = 'wood', opts = {}) {
     const spanCells = Math.max(1, Math.floor(length || 1));
-    if (spanCells <= 1) return makeVoxelFence(side, level, false, false, 'x', style);
+    if (spanCells <= 1) return makeVoxelFence(side, level, false, false, 'x', style, opts);
     const g = new THREE.Group();
     const lv = Math.max(1, Math.min(MAX_FLOORS, level || 1));
     const normalized = FENCE_SIDES.has(side) ? side : 'n';
@@ -2081,11 +2093,12 @@
     }
     g.userData = { kind: 'fence', level: lv, side: normalized, fenceStyle, batchedSpan: true, spanCells };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-fence-span' });
     return g;
   }
 
-  function makeVoxelCropKind(kind, level = 1) {
+  function makeVoxelCropKind(kind, level = 1, opts = {}) {
     const g = new THREE.Group();
     const extra = Math.max(0, Math.min(MAX_FLOORS, level || 1) - 1);
     const positions = [
@@ -2128,11 +2141,12 @@
     }
     g.userData = { kind };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-crop' });
     return g;
   }
 
-  function makeVoxelPumpkinCarriage() {
+  function makeVoxelPumpkinCarriage(opts = {}) {
     const g = new THREE.Group();
     vbox(g, 0.56, 0.38, 0.46, 0, 0.25, 0, M.pumpkin);
     vbox(g, 0.62, 0.08, 0.50, 0, 0.42, 0, M.pumpkinDk);
@@ -2146,11 +2160,12 @@
     }
     g.userData = { kind: 'pumpkin', carriage: true, swayPhase: Math.random() * Math.PI * 2 };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-pumpkin-carriage' });
     return g;
   }
 
-  function makeVoxelAnimal(kind) {
+  function makeVoxelAnimal(kind, opts = {}) {
     const g = new THREE.Group();
     const sheep = kind === 'sheep';
     const bodyMat = sheep ? M_ANIMAL.sheepWool : M_ANIMAL.cowWhite;
@@ -2168,6 +2183,7 @@
     });
     g.userData = { kind };
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     optimizeVoxelObjectGroup(g, { reason: 'voxel-animal' });
     return g;
   }
@@ -2274,7 +2290,7 @@
     return g;
   }
 
-  function makeVoxelMicroKind(kind, level = 1, x = 0, z = 0) {
+  function makeVoxelMicroKind(kind, level = 1, x = 0, z = 0, opts = {}) {
     const g = new THREE.Group();
     if (kind === 'chimney') {
       vbox(g, 0.16, 0.40, 0.16, 0, 0.20, 0, M.chimney);
@@ -2287,21 +2303,22 @@
       vbox(g, 0.22, 0.018, 0.05, -0.06, 0.038, -0.15, M.waterDk);
       g.userData = { kind: 'ripple' };
     } else if (kind === 'shrub') {
-      const bush = makeVoxelCropKind('bush', Math.max(1, level));
+      const bush = makeVoxelCropKind('bush', Math.max(1, level), opts);
       bush.scale.set(0.72, 0.72, 0.72);
       return bush;
     } else if (kind === 'pebble') {
-      const pebble = makeVoxelRock(null, 1, x, z, false);
+      const pebble = makeVoxelRock(null, 1, x, z, false, opts);
       pebble.scale.set(0.55, 0.55, 0.55);
       return pebble;
     } else if (kind === 'stone') {
-      return makeVoxelRock(null, Math.max(1, level), x, z, false);
+      return makeVoxelRock(null, Math.max(1, level), x, z, false, opts);
     } else if (kind === 'bridge-rail') {
-      const rail = makeVoxelFence('center-x', Math.max(1, level), false, false);
+      const rail = makeVoxelFence('center-x', Math.max(1, level), false, false, 'x', 'wood', opts);
       rail.scale.set(0.80, 0.80, 0.80);
       return rail;
     }
     castReceive(g);
+    applyEditableObjectParts(g, opts);
     return g;
   }
 
@@ -2314,9 +2331,28 @@
   }
   function getVoxelSubEditKey() { return voxelSubEditKey; }
   function isVoxelSubEditCell(x, z) { return voxelSubEditKey !== null && voxelSubEditKey === (x + ',' + z); }
+  const TW_VOXEL_SUBEDIT_BUILTIN_KINDS = new Set([
+    'house', 'tree', 'rock', 'bridge', 'fence', 'lamp-post', 'spotlight',
+    'tuft', 'flower', 'bush', 'crop', 'corn', 'wheat', 'pumpkin', 'carrot',
+    'sunflower', 'cow', 'sheep', 'chimney', 'ripple', 'shrub', 'stone',
+    'pebble', 'bridge-rail',
+  ]);
+  function isVoxelSubEditableKind(kind, cell = null) {
+    const k = String(kind || (cell && cell.kind) || '');
+    if (!k) return false;
+    if (k === 'voxel-build') {
+      const st = (typeof getVoxelBuildStamp === 'function')
+        ? getVoxelBuildStamp(cell && cell.appearance && cell.appearance.voxelBuildId) : null;
+      return !!(st && Array.isArray(st.voxels) && st.voxels.length
+        && !(Array.isArray(st.customParts) && st.customParts.length));
+    }
+    return TW_VOXEL_SUBEDIT_BUILTIN_KINDS.has(k);
+  }
 
   function makeVoxelRenderForCell(kind, x, z, cell, level) {
     const subEditable = isVoxelSubEditCell(x, z);
+    const editOpts = { appearance: cell.appearance, editable: subEditable };
+    const partSensitive = subEditable || !!(editOpts.appearance && editOpts.appearance.parts && Object.keys(editOpts.appearance.parts).length);
     let mesh = null;
     let posX = null;
     let posZ = null;
@@ -2324,20 +2360,22 @@
 
     if (kind === 'voxel-build') mesh = makeVoxelBuildStamp(cell.appearance && cell.appearance.voxelBuildId, { appearance: cell.appearance, editable: subEditable });
     else if (kind === 'model-stamp') mesh = makeModelStamp(cell.appearance && cell.appearance.modelStampId, { appearance: cell.appearance });
-    else if (kind === 'tree') mesh = makeVoxelTree(level, x, z, { editable: subEditable, appearance: cell.appearance });
-    else if (kind === 'rock') mesh = makeVoxelRock(getRockNeighbors(x, z), level, x, z, cell.terrain === 'water');
-    else if (kind === 'bridge') mesh = makeVoxelBridge(getBridgeOrientation(x, z), level);
-    else if (kind === 'tuft' || kind === 'flower' || kind === 'bush' || kind === 'crop' || kind === 'corn' || kind === 'wheat' || kind === 'carrot' || kind === 'sunflower') mesh = makeVoxelCropKind(kind, level);
-    else if (kind === 'pumpkin') mesh = (level >= MAX_FLOORS && isCarriagePumpkin(x, z)) ? makeVoxelPumpkinCarriage() : makeVoxelCropKind('pumpkin', level);
-    else if (kind === 'cow' || kind === 'sheep') mesh = makeVoxelAnimal(kind);
-    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level, { appearance: cell.appearance, editable: subEditable });
-    else if (kind === 'chimney' || kind === 'ripple' || kind === 'shrub' || kind === 'stone' || kind === 'pebble' || kind === 'bridge-rail') mesh = makeVoxelMicroKind(kind, level, x, z);
+    else if (kind === 'tree') mesh = makeVoxelTree(level, x, z, editOpts);
+    else if (kind === 'rock') mesh = makeVoxelRock(getRockNeighbors(x, z), level, x, z, cell.terrain === 'water', editOpts);
+    else if (kind === 'bridge') mesh = makeVoxelBridge(getBridgeOrientation(x, z), level, editOpts);
+    else if (kind === 'tuft' || kind === 'flower' || kind === 'bush' || kind === 'crop' || kind === 'corn' || kind === 'wheat' || kind === 'carrot' || kind === 'sunflower') mesh = makeVoxelCropKind(kind, level, editOpts);
+    else if (kind === 'pumpkin') mesh = (level >= MAX_FLOORS && isCarriagePumpkin(x, z)) ? makeVoxelPumpkinCarriage(editOpts) : makeVoxelCropKind('pumpkin', level, editOpts);
+    else if (kind === 'cow' || kind === 'sheep') mesh = makeVoxelAnimal(kind, editOpts);
+    else if (kind === 'lamp-post' || kind === 'spotlight') mesh = makeVoxelLightSource(kind, level, editOpts);
+    else if (kind === 'chimney' || kind === 'ripple' || kind === 'shrub' || kind === 'stone' || kind === 'pebble' || kind === 'bridge-rail') mesh = makeVoxelMicroKind(kind, level, x, z, editOpts);
     else if (kind === 'fence') {
       const fenceStyle = typeof fenceStyleForCell === 'function' ? fenceStyleForCell(cell) : 'wood';
       if (cell.terrain === 'path') {
         const pn = getPathNeighbors(x, z);
         const pathAxis = (pn.e || pn.w) ? 'x' : (pn.n || pn.s) ? 'z' : 'x';
-        mesh = makeVoxelFence(normalizeFenceSide(cell.fenceSide), level, false, true, pathAxis, fenceStyle);
+        mesh = makeVoxelFence(normalizeFenceSide(cell.fenceSide), level, false, true, pathAxis, fenceStyle, editOpts);
+      } else if (partSensitive) {
+        mesh = makeVoxelFence(normalizeFenceSide(cell.fenceSide), level, isCastleFence(x, z), false, 'x', fenceStyle, editOpts);
       } else {
         const span = findFenceRenderSpan(x, z);
         if (span && !span.isAnchor) return { skip: true };
@@ -2350,7 +2388,7 @@
           else posZ += (span.length - 1) * TILE / 2;
           setGridUserData = false;
         } else {
-          mesh = makeVoxelFence(normalizeFenceSide(cell.fenceSide), level, isCastleFence(x, z), false, 'x', fenceStyle);
+          mesh = makeVoxelFence(normalizeFenceSide(cell.fenceSide), level, isCastleFence(x, z), false, 'x', fenceStyle, editOpts);
         }
       }
     } else if (kind === 'house') {

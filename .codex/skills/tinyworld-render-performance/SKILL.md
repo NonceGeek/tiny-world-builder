@@ -164,6 +164,12 @@ GPU caches (introduced for low-end GPU + visible-distance scaling):
   lighting conservative now that there is no post pass; time-of-day
   hemisphere scaling should normalize against the day anchor (`0.90`), not
   the raw constructor value, or midday blows out.
+- Imported GLB/model stamps also have named non-shadowing safety lights:
+  `model-stamp-import-ambient-fill` and
+  `model-stamp-import-directional-fill`. They are adapted from the
+  user-supplied Mugen87 StackOverflow ambient/directional baseline, scaled by
+  the render lighting/ambient sliders and time-of-day/weather code, and must
+  follow the camera target without casting shadows.
 - Accent lighting for the starlit look is limited to non-shadowing local
   `SpotLight`/`PointLight` instances that follow the camera target and fade in
   at dusk/night. Do not enable shadow maps on these lights; the directional sun

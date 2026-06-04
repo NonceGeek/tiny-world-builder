@@ -2052,23 +2052,12 @@
         {
           const ap = cell => normalizeAppearance(cell.appearance) || {};
           // Sub-object part editing works on home-board objects that expose keyed
-          // parts: voxel-builds with a voxel-based stamp, and cottage houses
-          // (makeVoxelLinearHouse keys wall/door/windows). Island objects render
-          // outside the home cellMeshes path; customParts stamps + special
-          // buildingTypes (manor/tower/turret) have no part keys yet.
+          // parts through the voxel renderer. Island objects render outside the
+          // home cellMeshes path, and model stamps stay separate from voxel parts.
           const subT = selectedTargets[0] || null;
           const onHome = !!(subT && (typeof isOutsideHomeGrid !== 'function' || !isOutsideHomeGrid(subT.x, subT.z)));
-          const isVoxelStampObj = (() => {
-            if (!subT || subT.cell.kind !== 'voxel-build') return false;
-            const st = (typeof getVoxelBuildStamp === 'function')
-              ? getVoxelBuildStamp(subT.cell.appearance && subT.cell.appearance.voxelBuildId) : null;
-            return !!(st && Array.isArray(st.voxels) && st.voxels.length
-              && !(Array.isArray(st.customParts) && st.customParts.length));
-          })();
-          const isHouse = !!(subT && subT.cell.kind === 'house');
-          const isTree = !!(subT && subT.cell.kind === 'tree');
-          const isLight = !!(subT && (subT.cell.kind === 'lamp-post' || subT.cell.kind === 'spotlight'));
-          const subSupported = onHome && (isVoxelStampObj || isHouse || isTree || isLight);
+          const subSupported = onHome && !!(subT && typeof isVoxelSubEditableKind === 'function'
+            && isVoxelSubEditableKind(subT.cell.kind, subT.cell));
           if (objectCells.length === 1 && subSupported) {
             const editing = !!(window.__tinyworldSubEdit && window.__tinyworldSubEdit.isActive && window.__tinyworldSubEdit.isActive());
             addRow('Edit', { key: 'subEdit', label: 'Parts', control: 'actions', options: [

@@ -112,8 +112,10 @@ if (Number.isFinite(p.topPct) && Number.isFinite(p.leftPct)) {
 Always re-apply on `window.addEventListener('resize')` and clamp to
 `[8, innerWidth - w - 8]` / `[8, innerHeight - h - 8]`.
 
-The existing minimap implementation (`applyStoredMinimapPos` /
-`endMinimapDrag`) is the reference pattern.
+The existing minimap implementation (`clampMinimapPosition` /
+`setMinimapPosition` / `applyStoredMinimapPos` / `endMinimapDrag`) is the
+reference pattern. Minimap collapse must shrink in place; do not use a
+`translateX(...)` trick that pushes the map outside the viewport.
 
 ## Audio system
 

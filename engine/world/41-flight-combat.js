@@ -63,8 +63,12 @@
     if (health <= 0) { health = 0; doDeathAndRelaunch(); }
   }
   function spawnExplosionFX(pos) {
-    // bigger burst than a normal hit, reusing the spark pool
-    for (let k = 0; k < 3; k++) spawnHitSparks(pos);
+    ensureSparkPool();
+    ensureExplosionPool();
+    for (let k = 0; k < 2; k++) spawnHitSparks(pos);
+    for (let k = 0; k < 5; k++) spawnExplosionParticle(pos, 'fire');
+    for (let k = 0; k < 9; k++) spawnExplosionParticle(pos, 'smoke');
+    for (let k = 0; k < 5; k++) spawnExplosionParticle(pos, 'ember');
   }
   function doDeathAndRelaunch() {
     if (jet) { jet.getWorldPosition(_fcSparkTmp); spawnExplosionFX(_fcSparkTmp); }
@@ -339,6 +343,132 @@
     }
   }
 
+  // ---- fireball / smoke bursts ----
+  const EXPLOSION_POOL = 96;
+  let explosionGroup = null;
+  let explosionFireTexture = null;
+  let explosionSmokeTexture = null;
+  const explosions = [];
+
+  function makeExplosionTexture(stops) {
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(32, 32, 1, 32, 32, 32);
+    stops.forEach(stop => g.addColorStop(stop[0], stop[1]));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  function ensureExplosionPool() {
+    if (explosionGroup) return;
+    explosionGroup = new THREE.Group();
+    explosionGroup.name = 'tw_flight_explosions';
+    scene.add(explosionGroup);
+    explosionFireTexture = makeExplosionTexture([
+      [0, 'rgba(255,255,230,1)'],
+      [0.22, 'rgba(255,186,48,0.95)'],
+      [0.55, 'rgba(255,72,20,0.62)'],
+      [1, 'rgba(255,50,0,0)'],
+    ]);
+    explosionSmokeTexture = makeExplosionTexture([
+      [0, 'rgba(95,92,82,0.72)'],
+      [0.42, 'rgba(45,43,39,0.55)'],
+      [1, 'rgba(18,17,15,0)'],
+    ]);
+    for (let i = 0; i < EXPLOSION_POOL; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: explosionFireTexture,
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.visible = false;
+      sprite.raycast = () => {};
+      explosionGroup.add(sprite);
+      explosions.push({
+        sprite,
+        vel: new THREE.Vector3(),
+        life: 0,
+        maxLife: 1,
+        baseScale: 1,
+        grow: 1,
+        type: 'fire',
+        active: false,
+      });
+    }
+  }
+
+  function spawnExplosionParticle(pos, type) {
+    const p = explosions.find(item => !item.active);
+    if (!p) return null;
+    const fire = type === 'fire';
+    const smoke = type === 'smoke';
+    const ember = type === 'ember';
+    p.active = true;
+    p.type = type;
+    p.maxLife = fire ? 0.42 + Math.random() * 0.14 : smoke ? 1.15 + Math.random() * 0.65 : 0.34 + Math.random() * 0.20;
+    p.life = p.maxLife;
+    p.baseScale = fire ? 0.55 + Math.random() * 0.60 : smoke ? 0.38 + Math.random() * 0.42 : 0.16 + Math.random() * 0.16;
+    p.grow = fire ? 2.2 + Math.random() * 1.6 : smoke ? 2.4 + Math.random() * 2.2 : 1.1 + Math.random() * 0.8;
+    p.sprite.position.copy(pos);
+    p.sprite.position.x += (Math.random() - 0.5) * (smoke ? 0.8 : 0.35);
+    p.sprite.position.y += (Math.random() - 0.35) * (smoke ? 0.55 : 0.28);
+    p.sprite.position.z += (Math.random() - 0.5) * (smoke ? 0.8 : 0.35);
+    p.vel.set(
+      (Math.random() - 0.5) * (fire ? 3.8 : smoke ? 1.7 : 6.0),
+      (fire ? 1.2 : smoke ? 2.2 : 2.8) + Math.random() * (smoke ? 2.1 : 2.8),
+      (Math.random() - 0.5) * (fire ? 3.8 : smoke ? 1.7 : 6.0)
+    );
+    p.sprite.material.map = smoke ? explosionSmokeTexture : explosionFireTexture;
+    p.sprite.material.blending = smoke ? THREE.NormalBlending : THREE.AdditiveBlending;
+    p.sprite.material.color.setHex(ember ? 0xffd06b : fire ? 0xff8a24 : 0x4f4a42);
+    p.sprite.material.opacity = fire ? 0.98 : smoke ? 0.48 : 0.86;
+    p.sprite.material.needsUpdate = true;
+    p.sprite.scale.setScalar(p.baseScale);
+    p.sprite.visible = true;
+    return p;
+  }
+
+  function spawnMissileTrail(pos) {
+    ensureExplosionPool();
+    const puff = spawnExplosionParticle(pos, 'smoke');
+    if (puff && puff.active && puff.type === 'smoke') {
+      puff.maxLife = 0.55;
+      puff.life = 0.55;
+      puff.baseScale = 0.18;
+      puff.grow = 1.8;
+      puff.sprite.scale.setScalar(0.18);
+      puff.vel.multiplyScalar(0.35);
+    }
+  }
+
+  function updateExplosionFX(dt) {
+    for (const p of explosions) {
+      if (!p.active) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.active = false;
+        p.sprite.visible = false;
+        continue;
+      }
+      const age = 1 - p.life / p.maxLife;
+      p.sprite.position.addScaledVector(p.vel, dt);
+      if (p.type === 'smoke') p.vel.y += dt * 0.45;
+      else p.vel.multiplyScalar(Math.max(0.88, 1 - dt * 1.5));
+      p.sprite.scale.setScalar(p.baseScale * (1 + age * p.grow));
+      const fade = p.type === 'smoke' ? Math.pow(1 - age, 1.45) * 0.52 : Math.pow(1 - age, 1.9) * 0.98;
+      p.sprite.material.opacity = Math.max(0, fade);
+    }
+  }
+
   // ---- bbox-derived muzzle offsets ----
   // _bbox yields WORLD-space extents. Because fireGuns uses jet.localToWorld
   // (which re-applies the jet's world scale), we convert the world extents to
@@ -565,7 +695,7 @@
       g.add(b, n); g.visible = false; g.raycast = () => {};
       missileGroup.add(g);
       missiles.push({ mesh: g, vel: new THREE.Vector3(), pos: new THREE.Vector3(),
-        targetId: '', life: 0, active: false, sceneryPhase: i % 4 });
+        targetId: '', life: 0, active: false, sceneryPhase: i % 4, trailClock: 0 });
     }
   }
   function findTargetById(id) { for (const t of targets) if (t.id === id) return t; return null; }
@@ -580,7 +710,7 @@
     m.pos.copy(local); jet.localToWorld(m.pos);
     m.vel.copy(dir).multiplyScalar(MISSILE_SPEED);
     m.targetId = (lockAmount > 0.3 && lockId) ? lockId : '';
-    m.life = MISSILE_LIFE; m.active = true;
+    m.life = MISSILE_LIFE; m.active = true; m.trailClock = 0;
     m.mesh.visible = true; m.mesh.position.copy(m.pos);
     m.mesh.quaternion.copy(_fcMq.setFromUnitVectors(_projForward, dir));
     spawnHitSparks(m.pos); // launch puff
@@ -613,6 +743,11 @@
       m.pos.addScaledVector(m.vel, dt);
       m.mesh.position.copy(m.pos);
       m.mesh.quaternion.copy(_fcMq.setFromUnitVectors(_projForward, _fcMTrailTmp.copy(m.vel).normalize()));
+      m.trailClock -= dt;
+      if (m.trailClock <= 0) {
+        spawnMissileTrail(m.pos);
+        m.trailClock = 0.055;
+      }
       if (m.life <= 0) deactivateMissile(m);
     }
   }
@@ -624,9 +759,12 @@
     shotsFired = 0;
     ensureTracerPool();
     ensureSparkPool();
+    ensureExplosionPool();
     ensureMissilePool();
     for (const m of missiles) deactivateMissile(m);
     missilesAmmo = MISSILE_COUNT; missileCooldown = 0; missileSide = -1; _fcXPrev = false;
+    window.__flightMissilePressed = false;
+    window.__flightMissileHeld = false;
     ensureOverlay();
     ensureHudPool();
     reticleState.init = false;
@@ -645,6 +783,9 @@
     for (const m of missiles) deactivateMissile(m);
     for (const tr of tracers) { tr.active = false; if (tr.mesh) tr.mesh.visible = false; }
     for (const sp of sparks) { sp.active = false; if (sp.sprite) sp.sprite.visible = false; }
+    for (const ex of explosions) { ex.active = false; if (ex.sprite) ex.sprite.visible = false; }
+    window.__flightMissilePressed = false;
+    window.__flightMissileHeld = false;
   }
 
   function tick(dt) {
@@ -659,13 +800,16 @@
       fireGuns();
       fireCooldown = FIRE_COOLDOWN;
     }
+    const missilePressed = !!window.__flightMissilePressed;
     const xDown = !!(window.__flightKeys && window.__flightKeys['KeyX']);
-    if (xDown && !_fcXPrev) fireMissile();
+    if ((xDown && !_fcXPrev) || missilePressed) fireMissile();
     _fcXPrev = xDown;
+    window.__flightMissilePressed = false;
     missileCooldown = Math.max(0, missileCooldown - dt);
     updateMissiles(dt);
     updateTracers(dt);
     updateSparks(dt);
+    updateExplosionFX(dt);
     updateReticle(dt);
     updateLock(dt);
     updateTargetHud();

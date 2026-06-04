@@ -16,6 +16,12 @@ description: Use when changing Tiny World Builder's mode indicator, boot tool se
   build panels and edit radials are hidden, selection/sub-edit state is cleared,
   and mutation paths should be gated through the same edit checks that call
   `mpEditAllowed()`.
+- First load uses the same Build/Play contract through `#welcome-modal`: the
+  rounded `.launch-modal` shows `assets/twlogo.png` with BUILD and PLAY buttons,
+  hides app chrome via `body.welcome-launch-open`, and calls
+  `window.__tinyworldMode` when the user chooses. Do not bring back the old
+  farm/vehicle welcome picker for this path, and keep `publish.sh` copying the
+  `assets/` directory into `dist/assets/`.
 - `#mode-indicator` (HUD chip, updated in `updateModeIndicator` in
   `19-tools-toolbar.js`) names the current mode and colours itself: calm
   `mode-select`, amber `mode-build`, red `mode-erase`. Keep it
@@ -25,10 +31,9 @@ description: Use when changing Tiny World Builder's mode indicator, boot tool se
 
 ## Gotcha
 
-`npm test` (`tools/check.js` / `smoke-static.js`) is stale post-split: it
-string-matches the old inline `<script>`/`setCell(` in
-`tiny-world-builder.html` and fails regardless of these changes. Verify with a
-headless boot (no new console errors) instead.
+`npm test` (`tools/check.js` / `smoke-static.js`) reconstructs the split app
+from `tiny-world-builder.html` plus `engine/**/*.js`. Update those static guards
+when changing boot mode, launcher chrome, or mode persistence.
 
 
 ## Bottom toolbar vs floating block palette

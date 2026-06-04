@@ -52,6 +52,13 @@ stamp at `enterFlight`. Ground is a flat sim plane at spawn height.
   disc whose opacity flickers with throttle.
 - Controls: W = nose down, S or X = nose up (pitch), A/D roll, Q/E yaw, Shift/Ctrl OR
   ArrowUp/ArrowDown = throttle, ArrowLeft/ArrowRight = rudder, B brake.
+- Combat controls live in `41-flight-combat.js` while flying: left mouse or
+  Space holds guns, `X` fires a missile, and right-click fires one missile via
+  `window.__flightMissilePressed` / `window.__flightMissileHeld`. The pointer
+  handler in `34-flight-sim.js` must prevent the context menu only while
+  `flightActive` is true. Missile hits and destruction should use the pooled
+  flight explosion sprites (`tw_flight_explosions`) plus smoke trails rather
+  than adding DOM effects or build-mode controls.
 - `Escape` → `exitFlight()`: restores the previous camera, calls `updateCamera()`,
   re-renders the cell to re-park the stamp.
 

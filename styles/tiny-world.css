@@ -323,53 +323,147 @@
   }
   .appbar .btn.icon svg { width: 15px; height: 15px; }
 
-  /* Quick language switch — SVG flags grouped at the end of the appbar. */
+  /* Quick language switch — one flag button that opens an upward menu. */
   .appbar-sep {
     width: 1px;
     align-self: stretch;
     margin: 4px 2px;
     background: rgba(120, 130, 150, 0.25);
   }
-  .lang-flags {
+  .language-picker {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 3px;
   }
-  .lang-flag {
-    width: 26px;
-    height: 18px;
-    padding: 0;
-    border: 1px solid rgba(120, 130, 150, 0.28);
-    border-radius: 4px;
-    overflow: hidden;
+  .language-trigger {
+    position: relative;
+    width: 46px;
+    height: 30px;
+    padding: 2px 5px 2px 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 11px;
     cursor: pointer;
-    background: none;
-    opacity: 0.55;
-    transition: opacity 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+    background: transparent;
     -webkit-appearance: none;
     appearance: none;
   }
-  .lang-flag svg { display: block; width: 100%; height: 100%; }
-  .lang-flag:hover { opacity: 0.9; transform: translateY(-1px); }
-  .lang-flag.is-active {
-    opacity: 1;
-    border-color: rgba(40, 50, 80, 0.55);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85), 0 2px 6px -1px rgba(20, 30, 50, 0.35);
+  .language-current-flag,
+  .language-flag-svg {
+    width: 25px;
+    height: 17px;
+    display: inline-flex;
+    flex: 0 0 auto;
+    overflow: hidden;
+    border-radius: 5px;
+    box-shadow: 0 0 0 1px rgba(30, 40, 60, 0.22);
   }
-  .lang-flag:focus-visible {
-    outline: 2px solid #4a90d9;
+  .language-current-flag svg,
+  .language-flag-svg svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .language-chevron {
+    width: 10px;
+    height: 10px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.12s ease;
+  }
+  .language-trigger[aria-expanded="true"] .language-chevron { transform: rotate(180deg); }
+  .language-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    z-index: 36;
+    min-width: 126px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.86) inset,
+      0 12px 28px -14px rgba(20, 30, 50, 0.42);
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+  }
+  .language-menu[hidden] { display: none; }
+  .language-option {
+    width: 100%;
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px 4px 5px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--ink);
+    background: transparent;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1;
+    text-align: left;
+    cursor: pointer;
+  }
+  .language-option:hover,
+  .language-option:focus-visible,
+  .language-option.is-active {
+    background: rgba(255, 255, 255, 0.72);
+  }
+  .language-option:focus-visible {
+    outline: 2px solid rgba(84, 137, 230, 0.54);
     outline-offset: 1px;
+  }
+  .language-option.is-active {
+    color: #1e428a;
+    box-shadow: inset 0 0 0 1px rgba(30, 66, 138, 0.18);
+  }
+  body.ui-theme-dark .language-menu {
+    background: rgba(24, 30, 44, 0.88);
+    border-color: rgba(220, 236, 255, 0.22);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.14) inset,
+      0 14px 30px -16px rgba(0, 0, 0, 0.72);
+  }
+  body.ui-theme-dark .language-option {
+    color: #eef5ff;
+  }
+  body.ui-theme-dark .language-option:hover,
+  body.ui-theme-dark .language-option:focus-visible,
+  body.ui-theme-dark .language-option.is-active {
+    background: rgba(220, 236, 255, 0.12);
+  }
+  body.ui-theme-dark .language-option.is-active {
+    color: #9fc1ff;
+    box-shadow: inset 0 0 0 1px rgba(159, 193, 255, 0.24);
+  }
+  .language-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .brand-banner {
     position: fixed;
-    top: 76px;
-    right: 24px;
+    top: 22px;
+    left: 348px;
+    right: auto;
     bottom: auto;
     z-index: 12;
     display: block;
     line-height: 0;
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: hidden;
     opacity: 0.92;
     box-shadow: 0 8px 24px -10px rgba(40, 50, 80, 0.35);
@@ -377,9 +471,17 @@
   }
   .brand-banner:hover { opacity: 1; transform: translateY(-1px); }
   .brand-banner:focus-visible { outline: 2px solid rgba(90, 140, 255, 0.8); outline-offset: 2px; }
-  .brand-banner img { display: block; width: 200px; height: auto; }
+  .brand-banner img { display: block; width: 154px; height: auto; }
 
-  .token-pill {
+  @media (max-width: 1180px) {
+    .brand-banner {
+      top: 82px;
+      left: 28px;
+    }
+    .brand-banner img { width: 132px; }
+  }
+
+  .token-corner {
     position: fixed;
     top: 18px;
     right: 24px;
@@ -388,23 +490,37 @@
     align-items: center;
     gap: 8px;
     font-size: 12px;
-    padding: 5px 11px 5px 6px;
-    border-radius: 15px;
-    color: #3a3a3a;
+    line-height: 1;
+    color: #2a2722;
     white-space: nowrap;
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
   }
-  .token-pill .token-github-link {
+  .token-corner .token-github-link {
     width: 28px;
     height: 28px;
     flex: 0 0 28px;
     border-radius: 10px;
   }
-  .token-pill .token-github-link svg {
+  .token-corner .token-github-link svg {
     width: 16px;
     height: 16px;
   }
-  .token-pill .ticker { font-weight: 600; color: #2a2722; }
-  .token-pill .ca { font-family: ui-monospace, monospace; opacity: 0.75; }
+  .token-corner .token-corner-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    min-width: 0;
+  }
+  .token-corner .ticker { font-weight: 700; color: #2a2722; }
+  .token-corner .token-sep { color: rgba(42, 39, 34, 0.48); }
+  .token-corner .ca { font-family: ui-monospace, monospace; opacity: 0.72; }
+  body.ui-theme-dark .token-corner {
+    color: #f4f7ff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.72);
+  }
+  body.ui-theme-dark .token-corner .ticker { color: #f4f7ff; }
+  body.ui-theme-dark .token-corner .token-sep,
+  body.ui-theme-dark .token-corner .ca { color: rgba(244, 247, 255, 0.76); }
   .multiplayer-status {
     position: fixed;
     top: 44px;
@@ -3680,15 +3796,31 @@
   }
   .modal[hidden] { display: none; }
 
-  /* Hide the floating agent input bar, conversation panel, its right-edge
-     grip handle, the main toolbar, and XR panel while the welcome chooser
-     modal is open. Gives a completely clean launcher experience. */
-  #welcome-modal:not([hidden]) ~ #agent-input,
-  #welcome-modal:not([hidden]) ~ #agent-panel,
-  #welcome-modal:not([hidden]) ~ #agent-panel-handle,
-  #welcome-modal:not([hidden]) ~ .toolbar,
-  #welcome-modal:not([hidden]) ~ #xr-panel {
+  body.welcome-launch-open .brand,
+  body.welcome-launch-open .brand-banner,
+  body.welcome-launch-open .world-pill,
+  body.welcome-launch-open .token-corner,
+  body.welcome-launch-open .appbar,
+  body.welcome-launch-open .controls,
+  body.welcome-launch-open .toolbar,
+  body.welcome-launch-open #tool-palette,
+  body.welcome-launch-open .flyout,
+  body.welcome-launch-open #layers-toggle,
+  body.welcome-launch-open #layers-panel,
+  body.welcome-launch-open #agent-input,
+  body.welcome-launch-open #agent-panel,
+  body.welcome-launch-open #agent-panel-handle,
+  body.welcome-launch-open #xr-panel,
+  body.welcome-launch-open .minimap-wrap,
+  body.welcome-launch-open .sound-panel,
+  body.welcome-launch-open .unsaved-banner {
     display: none !important;
+  }
+  .launch-modal {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(20, 24, 40, 0.22);
   }
 
   :root {
@@ -4098,14 +4230,17 @@
     /* Stop the browser claiming touch-drags as page scroll before our pointer
        handlers run, so the minimap stays draggable on mobile. */
     touch-action: none;
+    max-width: calc(100vw - 16px);
   }
   .minimap-wrap.dragging { cursor: grabbing; transition: none; }
-  .minimap-wrap.collapsed { transform: translateX(180px); }
+  .minimap-wrap.collapsed { transform: none; }
   .minimap-card {
     background: rgba(255, 255, 255, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.55);
     border-radius: 18px;
     padding: 8px;
+    box-sizing: border-box;
+    max-width: 100%;
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.85) inset,
       0 -1px 0 rgba(120, 130, 150, 0.10) inset,
@@ -4116,11 +4251,14 @@
   }
   .minimap-card canvas {
     display: block;
-    width: 168px; height: 168px;
+    width: min(168px, calc(100vw - 32px));
+    height: auto;
+    aspect-ratio: 1 / 1;
     border-radius: 6px;
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
+  .minimap-wrap.collapsed .minimap-card canvas { display: none; }
   .minimap-foot {
     display: flex; justify-content: space-between;
     margin-top: 6px;
@@ -4879,18 +5017,17 @@
       0 8px 16px -12px rgba(20, 30, 50, 0.62);
   }
 
-  /* Unified chrome icon buttons: appbar, language flags, top pills, chat, and
+  /* Unified chrome icon buttons: appbar, language picker, top pills, chat, and
      the side rail share the block-button outline/inner-line language used by
      the toolbar. */
   .appbar .btn.icon[data-pos-type],
-  .token-pill .btn.icon[data-pos-type],
+  .token-corner .btn.icon[data-pos-type],
   .controls .btn.icon[data-pos-type],
-  .lang-flag[data-pos-type],
+  .language-trigger[data-pos-type],
   .sound-icon[data-pos-type],
   .layers-handle[data-pos-type],
   .mp-chat-toggle[data-pos-type],
   .world-pill[data-pos-type],
-  .token-pill[data-pos-type],
   .multiplayer-status[data-pos-type],
   .multiplayer-roster[data-pos-type] {
     --chrome-outline: #2f3b57;
@@ -4919,7 +5056,7 @@
       transform 0.12s ease;
   }
   .appbar .btn.icon[data-pos-type],
-  .token-pill .btn.icon[data-pos-type],
+  .token-corner .btn.icon[data-pos-type],
   .controls .btn.icon[data-pos-type] {
     border-radius: 11px;
   }
@@ -4967,7 +5104,7 @@
     height: 30px;
     flex: 0 0 30px;
   }
-  .token-pill .btn.icon[data-pos-type] {
+  .token-corner .btn.icon[data-pos-type] {
     width: 30px;
     height: 30px;
     flex: 0 0 30px;
@@ -4982,7 +5119,7 @@
     width: 15px;
     height: 15px;
   }
-  .token-pill .btn.icon[data-pos-type] svg,
+  .token-corner .btn.icon[data-pos-type] svg,
   .controls .btn.icon[data-pos-type] svg {
     width: 18px;
     height: 18px;
@@ -5003,36 +5140,31 @@
     height: 22px;
   }
   .world-pill[data-pos-type],
-  .token-pill[data-pos-type],
   .multiplayer-status[data-pos-type],
   .multiplayer-roster[data-pos-type] {
     border-radius: 999px;
   }
-  .lang-flags {
-    gap: 4px;
-  }
-  .lang-flag[data-pos-type] {
-    width: 31px;
-    height: 24px;
-    padding: 2px;
-    flex: 0 0 31px;
-    border-radius: 9px;
-    opacity: 0.82;
+  .language-trigger[data-pos-type] {
+    width: 46px;
+    height: 30px;
+    padding: 2px 5px 2px 4px;
+    flex: 0 0 46px;
+    border-radius: 11px;
+    opacity: 0.92;
     background: var(--chrome-bg);
   }
-  .lang-flag[data-pos-type] svg {
+  .language-trigger[data-pos-type] .language-current-flag {
     border-radius: 5px;
     overflow: hidden;
   }
   .appbar .btn.icon[data-pos-type]:hover,
-  .token-pill .btn.icon[data-pos-type]:hover,
+  .token-corner .btn.icon[data-pos-type]:hover,
   .controls .btn.icon[data-pos-type]:hover,
-  .lang-flag[data-pos-type]:hover,
+  .language-trigger[data-pos-type]:hover,
   .sound-icon[data-pos-type]:hover,
   .layers-handle[data-pos-type]:hover,
   .mp-chat-toggle[data-pos-type]:hover,
-  .world-pill[data-pos-type]:hover,
-  .token-pill[data-pos-type]:hover {
+  .world-pill[data-pos-type]:hover {
     color: var(--chrome-outline);
     background: var(--chrome-hover-bg);
     border-color: var(--chrome-outline);
@@ -5044,9 +5176,9 @@
       0 3px 6px -2px rgba(20, 30, 50, 0.28);
   }
   .appbar .btn.icon[data-pos-type="primary"],
-  .token-pill .btn.icon[data-pos-type="primary"],
+  .token-corner .btn.icon[data-pos-type="primary"],
   .controls .btn.icon[data-pos-type="primary"],
-  .lang-flag[data-pos-type="primary"],
+  .language-trigger[data-pos-type="primary"],
   .sound-icon[data-pos-type="primary"],
   .layers-handle[data-pos-type="primary"],
   .mp-chat-toggle[data-pos-type="primary"],
@@ -5058,9 +5190,9 @@
     --chrome-bevel: rgba(30, 66, 138, 0.22);
   }
   .appbar .btn.icon[data-pos-type="tertiary"],
-  .token-pill .btn.icon[data-pos-type="tertiary"],
+  .token-corner .btn.icon[data-pos-type="tertiary"],
   .controls .btn.icon[data-pos-type="tertiary"],
-  .lang-flag[data-pos-type="tertiary"],
+  .language-trigger[data-pos-type="tertiary"],
   .sound-icon[data-pos-type="tertiary"],
   .layers-handle[data-pos-type="tertiary"],
   .mp-chat-toggle[data-pos-type="tertiary"] {
@@ -5070,9 +5202,9 @@
     --chrome-bevel: rgba(160, 86, 0, 0.22);
   }
   .appbar .btn.icon[data-pos-type="shield"],
-  .token-pill .btn.icon[data-pos-type="shield"],
+  .token-corner .btn.icon[data-pos-type="shield"],
   .controls .btn.icon[data-pos-type="shield"],
-  .lang-flag[data-pos-type="shield"],
+  .language-trigger[data-pos-type="shield"],
   .sound-icon[data-pos-type="shield"],
   .layers-handle[data-pos-type="shield"],
   .mp-chat-toggle[data-pos-type="shield"] {
@@ -5083,11 +5215,11 @@
   }
   .appbar .btn.icon[data-pos-type].active,
   .appbar .btn.icon[data-pos-type].on,
-  .token-pill .btn.icon[data-pos-type].active,
-  .token-pill .btn.icon[data-pos-type].on,
+  .token-corner .btn.icon[data-pos-type].active,
+  .token-corner .btn.icon[data-pos-type].on,
   .controls .btn.icon[data-pos-type].active,
   .controls .btn.icon[data-pos-type].on,
-  .lang-flag[data-pos-type].is-active,
+  .language-trigger[data-pos-type][aria-expanded="true"],
   .sound-icon[data-pos-type].open,
   .layers-handle[data-pos-type].on,
   .mp-chat-toggle[data-pos-type].is-open,
@@ -5104,11 +5236,11 @@
   }
   .appbar .btn.icon[data-pos-type="tertiary"].active,
   .appbar .btn.icon[data-pos-type="tertiary"].on,
-  .token-pill .btn.icon[data-pos-type="tertiary"].active,
-  .token-pill .btn.icon[data-pos-type="tertiary"].on,
+  .token-corner .btn.icon[data-pos-type="tertiary"].active,
+  .token-corner .btn.icon[data-pos-type="tertiary"].on,
   .controls .btn.icon[data-pos-type="tertiary"].active,
   .controls .btn.icon[data-pos-type="tertiary"].on,
-  .lang-flag[data-pos-type="tertiary"].is-active {
+  .language-trigger[data-pos-type="tertiary"][aria-expanded="true"] {
     --chrome-active-outline: #a05600;
     --chrome-active-fill: #fff8ec;
     --chrome-active-fill-low: #ffe0ad;
@@ -5117,11 +5249,11 @@
   }
   .appbar .btn.icon[data-pos-type="shield"].active,
   .appbar .btn.icon[data-pos-type="shield"].on,
-  .token-pill .btn.icon[data-pos-type="shield"].active,
-  .token-pill .btn.icon[data-pos-type="shield"].on,
+  .token-corner .btn.icon[data-pos-type="shield"].active,
+  .token-corner .btn.icon[data-pos-type="shield"].on,
   .controls .btn.icon[data-pos-type="shield"].active,
   .controls .btn.icon[data-pos-type="shield"].on,
-  .lang-flag[data-pos-type="shield"].is-active {
+  .language-trigger[data-pos-type="shield"][aria-expanded="true"] {
     --chrome-active-outline: #0e5f7e;
     --chrome-active-fill: #effcff;
     --chrome-active-fill-low: #c9f0ff;
@@ -5129,14 +5261,13 @@
     --chrome-active-bevel: rgba(14, 95, 126, 0.28);
   }
   .appbar .btn.icon[data-pos-type]:focus-visible,
-  .token-pill .btn.icon[data-pos-type]:focus-visible,
+  .token-corner .btn.icon[data-pos-type]:focus-visible,
   .controls .btn.icon[data-pos-type]:focus-visible,
-  .lang-flag[data-pos-type]:focus-visible,
+  .language-trigger[data-pos-type]:focus-visible,
   .sound-icon[data-pos-type]:focus-visible,
   .layers-handle[data-pos-type]:focus-visible,
   .mp-chat-toggle[data-pos-type]:focus-visible,
-  .world-pill[data-pos-type]:focus-visible,
-  .token-pill[data-pos-type]:focus-visible {
+  .world-pill[data-pos-type]:focus-visible {
     outline: 2px solid rgba(255, 255, 255, 0.92);
     outline-offset: 2px;
     box-shadow:
@@ -5145,14 +5276,13 @@
       0 8px 16px -12px rgba(20, 30, 50, 0.62);
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type]:not(.active):not(.on),
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type]:not(.active):not(.on),
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type]:not(.active):not(.on),
   body.ui-theme-dark .controls .btn.icon[data-pos-type]:not(.active):not(.on),
-  body.ui-theme-dark .lang-flag[data-pos-type]:not(.is-active),
+  body.ui-theme-dark .language-trigger[data-pos-type]:not([aria-expanded="true"]),
   body.ui-theme-dark .sound-icon[data-pos-type]:not(.open),
   body.ui-theme-dark .layers-handle[data-pos-type]:not(.on),
   body.ui-theme-dark .mp-chat-toggle[data-pos-type]:not(.is-open),
   body.ui-theme-dark .world-pill[data-pos-type]:not([aria-expanded="true"]),
-  body.ui-theme-dark .token-pill[data-pos-type],
   body.ui-theme-dark .multiplayer-status[data-pos-type],
   body.ui-theme-dark .multiplayer-roster[data-pos-type] {
     --chrome-outline: #dcecff;
@@ -5168,30 +5298,30 @@
       0 2px 5px -2px rgba(0, 0, 0, 0.58) !important;
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type="primary"]:not(.active):not(.on),
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type="primary"]:not(.active):not(.on),
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type="primary"]:not(.active):not(.on),
   body.ui-theme-dark .controls .btn.icon[data-pos-type="primary"]:not(.active):not(.on) {
     --chrome-outline: #9fc1ff;
     --chrome-dark-bg: rgba(40, 54, 92, 0.88);
     --chrome-dark-hover-bg: rgba(50, 70, 118, 0.92);
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type="tertiary"]:not(.active):not(.on),
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type="tertiary"]:not(.active):not(.on),
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type="tertiary"]:not(.active):not(.on),
   body.ui-theme-dark .controls .btn.icon[data-pos-type="tertiary"]:not(.active):not(.on) {
     --chrome-outline: #ffc26e;
     --chrome-dark-bg: rgba(88, 56, 30, 0.88);
     --chrome-dark-hover-bg: rgba(112, 72, 36, 0.92);
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type="shield"]:not(.active):not(.on),
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type="shield"]:not(.active):not(.on),
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type="shield"]:not(.active):not(.on),
   body.ui-theme-dark .controls .btn.icon[data-pos-type="shield"]:not(.active):not(.on) {
     --chrome-outline: #75ddff;
     --chrome-dark-bg: rgba(30, 72, 92, 0.88);
     --chrome-dark-hover-bg: rgba(36, 92, 115, 0.92);
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type]:not(.active):not(.on):hover,
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type]:not(.active):not(.on):hover,
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type]:not(.active):not(.on):hover,
   body.ui-theme-dark .controls .btn.icon[data-pos-type]:not(.active):not(.on):hover,
-  body.ui-theme-dark .lang-flag[data-pos-type]:not(.is-active):hover,
+  body.ui-theme-dark .language-trigger[data-pos-type]:not([aria-expanded="true"]):hover,
   body.ui-theme-dark .sound-icon[data-pos-type]:not(.open):hover,
   body.ui-theme-dark .layers-handle[data-pos-type]:not(.on):hover,
   body.ui-theme-dark .mp-chat-toggle[data-pos-type]:not(.is-open):hover,
@@ -5201,34 +5331,34 @@
   }
   body.ui-theme-dark .appbar .btn.icon[data-pos-type].active,
   body.ui-theme-dark .appbar .btn.icon[data-pos-type].on,
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type].active,
-  body.ui-theme-dark .token-pill .btn.icon[data-pos-type].on,
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type].active,
+  body.ui-theme-dark .token-corner .btn.icon[data-pos-type].on,
   body.ui-theme-dark .controls .btn.icon[data-pos-type].active,
   body.ui-theme-dark .controls .btn.icon[data-pos-type].on,
   body.ui-theme-dark .sound-icon[data-pos-type].open,
   body.ui-theme-dark .layers-handle[data-pos-type].on,
   body.ui-theme-dark .mp-chat-toggle[data-pos-type].is-open,
-  body.ui-theme-dark .lang-flag[data-pos-type].is-active,
+  body.ui-theme-dark .language-trigger[data-pos-type][aria-expanded="true"],
   body.tod-night .appbar .btn.icon[data-pos-type].active,
   body.tod-night .appbar .btn.icon[data-pos-type].on,
-  body.tod-night .token-pill .btn.icon[data-pos-type].active,
-  body.tod-night .token-pill .btn.icon[data-pos-type].on,
+  body.tod-night .token-corner .btn.icon[data-pos-type].active,
+  body.tod-night .token-corner .btn.icon[data-pos-type].on,
   body.tod-night .controls .btn.icon[data-pos-type].active,
   body.tod-night .controls .btn.icon[data-pos-type].on,
   body.tod-night .sound-icon[data-pos-type].open,
   body.tod-night .layers-handle[data-pos-type].on,
   body.tod-night .mp-chat-toggle[data-pos-type].is-open,
-  body.tod-night .lang-flag[data-pos-type].is-active,
+  body.tod-night .language-trigger[data-pos-type][aria-expanded="true"],
   body.tod-dusk .appbar .btn.icon[data-pos-type].active,
   body.tod-dusk .appbar .btn.icon[data-pos-type].on,
-  body.tod-dusk .token-pill .btn.icon[data-pos-type].active,
-  body.tod-dusk .token-pill .btn.icon[data-pos-type].on,
+  body.tod-dusk .token-corner .btn.icon[data-pos-type].active,
+  body.tod-dusk .token-corner .btn.icon[data-pos-type].on,
   body.tod-dusk .controls .btn.icon[data-pos-type].active,
   body.tod-dusk .controls .btn.icon[data-pos-type].on,
   body.tod-dusk .sound-icon[data-pos-type].open,
   body.tod-dusk .layers-handle[data-pos-type].on,
   body.tod-dusk .mp-chat-toggle[data-pos-type].is-open,
-  body.tod-dusk .lang-flag[data-pos-type].is-active {
+  body.tod-dusk .language-trigger[data-pos-type][aria-expanded="true"] {
     color: var(--chrome-active-outline) !important;
     background: linear-gradient(180deg, var(--chrome-active-fill), var(--chrome-active-fill-low)) !important;
     border-color: var(--chrome-active-outline) !important;
@@ -7193,186 +7323,116 @@
     .settings-tab-hint { display: none; }
   }
   .welcome-card {
-    width: min(620px, calc(100vw - 32px));
-    padding: 22px 24px 18px;
+    width: min(600px, calc(100vw - 32px));
+    padding: 14px;
     gap: 12px;
-
-    /* Match the lovely frosted glass style of other dialogs */
-    background: rgba(255, 255, 255, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.55);
-    border-radius: 20px;
+    border-radius: 26px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(255, 255, 255, 0.62);
     box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.85) inset,
-      0 -1px 0 rgba(120, 130, 150, 0.10) inset,
-      0 1px 2px rgba(20, 30, 50, 0.05),
-      0 24px 56px -16px rgba(40, 50, 80, 0.30);
-    backdrop-filter: blur(22px) saturate(180%);
-    -webkit-backdrop-filter: blur(22px) saturate(180%);
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 -1px 0 rgba(120, 130, 150, 0.12) inset,
+      0 30px 70px -24px rgba(20, 30, 50, 0.38);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
   }
-  .welcome-title {
-    font-family: 'Fraunces', Georgia, serif;
-    font-size: clamp(28px, 6vw, 48px);
-    line-height: 0.95;
-    letter-spacing: -0.04em;
+  .launch-card {
+    align-items: stretch;
   }
-  .welcome-title em {
-    font-style: italic;
-    color: #a08454;
-  }
-  .welcome-copy {
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.55;
-    margin: 0;
-  }
-  .welcome-tips {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-  .welcome-tip {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.45);
-    padding: 10px;
-    font-size: 12px;
-    line-height: 1.35;
-    color: var(--muted);
-  }
-  .welcome-tip strong {
+  .welcome-logo {
     display: block;
-    color: var(--ink);
-    margin-bottom: 3px;
+    width: 100%;
+    max-height: min(62vh, 560px);
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    border-radius: 20px;
+    background: #b7ddff;
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+      0 12px 28px -18px rgba(20, 30, 50, 0.42);
   }
-  .welcome-subtitle {
-    text-align: center;
-    font-size: 15px;
-    color: #666;
-    margin: 4px 0 16px;
+  .welcome-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
-
-  .welcome-options {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .welcome-option {
-    text-align: left;
-    padding: 14px 16px;
-    border-radius: var(--radius-lg);
-    border: 1px solid rgba(212, 201, 176, 0.6);
-    background: rgba(255, 255, 255, 0.45);
-    transition: all 0.1s ease;
+  .welcome-mode-btn {
+    --welcome-outline: #2f3b57;
+    --welcome-fill: rgba(255, 255, 255, 0.7);
+    --welcome-bevel: rgba(47, 59, 87, 0.22);
+    min-height: 54px;
+    border: 1.5px solid var(--welcome-outline);
+    border-radius: 16px;
+    background: var(--welcome-fill);
+    color: var(--welcome-outline);
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0;
     cursor: pointer;
     outline: none;
-    backdrop-filter: blur(10px) saturate(180%);
-    -webkit-backdrop-filter: blur(10px) saturate(180%);
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255, 255, 255, 0.92),
+      inset 0 -4px 0 var(--welcome-bevel),
+      0 3px 5px -2px rgba(20, 30, 50, 0.25);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
   }
-
-  .welcome-option:hover {
-    border-color: #a08454;
-    background: rgba(255, 255, 255, 0.65);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  .welcome-mode-btn:hover {
     transform: translateY(-1px);
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255, 255, 255, 0.96),
+      inset 0 -4px 0 var(--welcome-bevel),
+      0 6px 10px -5px rgba(20, 30, 50, 0.32);
   }
-
-  .welcome-option:active {
-    transform: translateY(0);
+  .welcome-mode-btn:active {
+    transform: translateY(1px);
   }
-
-  .welcome-option:focus-visible {
-    box-shadow: 0 0 0 3px rgba(160, 132, 84, 0.35);
-    border-color: #a08454;
+  .welcome-mode-btn:focus-visible {
+    box-shadow:
+      inset 0 0 0 1.5px rgba(255, 255, 255, 0.96),
+      inset 0 -4px 0 var(--welcome-bevel),
+      0 0 0 3px rgba(255, 255, 255, 0.86),
+      0 0 0 6px rgba(23, 107, 235, 0.28);
   }
-
-  .welcome-option.primary {
-    border-color: #a08454;
-    background: rgba(253, 250, 243, 0.7);
+  .welcome-build {
+    --welcome-outline: #1e428a;
+    --welcome-fill: rgba(23, 107, 235, 0.13);
+    --welcome-bevel: rgba(30, 66, 138, 0.22);
   }
-
-  .welcome-option .option-title {
-    font-weight: 600;
-    font-size: 15px;
-    color: #222;
-  }
-
-  .welcome-option .option-desc {
-    font-size: 12px;
-    color: #666;
-    margin-top: 4px;
-    line-height: 1.4;
-  }
-
-  .welcome-footer {
-    margin-top: 14px;
-    font-size: 11px;
-    text-align: center;
-    color: #888;
+  .welcome-play {
+    --welcome-outline: #3a6511;
+    --welcome-fill: rgba(123, 194, 48, 0.16);
+    --welcome-bevel: rgba(58, 101, 17, 0.24);
   }
   body.ui-theme-dark .welcome-card {
-    background-color: rgba(16, 22, 33, 0.94) !important;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)) !important;
+    background: rgba(16, 22, 33, 0.86) !important;
     border-color: rgba(255, 255, 255, 0.18) !important;
     color: #f4f7ff !important;
   }
-  body.ui-theme-dark .welcome-title {
-    color: #f4f7ff !important;
-  }
-  body.ui-theme-dark .welcome-subtitle,
-  body.ui-theme-dark .welcome-copy,
-  body.ui-theme-dark .welcome-footer {
-    color: rgba(226, 232, 242, 0.68) !important;
-  }
-  body.ui-theme-dark .welcome-tip {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-    color: rgba(226, 232, 242, 0.72) !important;
-  }
-  body.ui-theme-dark .welcome-tip strong {
-    color: #f4f7ff !important;
-  }
-  body.ui-theme-dark .welcome-option {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.18) !important;
-    color: #f4f7ff !important;
-  }
-  body.ui-theme-dark .welcome-option:hover {
-    background: rgba(255, 255, 255, 0.13) !important;
-    border-color: rgba(176, 148, 84, 0.58) !important;
-  }
-  body.ui-theme-dark .welcome-option.primary {
-    background: #dce7f8 !important;
-    border-color: rgba(220, 231, 248, 0.72) !important;
-    box-shadow: inset 0 0 0 2px rgba(160, 132, 84, 0.45), 0 8px 22px rgba(0, 0, 0, 0.22) !important;
-  }
-  body.ui-theme-dark .welcome-option.primary .option-title {
-    color: #0e1724 !important;
-  }
-  body.ui-theme-dark .welcome-option.primary .option-desc {
-    color: rgba(14, 23, 36, 0.68) !important;
-  }
-  body.ui-theme-dark .welcome-option:not(.primary) .option-title {
-    color: #f4f7ff !important;
-  }
-  body.ui-theme-dark .welcome-option:not(.primary) .option-desc {
-    color: rgba(226, 232, 242, 0.68) !important;
-  }
-  .welcome-dontshow {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--muted);
-    cursor: pointer;
-    user-select: none;
-  }
-  .welcome-dontshow input[type="checkbox"] {
-    margin: 0;
-    accent-color: #8a6f3a;
+  body.ui-theme-dark .welcome-logo {
+    background: #8ccaff;
   }
   @media (max-width: 600px) {
-    .welcome-tips { grid-template-columns: 1fr; }
+    .launch-modal { padding: 16px; }
+    .welcome-card {
+      width: calc(100vw - 24px);
+      padding: 10px;
+      border-radius: 22px;
+    }
+    .welcome-logo {
+      max-height: min(58vh, 420px);
+      border-radius: 16px;
+    }
+    .welcome-actions { gap: 10px; }
+    .welcome-mode-btn {
+      min-height: 48px;
+      border-radius: 14px;
+      font-size: 16px;
+    }
+  }
+  @media (max-height: 700px) {
+    .welcome-card { width: min(500px, calc(100vw - 32px)); }
+    .welcome-logo { max-height: 52vh; }
   }
 
   /* -------- auth modal -------- */
@@ -7934,24 +7994,30 @@
   @media (max-width: 600px) {
     .help { display: none; }
 
-    /* Token pill sits below the appbar */
-    .token-pill {
+    .brand-banner { display: none; }
+
+    /* Token text stays plain; only the GitHub button carries chrome. */
+    .token-corner {
       top: 18px;
       right: 24px;
       font-size: 11px;
-      padding: 5px 10px;
     }
 
-    /* Appbar (GitHub+profile): bottom right corner */
+    /* Appbar: bottom right corner */
     .appbar {
       top: auto;
       left: auto;
       right: 12px;
       bottom: 80px;
     }
+    .language-menu {
+      left: auto;
+      right: 0;
+    }
     .appbar .btn.icon { width: 28px; height: 28px; flex-basis: 28px; }
     .appbar .btn.icon svg { width: 14px; height: 14px; }
-    .token-pill .ca { display: none; }
+    .token-corner .token-sep,
+    .token-corner .ca { display: none; }
 
     /* Controls panel: left side, vertically centered */
     .controls {
@@ -8011,7 +8077,7 @@
   @media (max-width: 400px) {
     .appbar { top: auto; left: auto; right: 8px; bottom: 72px; }
     .appbar .btn.icon { width: 26px; height: 26px; flex-basis: 26px; }
-    .token-pill { top: 18px; right: 8px; font-size: 10px; padding: 4px 8px; }
+    .token-corner { top: 18px; right: 8px; font-size: 10px; }
     .minimap-wrap { top: 80px; right: 8px; }
     .topbar-popup { top: 80px; left: 50px; }
     .controls { left: 6px; width: 36px; }

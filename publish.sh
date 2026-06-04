@@ -113,6 +113,19 @@ for img in tinyworld-*.png plane-*.jpg perf-after.jpg; do
   cp "$img" "$DIST/assets/$img"
 done
 
+# App UI assets referenced directly by HTML/CSS.
+if [[ -d assets ]]; then
+  mkdir -p "$DIST/assets"
+  (cd assets && find . -type f ! -name '.DS_Store' -exec sh -c '
+    dist="$1"
+    shift
+    for f do
+      mkdir -p "$dist/assets/$(dirname "$f")"
+      cp "$f" "$dist/assets/$f"
+    done
+  ' sh "$DIST" {} +)
+fi
+
 # Dev-only feedback tooling under cluso/ is intentionally not copied into dist.
 # Production hosts must never load or display Cluso.
 

@@ -82,12 +82,16 @@ Raised, outlined square (per posType; same pattern for `.tool` and
   and the mooring style radial in `36-mooring-interaction.js` uses
   `tertiary`. Style them via `.radial-btn[data-pos-type]`, not by returning to
   pale generic circles.
-- Appbar icon buttons, language flags, and the left side-rail controls are also
-  category chrome now. Keep `data-pos-type` on those static HTML buttons and
-  style them through `.appbar .btn.icon[data-pos-type]`,
-  `.controls .btn.icon[data-pos-type]`, and `.lang-flag[data-pos-type]`; do not
-  let generic `.btn.icon` dark/theme rules flatten them back to plain line icons
-  or pale active circles.
+- Appbar icon buttons, the single language picker trigger, and the left side-rail
+  controls are also category chrome now. Keep `data-pos-type` on those static
+  HTML buttons and style them through `.appbar .btn.icon[data-pos-type]`,
+  `.controls .btn.icon[data-pos-type]`, and `.language-trigger[data-pos-type]`.
+  The language choices live in the upward menu; do not put the four-flag strip
+  back in the appbar.
+- The token corner is deliberately plain text, not a pill panel. Keep
+  `.token-corner` free of `data-pos-type`, borders, backdrop blur, and hover
+  transforms; only the nested GitHub link uses
+  `.token-corner .btn.icon[data-pos-type]` block-button chrome.
 - Build the icon with `buildToolButton(tool, { flyout: true })` so it reuses the
   `.tool-glyph` / `.tool-icon` machinery and the outline rules.
 - Bottom-toolbar utility buttons use `buildToolbarUtilityButton(...)` and the

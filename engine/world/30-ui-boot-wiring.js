@@ -1,25 +1,41 @@
   // -------- welcome dialog --------
-  // Bump WELCOME_NOTICE_ID when the welcome content has a genuinely new
-  // announcement worth re-showing to previously-dismissed users.
-  const WELCOME_NOTICE_ID = '2026-05-11-jigsaw';
-  const WELCOME_LS_KEY = 'tinyworld:welcome:dismissedId';
-  function startFarmWorld() {
-    doReset();
-  }
-
-  function startVehicleDemo() {
-    // Launch a nice seeded vehicle showcase (roads + multiple cars/trucks)
-    const seed = 424242;
-    runSeededVehicleDemo(seed, { showBadge: true, large: false });
-    if (typeof dismissWelcomeForDemo === 'function') dismissWelcomeForDemo();
-  }
-
   function initWelcomeDialog() {
     const modal = document.getElementById('welcome-modal');
     if (!modal) return;
-    modal.hidden = true;
-    modal.setAttribute('aria-hidden', 'true');
-    modal.dataset.featureHidden = modal.dataset.featureHidden || 'welcome-start';
+    const buildBtn = document.getElementById('welcome-build');
+    const playBtn = document.getElementById('welcome-play');
+    const closeWelcome = () => {
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('welcome-launch-open');
+    };
+    const chooseWelcomeMode = (mode) => {
+      const wantsPlay = mode === 'play';
+      let handledByModeApi = false;
+      try {
+        if (window.__tinyworldMode) {
+          if (wantsPlay) window.__tinyworldMode.setPlay();
+          else window.__tinyworldMode.setBuild();
+          handledByModeApi = true;
+        }
+      } catch (_) {
+        handledByModeApi = false;
+      }
+      if (!handledByModeApi) {
+        try { localStorage.setItem('tinyworld:build-play-mode.v1', wantsPlay ? 'play' : 'build'); } catch (_) {}
+        document.body.classList.toggle('tw-play-mode', wantsPlay);
+      }
+      closeWelcome();
+    };
+
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('welcome-launch-open');
+    if (buildBtn) buildBtn.addEventListener('click', () => chooseWelcomeMode('build'));
+    if (playBtn) playBtn.addEventListener('click', () => chooseWelcomeMode('play'));
+    requestAnimationFrame(() => {
+      try { (buildBtn || playBtn).focus({ preventScroll: true }); } catch (_) {}
+    });
   }
 
   // -------- cloud worlds / assets --------
@@ -1537,31 +1553,53 @@
     try {
       if (localStorage.getItem('tinyworld:minimap.collapsed') === '1') wrap.classList.add('collapsed');
     } catch (_) {}
-    function toggleCollapsed() {
-      wrap.classList.toggle('collapsed');
-      try { localStorage.setItem('tinyworld:minimap.collapsed', wrap.classList.contains('collapsed') ? '1' : '0'); } catch (_) {}
-    }
-    const minimapToggle = document.getElementById('minimap-toggle');
-    if (minimapToggle) minimapToggle.addEventListener('click', toggleCollapsed);
-    // Keyboard shortcut: N toggles the minimap (matches OWB).
-    window.addEventListener('keydown', e => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'n' || e.key === 'N') toggleCollapsed();
-    });
-
     // -- draggable minimap --
-    // Stored as top/left offsets so any viewport size resolves the same.
+    // Stored as viewport-relative top/left percentages so any viewport size
+    // resolves the same, then clamped so the map never leaves the screen.
     const MINIMAP_POS_KEY = 'tinyworld:minimap.pos';
+    const MINIMAP_VIEWPORT_PAD = 8;
+    function clampMinimapPosition(left, top) {
+      const r = wrap.getBoundingClientRect();
+      const w = Math.ceil(r.width || wrap.offsetWidth || 200);
+      const h = Math.ceil(r.height || wrap.offsetHeight || 200);
+      const maxTop = Math.max(MINIMAP_VIEWPORT_PAD, window.innerHeight - h - MINIMAP_VIEWPORT_PAD);
+      const maxLeft = Math.max(MINIMAP_VIEWPORT_PAD, window.innerWidth - w - MINIMAP_VIEWPORT_PAD);
+      const nextTop = Number.isFinite(top) ? top : r.top;
+      const nextLeft = Number.isFinite(left) ? left : r.left;
+      return {
+        top: Math.max(MINIMAP_VIEWPORT_PAD, Math.min(maxTop, nextTop)),
+        left: Math.max(MINIMAP_VIEWPORT_PAD, Math.min(maxLeft, nextLeft)),
+      };
+    }
+    function setMinimapPosition(left, top) {
+      const pos = clampMinimapPosition(left, top);
+      wrap.style.top = pos.top + 'px';
+      wrap.style.left = pos.left + 'px';
+      wrap.style.right = 'auto';
+      wrap.style.bottom = 'auto';
+      return pos;
+    }
+    function saveCurrentMinimapPos() {
+      const r = wrap.getBoundingClientRect();
+      const pos = setMinimapPosition(r.left, r.top);
+      try {
+        const W = Math.max(1, window.innerWidth);
+        const H = Math.max(1, window.innerHeight);
+        localStorage.setItem(MINIMAP_POS_KEY, JSON.stringify({
+          topPct: +(pos.top / H).toFixed(4),
+          leftPct: +(pos.left / W).toFixed(4),
+        }));
+      } catch (_) {}
+    }
     function applyStoredMinimapPos() {
       try {
         const raw = localStorage.getItem(MINIMAP_POS_KEY);
-        if (!raw) return;
+        if (!raw) {
+          const r = wrap.getBoundingClientRect();
+          setMinimapPosition(r.left, r.top);
+          return;
+        }
         const p = JSON.parse(raw);
-        const w = wrap.offsetWidth || 200;
-        const h = wrap.offsetHeight || 200;
-        const maxTop = Math.max(8, window.innerHeight - h - 8);
-        const maxLeft = Math.max(8, window.innerWidth - w - 8);
         // Prefer the new relative format (topPct/leftPct), fall back to legacy
         // absolute pixels so existing users don't lose their position.
         let top, left;
@@ -1574,14 +1612,29 @@
         } else {
           return;
         }
-        top = Math.max(8, Math.min(maxTop, top));
-        left = Math.max(8, Math.min(maxLeft, left));
-        wrap.style.top = top + 'px';
-        wrap.style.left = left + 'px';
-        wrap.style.right = 'auto';
-        wrap.style.bottom = 'auto';
-      } catch (_) {}
+        const pos = setMinimapPosition(left, top);
+        if (Math.abs(pos.top - top) > 0.5 || Math.abs(pos.left - left) > 0.5) saveCurrentMinimapPos();
+      } catch (_) {
+        const r = wrap.getBoundingClientRect();
+        setMinimapPosition(r.left, r.top);
+      }
     }
+    function toggleCollapsed() {
+      wrap.classList.toggle('collapsed');
+      try { localStorage.setItem('tinyworld:minimap.collapsed', wrap.classList.contains('collapsed') ? '1' : '0'); } catch (_) {}
+      requestAnimationFrame(() => {
+        applyStoredMinimapPos();
+        saveCurrentMinimapPos();
+      });
+    }
+    const minimapToggle = document.getElementById('minimap-toggle');
+    if (minimapToggle) minimapToggle.addEventListener('click', toggleCollapsed);
+    // Keyboard shortcut: N toggles the minimap (matches OWB).
+    window.addEventListener('keydown', e => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'n' || e.key === 'N') toggleCollapsed();
+    });
     // Keep the minimap on-screen if the window is resized — re-apply the
     // SAVED relative position so the map sticks to its proportional spot.
     window.addEventListener('resize', () => {
@@ -1608,14 +1661,7 @@
       if (!mmDrag.moved && Math.hypot(dx, dy) < 4) return;
       mmDrag.moved = true;
       wrap.classList.add('dragging');
-      const w = wrap.offsetWidth;
-      const h = wrap.offsetHeight;
-      const top = Math.max(8, Math.min(window.innerHeight - h - 8, mmDrag.topAtStart + dy));
-      const left = Math.max(8, Math.min(window.innerWidth - w - 8, mmDrag.leftAtStart + dx));
-      wrap.style.top = top + 'px';
-      wrap.style.left = left + 'px';
-      wrap.style.right = 'auto';
-      wrap.style.bottom = 'auto';
+      setMinimapPosition(mmDrag.leftAtStart + dx, mmDrag.topAtStart + dy);
     });
     function endMinimapDrag() {
       if (!mmDrag) return;
@@ -1623,17 +1669,9 @@
       mmDrag = null;
       wrap.classList.remove('dragging');
       if (moved) {
-        const r = wrap.getBoundingClientRect();
         // Save as relative percentages so the map keeps the same proportional
         // spot across window resizes / different monitor widths.
-        try {
-          const W = Math.max(1, window.innerWidth);
-          const H = Math.max(1, window.innerHeight);
-          localStorage.setItem(MINIMAP_POS_KEY, JSON.stringify({
-            topPct: +(r.top / H).toFixed(4),
-            leftPct: +(r.left / W).toFixed(4),
-          }));
-        } catch (_) {}
+        saveCurrentMinimapPos();
       }
     }
     wrap.addEventListener('pointerup', endMinimapDrag);
@@ -1977,6 +2015,12 @@
         ambI:  ambient.intensity,
         ambC:  ambient.color.getHex(),
       };
+      if (typeof modelStampImportAmbientFill !== 'undefined' && typeof modelStampImportDirFill !== 'undefined') {
+        lightBase.modelStampAmbI = modelStampImportAmbientFill.intensity;
+        lightBase.modelStampAmbC = modelStampImportAmbientFill.color.getHex();
+        lightBase.modelStampDirI = modelStampImportDirFill.intensity;
+        lightBase.modelStampDirC = modelStampImportDirFill.color.getHex();
+      }
     }
     function lerpColor(a, b, t) {
       const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
@@ -2080,6 +2124,24 @@
         hemi.groundColor.setHex(lerpColor(lerpColor(tod.hemiGround, seasonGround, 0.45), 0x3f4250, nightFill * 0.36));
         const ambBoost = (tod.sunI < 0.5) ? 1.35 : 1.0;
         ambient.intensity = Math.max(lightBase.ambI * ambBoost, nightFill * (0.075 + renderAmbientFill * 0.065));
+        if (typeof modelStampImportAmbientFill !== 'undefined' && lightBase.modelStampAmbI != null) {
+          const importAmbBoost = (tod.sunI < 0.5) ? 1.12 : 1.0;
+          modelStampImportAmbientFill.intensity = Math.max(
+            lightBase.modelStampAmbI * importAmbBoost,
+            nightFill * (0.16 + renderAmbientFill * 0.10),
+          );
+          modelStampImportAmbientFill.color.setHex(ambient.color.getHex());
+        }
+        if (typeof modelStampImportDirFill !== 'undefined' && lightBase.modelStampDirI != null) {
+          const importSunMul = tod.sunI / 1.35;
+          const importWeatherMul = Math.max(0.55, wx.mul);
+          const importFloor = nightFill * (0.18 + renderLighting * 0.20);
+          modelStampImportDirFill.intensity = Math.max(
+            lightBase.modelStampDirI * importSunMul * importWeatherMul,
+            importFloor,
+          );
+          modelStampImportDirFill.color.setHex(lerpColor(sc, lightBase.modelStampDirC || 0xefefff, 0.35));
+        }
         // 3D scene background — drives the colour visible past the world
         // edge.  This is what makes 'night' actually look dark instead of
         // just the canvas darkening behind a static cream backdrop.
@@ -2140,18 +2202,93 @@
       });
     }
 
-    // Quick language flags in the appbar. Same reload-on-switch path as the
-    // settings select; mark the current locale active.
-    const langFlags = document.getElementById('lang-flags');
-    if (langFlags && window.TWI18N) {
-      langFlags.querySelectorAll('.lang-flag').forEach((btn) => {
-        if (btn.getAttribute('data-lang') === window.TWI18N.locale) {
-          btn.classList.add('is-active');
-          btn.setAttribute('aria-current', 'true');
-        }
-        btn.addEventListener('click', () => {
-          window.TWI18N.setLocale(btn.getAttribute('data-lang'));
+    // Quick language picker in the appbar. Same reload-on-switch path as the
+    // settings select; the compact trigger mirrors the resolved locale.
+    const languagePicker = document.getElementById('language-picker');
+    const languageTrigger = document.getElementById('language-trigger');
+    const languageMenu = document.getElementById('language-menu');
+    const languageCurrentFlag = document.getElementById('language-current-flag');
+    const languageCurrentLabel = document.getElementById('language-current-label');
+    if (languagePicker && languageTrigger && languageMenu && window.TWI18N) {
+      const languageOptions = Array.from(languageMenu.querySelectorAll('.language-option'));
+      const closeLanguageMenu = () => {
+        languagePicker.classList.remove('open');
+        languageTrigger.setAttribute('aria-expanded', 'false');
+        languageMenu.hidden = true;
+      };
+      const focusLanguageOption = (direction) => {
+        if (!languageOptions.length) return;
+        const activeElement = document.activeElement;
+        const currentIndex = languageOptions.indexOf(activeElement);
+        const nextIndex = currentIndex < 0
+          ? Math.max(0, languageOptions.findIndex(btn => btn.classList.contains('is-active')))
+          : (currentIndex + direction + languageOptions.length) % languageOptions.length;
+        languageOptions[nextIndex].focus({ preventScroll: true });
+      };
+      const openLanguageMenu = () => {
+        languagePicker.classList.add('open');
+        languageTrigger.setAttribute('aria-expanded', 'true');
+        languageMenu.hidden = false;
+        focusLanguageOption(0);
+      };
+      const syncLanguagePicker = () => {
+        const locale = window.TWI18N.locale || 'en';
+        const active = languageOptions.find(btn => btn.getAttribute('data-lang') === locale) || languageOptions[0];
+        languageOptions.forEach((btn) => {
+          const isActive = btn === active;
+          btn.classList.toggle('is-active', isActive);
+          btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+          if (isActive) btn.setAttribute('aria-current', 'true');
+          else btn.removeAttribute('aria-current');
         });
+        if (!active) return;
+        const flag = active.querySelector('.language-flag-svg');
+        const label = active.querySelector('.language-label');
+        const labelText = label ? label.textContent.trim() : locale;
+        if (flag && languageCurrentFlag) languageCurrentFlag.innerHTML = flag.innerHTML;
+        if (languageCurrentLabel) languageCurrentLabel.textContent = labelText;
+        languageTrigger.setAttribute('aria-label', 'Language: ' + labelText);
+        languageTrigger.setAttribute('data-tooltip', labelText);
+      };
+      syncLanguagePicker();
+      languageTrigger.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (languageMenu.hidden) openLanguageMenu();
+        else closeLanguageMenu();
+      });
+      languageTrigger.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          event.preventDefault();
+          openLanguageMenu();
+        }
+      });
+      languageOptions.forEach((btn) => {
+        btn.addEventListener('click', (event) => {
+          event.stopPropagation();
+          const nextLocale = btn.getAttribute('data-lang');
+          closeLanguageMenu();
+          if (nextLocale && nextLocale !== window.TWI18N.locale) {
+            window.TWI18N.setLocale(nextLocale);
+          }
+        });
+        btn.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            closeLanguageMenu();
+            languageTrigger.focus({ preventScroll: true });
+            return;
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            focusLanguageOption(event.key === 'ArrowDown' ? 1 : -1);
+          }
+        });
+      });
+      document.addEventListener('click', (event) => {
+        if (!languagePicker.contains(event.target)) closeLanguageMenu();
+      });
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeLanguageMenu();
       });
     }
 

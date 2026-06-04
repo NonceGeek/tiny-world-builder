@@ -834,6 +834,56 @@
     return tex;
   }
 
+  function createIslandSideStrataImageTexture(src) {
+    const width = 1024;
+    const height = 192;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const fallback = createIslandSideStrataReferenceTexture(width, height);
+    if (fallback && fallback.image) ctx.drawImage(fallback.image, 0, 0, width, height);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestMipmapNearestFilter;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.flipY = false;
+    tex.encoding = THREE.sRGBEncoding;
+    tex.userData = Object.assign({}, tex.userData || {}, {
+      sourceSrc: src,
+      sourceKind: 'island-side-strata-image',
+    });
+    function liftStrataCanvasShadows() {
+      const image = ctx.getImageData(0, 0, width, height);
+      const data = image.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const y = Math.floor((i / 4) / width);
+        const floor = y < height * 0.34 ? 56 : (y < height * 0.72 ? 62 : 68);
+        const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
+        if (lum > 0 && lum < floor) {
+          const scale = floor / lum;
+          data[i] = Math.min(255, Math.round(data[i] * scale));
+          data[i + 1] = Math.min(255, Math.round(data[i + 1] * scale));
+          data[i + 2] = Math.min(255, Math.round(data[i + 2] * scale));
+        }
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+    liftStrataCanvasShadows();
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      liftStrataCanvasShadows();
+      tex.needsUpdate = true;
+      repaintAfterTextureLoad();
+    };
+    img.src = src;
+    return tex;
+  }
+
   function applyWorldUVs(material, texture, textureScale = 1.0, opts = {}) {
     if (!material) return;
     const needsWorldVoxel = !!(opts.voxelSeams || opts.edgeStrata);
@@ -1123,7 +1173,7 @@
   const texSand = createPixelTexture('sand', 16);
   const texRockFace = createPixelTexture('rock-face', 32);
   const texIslandSideBlocks = createPixelTexture('island-side-blocks', 128);
-  const texIslandSideStrataReference = createIslandSideStrataReferenceTexture();
+  const texIslandSideStrataReference = createIslandSideStrataImageTexture('textures/island-side-strata-gpt.png');
   const texPipeMetal = createPixelTexture('pipe-metal', 64);
   const texWaterFroth = createPixelTexture('water-froth', 64);
   const texPathPavers = createPixelTexture('path-pavers', 128);
@@ -1293,6 +1343,7 @@
           float v = clamp(down / max(uHeight, 0.0001), 0.0, 1.0);
           float u = fract(coord / max(uRepeatWidth, 0.0001) + 0.5);
           vec3 col = texture2D(uMap, vec2(u, v)).rgb;
+          col = max(col, vec3(0.18, 0.16, 0.12));
           float light = 0.82 + 0.18 * clamp(dot(normalize(vec3(-0.45, 0.35, 0.75)), n) * 0.5 + 0.5, 0.0, 1.0);
           gl_FragColor = vec4(col * light, 1.0);
         }

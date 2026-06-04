@@ -1,6 +1,6 @@
 ---
 name: tinyworld-island-and-planes
-description: Use when changing the home island layout, edge dressing, undersides, autoincentive sponsor banner (now a bottom-right DOM banner), plane/crop-duster flight paths, banner streamers, or which side of the island is "front".
+description: Use when changing the home island layout, edge dressing, undersides, autoincentive sponsor banner (now a top-left logo-adjacent DOM banner), plane/crop-duster flight paths, banner streamers, or which side of the island is "front".
 ---
 
 # Tiny World Island & Planes
@@ -27,7 +27,7 @@ vbox(... underside slab ...)
 voxelInvertedSteppedRoof(... cascading underside ...)
 addIslandRocketEngines(homeBorderGroup)
 addIslandEdgeDressing(homeBorderGroup)    // tufts, rocks, dirt accents
-(island front drape removed — autoincentive now a DOM banner, bottom-right)
+(island front drape removed — autoincentive now a top-left logo-adjacent DOM banner)
 prepareHomeBorderForRender(homeBorderGroup)
 buildDistantWorlds()
 buildUnderIslandClouds() (if defined)
@@ -68,15 +68,17 @@ darkens a coarse horizontal/vertical side grid and lightly modulates each
 block/underside cell in the fragment shader. It uses world position/normal
 varyings, so the large merged side slabs read as chunky voxel blocks without
 adding geometry or draw calls. `islandShellMaterial()` in `03-geometry-materials.js`
-copies the base material's `onBeforeCompile` hook so the side-backing clone keeps
-the same coarse grid.
+copies Lambert `onBeforeCompile` hooks and explicitly preserves `ShaderMaterial`
+uniforms/source so the side-backing clone keeps the same coarse grid/strata
+shader instead of falling back to a black shell.
 
 Island edge strata is shader-driven on the side backing only:
 `addIslandSideBacking` uses the dedicated `M.boardSideEdge` shader material. Its
 top is anchored to `ISLAND_SIDE_STRATA_TOP_Y = TOP_H`, the visible top of the
-grass cap. The shader samples the internal image-style slice
-`texIslandSideStrataReference`; do not rebuild this as normalized fragment math
-or the grass/dirt/rock bands will stretch into tall green columns. The function
+grass cap. The shader samples the fixed 1024x192 generated image slice
+`textures/island-side-strata-gpt.png` through a `CanvasTexture` with a minimum
+shadow floor; do not load it as a raw `TextureLoader` image with ambiguous
+vertical flip, and do not let near-black pixels dominate the strip. The function
 uses that material on the real side-backing faces from `TOP_H` down through the
 dirt/stone side (`ISLAND_SIDE_STRATA_HEIGHT = TOP_H + DIRT_H + 0.035`). Do not
 add a separate shallow overlay strip over a plain brown backing; it leaves the
@@ -149,13 +151,19 @@ rebuild it as many per-layer flame cubes; the sheet approach keeps the
 underside readable while staying cheap for large-island scenes. Keep older
 voxel object builders as inactive legacy helpers rather than deleting them;
 they may be useful again for alternate engine styles or detail settings.
+The jet plume sheets are underside-only effects: `tickIslandRocketEngines`
+hides `rocketPlumeSheet` meshes when the camera is above the engine/island
+surface gate, and their compact sheet dimensions are guarded by
+`tools/check.js`. Do not let them billboard through the board or become a
+surface-level white/cyan cloud in normal build/play views.
 
 ## Autoincentive sponsor banner
 
 The PNG/JPG ships inline as `AUTOINCENTIVE_BANNER_DATA_URL` (~41 KB base64
 JPEG) so there's no extra HTTP. Same data URL feeds:
 
-1. A fixed DOM banner in the **bottom-right** of the screen
+1. A fixed DOM banner next to the **top-left Tiny World logo/title** on wide
+   screens, dropping below the logo at medium widths and hiding on phone widths
    (`<a id="brand-banner"><img id="brand-banner-img">`), src set by the
    `applyAutoincentiveSponsorLogo` IIFE. Clickable, opens
    `https://x.com/Autoincentiv3`. Hidden in showcase + XR via `.brand-banner`

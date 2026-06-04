@@ -79,23 +79,17 @@
       const entry = cellMeshes[t.x + ',' + t.z];
       return entry && entry.object ? entry.object : null;
     }
-    // Mirrors the inspector gate (28): home-board cottages + voxel-based stamps.
+    // Mirrors the inspector gate (28): home-board objects with voxel/keyed parts.
     function subEditSupported() {
       const t = subEditTargetCell();
       if (!t || !t.cell) return false;
       if (typeof isOutsideHomeGrid === 'function' && isOutsideHomeGrid(t.x, t.z)) return false;
-      if (t.cell.kind === 'house' || t.cell.kind === 'tree' || t.cell.kind === 'lamp-post' || t.cell.kind === 'spotlight') return true;
-      if (t.cell.kind === 'voxel-build') {
-        const st = (typeof getVoxelBuildStamp === 'function')
-          ? getVoxelBuildStamp(t.cell.appearance && t.cell.appearance.voxelBuildId) : null;
-        return !!(st && Array.isArray(st.voxels) && st.voxels.length
-          && !(Array.isArray(st.customParts) && st.customParts.length));
-      }
+      if (typeof isVoxelSubEditableKind === 'function') return isVoxelSubEditableKind(t.cell.kind, t.cell);
       return false;
     }
     function enterEditMode() {
       const se = subEdit(); const t = subEditTargetCell();
-      if (se && t) { se.enter(t.x, t.z); se.setExplode(true); }
+      if (se && t) se.enter(t.x, t.z);
     }
     function exitEditMode() {
       const se = subEdit();

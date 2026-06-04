@@ -9,9 +9,12 @@ const schemaPath = path.join(root, 'world.schema.json');
 const vercelPath = path.join(root, 'vercel.json');
 const netlifyPath = path.join(root, 'netlify.toml');
 const partykitPath = path.join(root, 'partykit.json');
+const publishPath = path.join(root, 'publish.sh');
 const htmlRaw = fs.readFileSync(htmlPath, 'utf8');
 const cssRaw = fs.readFileSync(cssPath, 'utf8');
+const publishRaw = fs.existsSync(publishPath) ? fs.readFileSync(publishPath, 'utf8') : '';
 const defaultsPath = path.join(root, 'tinyworld-defaults.json');
+const islandSideStrataPath = path.join(root, 'textures', 'island-side-strata-gpt.png');
 
 // The app was split out of the old single-file HTML into external <script src>
 // modules (LandscapeEngine.js + engine/**/*.js). The DOM markup still lives in
@@ -65,6 +68,12 @@ function sourceFunctionBody(source, name) {
     }
   }
   fail('function body unterminated: ' + name);
+}
+
+function pngDimensions(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 24 || buf.toString('ascii', 1, 4) !== 'PNG') return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 if (!/<script src="engine\/world\/[^"]+\.js">/.test(htmlRaw)) {
@@ -175,6 +184,16 @@ if (!/modelApi'\)\s*===\s*'1'/.test(modelStampScanBody) || !/return false;/.test
 if (!/DRACOLoader\.r128\.js/.test(htmlRaw) || !/meshopt_decoder\.r128\.js/.test(htmlRaw) || !/KTX2Loader\.bootstrap\.r128\.js/.test(htmlRaw) || !/setDRACOLoader\(modelStampDracoLoader\)/.test(html) || !/setMeshoptDecoder\(MeshoptDecoder\)/.test(html) || !/setKTX2Loader\(modelStampKtx2Loader\)/.test(html)) {
   fail('model-stamp GLB imports must wire r128 Draco, Meshopt, and KTX2 decoder support');
 }
+if (!/function modelStampMaterialNeedsTinyWorldLighting\(material\)/.test(html) || !/function createTinyWorldLitModelStampMaterial\(source\)/.test(html) || !/new THREE\.MeshLambertMaterial\(params\)/.test(html) || !/modelStampTinyWorldLit/.test(html) || !/node\.material = adapted\.material/.test(html)) {
+  fail('model-stamp GLB PBR materials must be adapted to TinyWorld Lambert lighting so imports do not render black');
+}
+const modelStampLitBody = sourceFunctionBody(html, 'createTinyWorldLitModelStampMaterial');
+if (!/function modelStampTextureStats\(texture\)/.test(html) || !/function modelStampShouldDropAoMap\(texture, material\)/.test(html) || !/function modelStampShouldDropNormalMap\(texture, material\)/.test(html) || !/function sanitizeModelStampMaterialLightingMaps\(material/.test(html) || !/stats\.maxR < 0\.08/.test(html) || !/stats\.darkR > 0\.78/.test(html)) {
+  fail('model-stamp material adaptation must detect black AO and broken normal textures');
+}
+if (!/sourceAoMap/.test(modelStampLitBody) || /next\.normalMap\s*=/.test(modelStampLitBody) || !/modelStampDroppedLightingMaps/.test(modelStampLitBody)) {
+  fail('TinyWorld-lit model-stamp materials must not blindly copy AO or normal maps that can blacken GLBs');
+}
 if (!/window\.__tinyworldPreloadModelStamp/.test(html) || !/window\.__tinyworldModelStampLoadState/.test(html) || !/Could not render/.test(html) || !/function waitForDroppedModel/.test(html)) {
   fail('dropped model imports must expose load state and show loader failures');
 }
@@ -208,6 +227,27 @@ if (!/id="render-material-target"/.test(html) || !/id="render-material-texture"/
 }
 if (!/textures\/HJCliEjbEAA9Ah2\.jpeg/.test(html) || !/dist\/textures/.test(fs.readFileSync(path.join(root, 'publish.sh'), 'utf8'))) {
   fail('texture-folder material assets must be referenced by the app and copied to dist/textures');
+}
+if (!fs.existsSync(islandSideStrataPath)) {
+  fail('island side edge strata must use the generated GPT texture asset');
+}
+{
+  const dims = pngDimensions(islandSideStrataPath);
+  if (!dims || dims.width !== 1024 || dims.height !== 192) {
+    fail('island side edge strata texture must stay exactly 1024x192');
+  }
+}
+const islandSideStrataImageBody = sourceFunctionBody(html, 'createIslandSideStrataImageTexture');
+if (!/createIslandSideStrataImageTexture\('textures\/island-side-strata-gpt\.png'\)/.test(html) || !/new THREE\.CanvasTexture\(canvas\)/.test(islandSideStrataImageBody) || !/tex\.wrapS = THREE\.RepeatWrapping/.test(islandSideStrataImageBody) || !/tex\.wrapT = THREE\.ClampToEdgeWrapping/.test(islandSideStrataImageBody) || !/liftStrataCanvasShadows/.test(islandSideStrataImageBody)) {
+  fail('island side edge strata must load the generated image through a canvas texture with repeat-X/clamp-Y wrapping and a shadow floor');
+}
+const islandShellMaterialBody = sourceFunctionBody(html, 'syncIslandShellMaterial');
+if (!/baseMat\.isShaderMaterial/.test(islandShellMaterialBody) || !/shellMat\.uniforms = baseMat\.uniforms/.test(islandShellMaterialBody) || !/shellMat\.vertexShader = baseMat\.vertexShader/.test(islandShellMaterialBody)) {
+  fail('island shell material clones must preserve ShaderMaterial uniforms and shader source');
+}
+const islandStrataShaderBody = sourceFunctionBody(html, 'makeIslandSideStrataMaterial');
+if (!/col = max\(col, vec3\(0\.18, 0\.16, 0\.12\)\)/.test(islandStrataShaderBody)) {
+  fail('island side edge shader must keep a brightness floor so generated textures cannot render black');
 }
 // The page hard-depends on its external stylesheet. A build that does not copy
 // styles/ into dist deploys an unstyled page (CSS 404 served as text/html), so
@@ -334,17 +374,20 @@ for (const id of ['tips-toggle', 'render-settings', 'import', 'export', 'reset',
     fail('utility chrome icon must live in the left side rail: ' + id);
   }
 }
-if (!/<div class="token-pill"[^>]*data-pos-type="neutral"[\s\S]*id="github-link"[\s\S]*class="ticker"/.test(htmlRaw)) {
-  fail('GitHub icon must sit beside the $TINYWORLD token title');
+if (/<div class="token-pill"/.test(htmlRaw) || !/<div class="token-corner"[\s\S]*id="github-link"[\s\S]*class="token-corner-text"[\s\S]*class="ticker"[\s\S]*\$TINYWORLD[\s\S]*class="ca"[\s\S]*CA:/.test(htmlRaw)) {
+  fail('GitHub icon must sit beside simple $TINYWORLD corner text without a token pill panel');
 }
-if (!/<div class="appbar">\s*<div class="lang-flags"/.test(htmlRaw)) {
-  fail('bottom-left appbar must be reserved for language flags only');
+if (!/<div class="appbar">\s*<div class="language-picker" id="language-picker"[\s\S]*id="language-trigger"[\s\S]*aria-controls="language-menu"[\s\S]*<div class="language-menu" id="language-menu"[\s\S]*role="menu"[\s\S]*class="language-option"[\s\S]*data-lang="zh"/.test(htmlRaw) || /id="lang-flags"|class="lang-flag"/.test(htmlRaw)) {
+  fail('bottom-left appbar language switcher must be one trigger button with an expandable language menu');
+}
+if (!/\.language-menu\s*\{[\s\S]*bottom:\s*calc\(100% \+ 8px\)/.test(cssRaw) || !/@media \(max-width: 600px\)[\s\S]*\.language-menu\s*\{[\s\S]*left:\s*auto[\s\S]*right:\s*0/.test(cssRaw) || !/const languagePicker = document\.getElementById\('language-picker'\)/.test(html) || !/window\.TWI18N\.setLocale\(nextLocale\)/.test(html)) {
+  fail('language picker must open upward, stay viewport-safe on mobile, and switch locale through the existing i18n setLocale path');
 }
 if (!/id="crowd-panel-handle"[^>]*data-feature-hidden="crowd-handle"/.test(htmlRaw) || !/\.crowd-panel-handle\s*\{[\s\S]*display:\s*none !important/.test(cssRaw)) {
   fail('crowd/crown handle must stay hidden');
 }
-if (!/Unified chrome icon buttons/.test(cssRaw) || !/\.token-pill \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.controls \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.lang-flag\[data-pos-type\]/.test(cssRaw) || !/\.sound-icon\[data-pos-type\]/.test(cssRaw) || !/\.layers-handle\[data-pos-type\]/.test(cssRaw) || !/\.world-pill\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-status\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-roster\[data-pos-type\]/.test(cssRaw) || !/\.mp-chat-toggle\[data-pos-type\]/.test(cssRaw)) {
-  fail('language flags, side rail controls, sound/layers, chat, and top pills must use the same category block-button chrome');
+if (!/Unified chrome icon buttons/.test(cssRaw) || !/\.token-corner \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.controls \.btn\.icon\[data-pos-type\]/.test(cssRaw) || !/\.language-trigger\[data-pos-type\]/.test(cssRaw) || !/\.sound-icon\[data-pos-type\]/.test(cssRaw) || !/\.layers-handle\[data-pos-type\]/.test(cssRaw) || !/\.world-pill\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-status\[data-pos-type\]/.test(cssRaw) || !/\.multiplayer-roster\[data-pos-type\]/.test(cssRaw) || !/\.mp-chat-toggle\[data-pos-type\]/.test(cssRaw)) {
+  fail('language trigger, side rail controls, sound/layers, chat, and top pills must use the same category block-button chrome');
 }
 if (!/body\.ui-theme-dark \.controls \.btn\.icon\[data-pos-type\]\.on/.test(cssRaw) || !/body\.ui-theme-dark \.sound-icon\[data-pos-type\]\.open/.test(cssRaw) || !/body\.tod-night \.controls \.btn\.icon\[data-pos-type\]\.on/.test(cssRaw)) {
   fail('dark and after-hours themes must preserve chrome icon active/on block-button states');
@@ -352,8 +395,11 @@ if (!/body\.ui-theme-dark \.controls \.btn\.icon\[data-pos-type\]\.on/.test(cssR
 if (!/\.world-menu-foot\s*\{[\s\S]*overflow-x:\s*auto/.test(cssRaw) || !/\.world-menu-foot-btn\s*\{[\s\S]*white-space:\s*nowrap/.test(cssRaw) || !/\.world-menu-foot-btn span\s*\{[\s\S]*text-overflow:\s*ellipsis/.test(cssRaw)) {
   fail('world menu footer buttons must stay single-line and use horizontal overflow instead of wrapping');
 }
-if (!/\.brand-banner\s*\{[\s\S]*top:\s*76px[\s\S]*bottom:\s*auto/.test(cssRaw)) {
-  fail('Autoinventive banner must be positioned under the shared-room pill');
+if (!/<div class="brand">[\s\S]*<\/div>\s*<a class="brand-banner" id="brand-banner"/.test(htmlRaw) || !/\.brand-banner\s*\{[\s\S]*top:\s*22px[\s\S]*left:\s*348px[\s\S]*right:\s*auto/.test(cssRaw)) {
+  fail('Autoincentive banner must sit next to the top-left logo instead of under the shared-room pill');
+}
+if (/\.minimap-wrap\.collapsed\s*\{[^}]*translateX/.test(cssRaw) || !/function clampMinimapPosition\(left, top\)/.test(html) || !/function setMinimapPosition\(left, top\)[\s\S]*clampMinimapPosition\(left, top\)/.test(html) || !/setMinimapPosition\(mmDrag\.leftAtStart \+ dx, mmDrag\.topAtStart \+ dy\)/.test(html)) {
+  fail('minimap must clamp restored/dragged/collapsed positions without translating off-screen');
 }
 const renderDefaults = {
   'tinyworld:render:version': '24',
@@ -387,8 +433,18 @@ if (!shippedCamera || !shippedCamera.target || shippedCamera.target.x !== 0 || s
 if (!/const RENDER_SETTINGS_VERSION = '24'/.test(html) || !/resolution:\s*'0\.75'/.test(html) || !/brightness:\s*'0\.80'/.test(html) || !/tiltBlur:\s*'10\.5'/.test(html)) {
   fail('hard-coded render defaults must match the shipped v24 defaults');
 }
-if (!/id="welcome-modal"[^>]*data-feature-hidden="welcome-start"/.test(htmlRaw) || !/function initWelcomeDialog\(\) \{[\s\S]*modal\.hidden = true;[\s\S]*aria-hidden/.test(html)) {
-  fail('welcome start modal must remain hidden at boot');
+if (!/<div id="welcome-modal" class="modal launch-modal" hidden aria-hidden="true">[\s\S]*<img class="welcome-logo" src="assets\/twlogo\.png" alt="Tiny World Builder"[\s\S]*id="welcome-build"[^>]*>BUILD<\/button>[\s\S]*id="welcome-play"[^>]*>PLAY<\/button>/.test(htmlRaw)) {
+  fail('welcome launcher must render the Tiny World logo with BUILD and PLAY buttons');
+}
+const welcomeDialogBody = sourceFunctionBody(html, 'initWelcomeDialog');
+if (!/modal\.hidden = false;/.test(welcomeDialogBody) || !/welcome-launch-open/.test(welcomeDialogBody) || !/__tinyworldMode/.test(welcomeDialogBody) || !/chooseWelcomeMode\('build'\)/.test(welcomeDialogBody) || !/chooseWelcomeMode\('play'\)/.test(welcomeDialogBody)) {
+  fail('welcome launcher must open at boot and route choices through Build/Play mode');
+}
+if (!/\.launch-modal\s*\{[\s\S]*align-items:\s*center/.test(cssRaw) || !/\.welcome-logo\s*\{[\s\S]*border-radius:\s*20px/.test(cssRaw) || !/\.welcome-mode-btn\s*\{[\s\S]*border:\s*1\.5px solid var\(--welcome-outline\)/.test(cssRaw)) {
+  fail('welcome launcher must be a centered rounded logo dialog with block-style mode buttons');
+}
+if (!fs.existsSync(path.join(root, 'assets', 'twlogo.png')) || !/if \[\[ -d assets \]\]/.test(publishRaw) || !/\$DIST\/assets/.test(publishRaw)) {
+  fail('welcome launcher logo must be shipped through the assets publish path');
 }
 if (!/#account-modal \.modal-card/.test(cssRaw) || !/#profile-photo-file::file-selector-button/.test(cssRaw) || !/#account-modal \.tab-bar button\.active/.test(cssRaw)) {
   fail('account modal must use scoped block-button styling, including the photo picker');
@@ -433,6 +489,12 @@ if (!/uTint: \{ value: new THREE\.Color\(0x(?:2d3235|131517)\) \}/.test(propelle
 }
 if (!/function getIslandRocketPlumeMaterial/.test(html) || !/rocketPlumeShader/.test(html) || !/rocketPlumeSheet/.test(html)) {
   fail('home island rocket plumes must use shared static shader sheets');
+}
+if (!/const ISLAND_ROCKET_PLUME_CAMERA_GATE_Y = 1\.15/.test(html) || !/function islandRocketPlumeVisibleFromCamera\(mesh\)/.test(html) || !/mesh\.visible = plumeVisible/.test(html) || !/if \(!plumeVisible\) continue;/.test(html)) {
+  fail('home island rocket plume sheets must be hidden from above-surface camera views');
+}
+if (!/kind: 'flame', y: -1\.52, w: 0\.70, h: 1\.36/.test(html) || !/kind: 'smoke', y: -2\.12, w: 0\.78, h: 1\.00/.test(html)) {
+  fail('home island rocket plume sheets must stay compact enough to avoid covering the board');
 }
 if (!/function updateIslandRocketPlumeFacing/.test(html) || !/mesh\.rotation\.y = Math\.atan2\(dx, dz\)/.test(html)) {
   fail('home island rocket plume sheets must yaw toward the camera so they do not render as flat slices');
@@ -581,6 +643,12 @@ if (!/id="render-ambient-fill"/.test(html) || !/id="render-front-fill"/.test(htm
 if (!/const frontFill = makeFillLight/.test(html) || !/sideFillA\.intensity = renderSideFill/.test(html) || !/backFill\.intensity = renderBackFill/.test(html)) {
   fail('lighting controls must drive non-shadowing directional fill lights');
 }
+if (!/MODEL_STAMP_IMPORT_AMBIENT_BASE = [0-9.]+/.test(html) || !/MODEL_STAMP_IMPORT_DIRECTIONAL_BASE = [0-9.]+/.test(html) || !/var modelStampImportAmbientFill = new THREE\.AmbientLight/.test(html) || !/var modelStampImportDirFill = new THREE\.DirectionalLight/.test(html) || !/modelStampImportDirFill\.castShadow = false/.test(html) || !/modelStampImportDirFill\.position\.copy\(target\)\.add\(MODEL_STAMP_IMPORT_LIGHT_OFFSET\)/.test(html)) {
+  fail('model-stamp import lighting must add the supplied ambient/directional safety fill without a shadow caster');
+}
+if (!/modelStampImportAmbientFill\.intensity = MODEL_STAMP_IMPORT_AMBIENT_BASE \* renderAmbientFill/.test(html) || !/modelStampImportDirFill\.intensity = MODEL_STAMP_IMPORT_DIRECTIONAL_BASE \* renderLighting/.test(html) || !/lightBase\.modelStampDirI/.test(html)) {
+  fail('model-stamp import lighting must follow render controls and time-of-day modulation');
+}
 if (!/function addWaterfallRiserEffects/.test(html) || !/terrain === 'water'[\s\S]*addWaterfallRiserEffects/.test(html)) {
   fail('exposed water risers must render lightweight waterfall effects');
 }
@@ -646,10 +714,6 @@ if (!/clearMooringCables\(\);/.test(homeGridResizeBody)) {
 const starterSceneBody = sourceFunctionBody(html, 'loadInitialScene');
 if (!/clearMooringCables\(\);/.test(starterSceneBody) || !/clearEditableIslands\(\);/.test(starterSceneBody)) {
   fail('starter scene reload must clear mooring and editable-island topology');
-}
-const farmStartBody = sourceFunctionBody(html, 'startFarmWorld');
-if (!/doReset\(\);/.test(farmStartBody)) {
-  fail('welcome farm start must use the full reset lifecycle');
 }
 const islandStressBody = sourceFunctionBody(html, 'runIslandStressDemo');
 if (!/clearMooringCables\(\);\s*clearEditableIslands\(\);/.test(islandStressBody)) {

@@ -482,8 +482,20 @@
 
   const islandShellMaterialCache = new Map();
   function syncIslandShellMaterial(baseMat, shellMat) {
-    shellMat.map = baseMat.map || shellMat.map || null;
-    shellMat.onBeforeCompile = baseMat.onBeforeCompile;
+    if (baseMat.isShaderMaterial && shellMat.isShaderMaterial) {
+      shellMat.uniforms = baseMat.uniforms;
+      shellMat.vertexShader = baseMat.vertexShader;
+      shellMat.fragmentShader = baseMat.fragmentShader;
+      shellMat.defines = baseMat.defines;
+      shellMat.extensions = baseMat.extensions;
+      shellMat.transparent = baseMat.transparent;
+      shellMat.depthWrite = baseMat.depthWrite;
+      shellMat.depthTest = baseMat.depthTest;
+      shellMat.blending = baseMat.blending;
+    } else {
+      shellMat.map = baseMat.map || shellMat.map || null;
+      shellMat.onBeforeCompile = baseMat.onBeforeCompile;
+    }
     shellMat.userData = Object.assign({}, baseMat.userData || {}, shellMat.userData || {}, {
       islandShellMaterial: true,
     });

@@ -668,6 +668,9 @@
 
     document.body.classList.add('flight-active');
     window.__flightActive = true;
+    window.__flightFireHeld = false;
+    window.__flightMissilePressed = false;
+    window.__flightMissileHeld = false;
     flightSetHudStatus('FLYING');
     showFlightHud(true);
     if (window.__flightCombat && typeof window.__flightCombat.onEnter === 'function') {
@@ -687,6 +690,9 @@
     flightPrevCamera = null;
     document.body.classList.remove('flight-active');
     window.__flightActive = false;
+    window.__flightFireHeld = false;
+    window.__flightMissilePressed = false;
+    window.__flightMissileHeld = false;
     if (window.__flightCombat && typeof window.__flightCombat.onExit === 'function') {
       window.__flightCombat.onExit();
     }
@@ -768,14 +774,37 @@
       e.stopImmediatePropagation();
     }
   }, true);
-  // Mouse fire-intent: left button while flying. 41-flight-combat reads
-  // window.__flightFireHeld. Gated on flightActive so it only arms in flight.
+  // Mouse combat intent while flying. 41-flight-combat reads these globals:
+  // left button holds guns; right click fires one missile.
   window.__flightFireHeld = false;
+  window.__flightMissilePressed = false;
+  window.__flightMissileHeld = false;
   window.addEventListener('pointerdown', e => {
-    if (flightActive && e.button === 0) { window.__flightFireHeld = true; }
+    if (!flightActive) return;
+    if (e.button === 0) {
+      window.__flightFireHeld = true;
+    } else if (e.button === 2) {
+      window.__flightMissilePressed = true;
+      window.__flightMissileHeld = true;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
   }, true);
   window.addEventListener('pointerup', e => {
     if (e.button === 0) window.__flightFireHeld = false;
+    else if (e.button === 2) {
+      window.__flightMissileHeld = false;
+      if (flightActive) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }
+  }, true);
+  window.addEventListener('contextmenu', e => {
+    if (flightActive) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
   }, true);
 
   window.addEventListener('resize', () => {

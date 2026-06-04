@@ -82,8 +82,9 @@ Use this together with:
   Home island edge grass/soil/rock strata is not a texture-map option: it is
   the dedicated `M.boardSideEdge` shader material, aligned from `TOP_H` (the
   visible grass-cap top) down a shallow side backing behind the foreground
-  greebles. It samples the internal image-style strata slice; keep that slice
-  image-driven rather than rebuilding tall normalized procedural bands.
+  greebles. It samples `textures/island-side-strata-gpt.png`, a fixed
+  1024x192 horizontal strata slice; keep that slice image-driven and the same
+  dimensions rather than rebuilding tall normalized procedural bands.
   Grass richness should stay FPS-safe through shared texture maps (`grass-voxel`
   or `grass-side` only when intentionally selected), not added blade meshes.
   Stone blocks should stay light cool gray like the stair/column references
@@ -98,6 +99,18 @@ Use this together with:
 - For toolbar thumbnails, increase contrast/saturation carefully so icons read against the white toolbar, but keep the in-world material natural.
 - If a model comes with a texture atlas, set `texture.encoding = THREE.sRGBEncoding` and check `flipY` for GLTF compatibility.
 - Repo-backed model stamps must run a material hydration pass: preserve real embedded materials, apply known sidecar atlases (GLTF atlases use `flipY = false`), parse OBJ `.mtl` sidecars when present, warn when they are missing, and apply a deterministic TinyWorld palette fallback to blank `palette`/white materials so imports do not look like unpainted 3D prints.
+- GLB/GLTF model stamps must adapt PBR `MeshStandardMaterial` /
+  `MeshPhysicalMaterial` into TinyWorld-lit Lambert materials while preserving
+  base-color maps, vertex colors, transparency, emissive maps, skinning, and
+  morph flags. The app has no environment map, so metallic PBR GLBs otherwise
+  render nearly black beside native Lambert objects. Do not blindly preserve
+  occlusion or normal maps on that conversion path: black AO/ORM red channels
+  remove indirect lighting in the glTF spec, and broken/uniform normal maps can
+  dominate lighting. The model-stamp loader samples AO maps and drops black
+  ones, keeps non-color maps linear, and does not copy normal maps into the
+  TinyWorld-lit Lambert material. The scene also includes model-stamp import
+  safety fill lights so converted GLBs are not dependent on the shadow-casting
+  sun alone.
 - Model stamp factories should apply `opts.appearance` themselves so world rendering, ghost previews, and selection previews share texture/color overrides; avoid applying the same model-stamp appearance again at the board render wrapper.
 - Wear-and-tear should stay stylized: global grime/desaturation plus small batched chips/scuffs/moss beats realistic noise-heavy shader work.
 - Floating-board depth can reuse existing roof language by inverting a stepped roof form under the board: dark gray shingle-textured slabs, board-footprint width/depth, vertically compressed, and attached below the dirt body. Utility underside dressing should stay toy-like and readable: chunky pipe cylinders, cable trays, clamps, junction boxes, and short dangling cable drops in the existing steel/dark underside palette.

@@ -486,11 +486,227 @@
     const mats = modelStampMaterialList(material);
     mats.forEach(mat => {
       if (!mat) return;
-      ['map', 'emissiveMap', 'aoMap', 'lightMap'].forEach(key => {
+      ['map', 'emissiveMap'].forEach(key => {
         if (mat[key]) mat[key].encoding = THREE.sRGBEncoding;
+      });
+      ['aoMap', 'lightMap', 'normalMap', 'metalnessMap', 'roughnessMap'].forEach(key => {
+        if (mat[key] && THREE.LinearEncoding !== undefined) mat[key].encoding = THREE.LinearEncoding;
       });
       mat.needsUpdate = true;
     });
+  }
+
+  function modelStampTextureStats(texture) {
+    if (!texture || !texture.image) return null;
+    texture.userData = texture.userData || {};
+    if (texture.userData.modelStampTextureStats) return texture.userData.modelStampTextureStats;
+    const image = texture.image;
+    const rawW = image.width || image.videoWidth || image.naturalWidth || 0;
+    const rawH = image.height || image.videoHeight || image.naturalHeight || 0;
+    if (!rawW || !rawH) return null;
+    let data = null;
+    let w = rawW;
+    let h = rawH;
+    let stride = 4;
+    try {
+      if (image.data && image.data.length) {
+        data = image.data;
+        stride = data.length >= rawW * rawH * 4 ? 4 : 3;
+      } else {
+        const sampleW = Math.max(1, Math.min(16, rawW));
+        const sampleH = Math.max(1, Math.min(16, rawH));
+        if (!modelStampTextureStats.canvas) modelStampTextureStats.canvas = document.createElement('canvas');
+        const canvas = modelStampTextureStats.canvas;
+        canvas.width = sampleW;
+        canvas.height = sampleH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.clearRect(0, 0, sampleW, sampleH);
+        ctx.drawImage(image, 0, 0, sampleW, sampleH);
+        data = ctx.getImageData(0, 0, sampleW, sampleH).data;
+        w = sampleW;
+        h = sampleH;
+        stride = 4;
+      }
+    } catch (_) {
+      return null;
+    }
+    if (!data || !data.length) return null;
+    const sampleW = Math.max(1, Math.min(16, w));
+    const sampleH = Math.max(1, Math.min(16, h));
+    let count = 0;
+    let sumR = 0, sumG = 0, sumB = 0;
+    let sumR2 = 0, sumG2 = 0, sumB2 = 0;
+    let maxR = 0;
+    let darkR = 0;
+    const norm = value => {
+      const n = Number(value) || 0;
+      return n > 1 ? n / 255 : Math.max(0, Math.min(1, n));
+    };
+    for (let sy = 0; sy < sampleH; sy++) {
+      const y = Math.floor(sy * (h - 1) / Math.max(1, sampleH - 1));
+      for (let sx = 0; sx < sampleW; sx++) {
+        const x = Math.floor(sx * (w - 1) / Math.max(1, sampleW - 1));
+        const i = (y * w + x) * stride;
+        const r = norm(data[i]);
+        const g = norm(data[i + 1] !== undefined ? data[i + 1] : data[i]);
+        const b = norm(data[i + 2] !== undefined ? data[i + 2] : data[i]);
+        sumR += r; sumG += g; sumB += b;
+        sumR2 += r * r; sumG2 += g * g; sumB2 += b * b;
+        maxR = Math.max(maxR, r);
+        if (r < 0.12) darkR++;
+        count++;
+      }
+    }
+    if (!count) return null;
+    const avgR = sumR / count;
+    const avgG = sumG / count;
+    const avgB = sumB / count;
+    const stats = {
+      avgR,
+      avgG,
+      avgB,
+      maxR,
+      darkR: darkR / count,
+      varR: Math.max(0, sumR2 / count - avgR * avgR),
+      varG: Math.max(0, sumG2 / count - avgG * avgG),
+      varB: Math.max(0, sumB2 / count - avgB * avgB),
+    };
+    texture.userData.modelStampTextureStats = stats;
+    return stats;
+  }
+
+  function modelStampTextureReference(texture, material) {
+    const image = texture && texture.image;
+    const source = texture && texture.source && texture.source.data;
+    return [
+      texture && texture.name,
+      texture && texture.uuid,
+      image && (image.currentSrc || image.src || image.name),
+      source && (source.currentSrc || source.src || source.name),
+      material && material.name,
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function modelStampShouldDropAoMap(texture, material) {
+    const stats = modelStampTextureStats(texture);
+    if (!stats) return false;
+    const ref = modelStampTextureReference(texture, material);
+    const taggedAo = /(^|[^a-z])(ao|occlusion|orm|occlusionroughnessmetallic|roughnessmetallic)([^a-z]|$)/i.test(ref);
+    return stats.maxR < 0.08 || (stats.avgR < (taggedAo ? 0.18 : 0.12) && stats.darkR > 0.78);
+  }
+
+  function modelStampShouldDropNormalMap(texture, material) {
+    const stats = modelStampTextureStats(texture);
+    if (!stats) return false;
+    const ref = modelStampTextureReference(texture, material);
+    const uniform = stats.varR < 0.00035 && stats.varG < 0.00035 && stats.varB < 0.00035;
+    const biased = Math.abs(stats.avgR - 0.5) > 0.12 || Math.abs(stats.avgG - 0.5) > 0.12 || stats.avgB < 0.62;
+    return uniform && (biased || /normal|phong/i.test(ref));
+  }
+
+  function sanitizeModelStampMaterialLightingMaps(material, opts = {}) {
+    let changed = 0;
+    const mats = modelStampMaterialList(material);
+    mats.forEach(mat => {
+      if (!mat) return;
+      mat.userData = mat.userData || {};
+      if (mat.aoMap && (opts.dropAoMap === true || modelStampShouldDropAoMap(mat.aoMap, mat))) {
+        mat.aoMap = null;
+        mat.aoMapIntensity = 0;
+        mat.userData.modelStampDroppedAOMap = true;
+        changed++;
+      }
+      if (mat.normalMap && (opts.dropNormalMap === true || modelStampShouldDropNormalMap(mat.normalMap, mat))) {
+        mat.normalMap = null;
+        mat.normalScale = null;
+        mat.userData.modelStampDroppedNormalMap = true;
+        changed++;
+      }
+      if (changed) mat.needsUpdate = true;
+    });
+    return changed;
+  }
+
+  function modelStampMaterialNeedsTinyWorldLighting(material) {
+    if (!material || !material.isMaterial) return false;
+    if (material.userData && material.userData.modelStampTinyWorldLit) return false;
+    if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) return true;
+    const type = String(material.type || '');
+    return /Mesh(Standard|Physical)Material/.test(type) || material.metalness !== undefined || material.roughness !== undefined;
+  }
+
+  function createTinyWorldLitModelStampMaterial(source) {
+    const sourceAoMap = source && source.aoMap && !modelStampShouldDropAoMap(source.aoMap, source) ? source.aoMap : null;
+    const params = {
+      color: source && source.color ? source.color.clone() : new THREE.Color(0xffffff),
+      map: source && source.map ? source.map : null,
+      vertexColors: !!(source && source.vertexColors),
+      side: source && source.side !== undefined ? source.side : THREE.FrontSide,
+      transparent: !!(source && source.transparent),
+      opacity: source && source.opacity !== undefined ? source.opacity : 1,
+      alphaTest: source && source.alphaTest !== undefined ? source.alphaTest : 0,
+      depthTest: source && source.depthTest !== undefined ? source.depthTest : true,
+      depthWrite: source && source.depthWrite !== undefined ? source.depthWrite : true,
+      blending: source && source.blending !== undefined ? source.blending : THREE.NormalBlending,
+      dithering: !!(source && source.dithering),
+      fog: source && source.fog !== undefined ? source.fog : true,
+    };
+    if (source && source.emissive) {
+      params.emissive = source.emissive.clone();
+      params.emissiveIntensity = Math.max(0, Math.min(2, source.emissiveIntensity || 0));
+    }
+    const next = new THREE.MeshLambertMaterial(params);
+    next.name = source && source.name ? source.name : 'TinyWorld lit GLB material';
+    if (source) {
+      if (source.alphaMap) next.alphaMap = source.alphaMap;
+      if (sourceAoMap) {
+        next.aoMap = sourceAoMap;
+        next.aoMapIntensity = source.aoMapIntensity !== undefined ? source.aoMapIntensity : 1;
+      }
+      if (source.lightMap) {
+        next.lightMap = source.lightMap;
+        next.lightMapIntensity = source.lightMapIntensity !== undefined ? source.lightMapIntensity : 1;
+      }
+      if (source.emissiveMap) next.emissiveMap = source.emissiveMap;
+      if (source.premultipliedAlpha !== undefined) next.premultipliedAlpha = source.premultipliedAlpha;
+      if (source.polygonOffset !== undefined) next.polygonOffset = source.polygonOffset;
+      if (source.polygonOffsetFactor !== undefined) next.polygonOffsetFactor = source.polygonOffsetFactor;
+      if (source.polygonOffsetUnits !== undefined) next.polygonOffsetUnits = source.polygonOffsetUnits;
+      if (source.skinning !== undefined) next.skinning = source.skinning;
+      if (source.morphTargets !== undefined) next.morphTargets = source.morphTargets;
+      if (source.morphNormals !== undefined) next.morphNormals = source.morphNormals;
+    }
+    next.userData = Object.assign({}, source && source.userData, {
+      modelStampTinyWorldLit: true,
+      modelStampSourceMaterialType: source && (source.type || source.constructor && source.constructor.name) || 'PBR',
+      modelStampDroppedLightingMaps: [
+        source && ((source.aoMap && !sourceAoMap) || (source.userData && source.userData.modelStampDroppedAOMap)) ? 'aoMap' : '',
+        source && (source.normalMap || (source.userData && source.userData.modelStampDroppedNormalMap)) ? 'normalMap' : '',
+      ].filter(Boolean).join(',') || undefined,
+    });
+    prepareModelStampTextureMaterial(next);
+    return next;
+  }
+
+  function adaptModelStampMaterialForTinyWorld(material, cache = null) {
+    if (Array.isArray(material)) {
+      let adapted = 0;
+      const next = material.map(mat => {
+        const result = adaptModelStampMaterialForTinyWorld(mat, cache);
+        adapted += result.adapted;
+        return result.material;
+      });
+      return { material: next, adapted };
+    }
+    if (!material) return { material, adapted: 0 };
+    sanitizeModelStampMaterialLightingMaps(material);
+    prepareModelStampTextureMaterial(material);
+    if (!modelStampMaterialNeedsTinyWorldLighting(material)) return { material, adapted: 0 };
+    if (cache && cache.has(material)) return { material: cache.get(material), adapted: 0 };
+    const next = createTinyWorldLitModelStampMaterial(material);
+    if (cache) cache.set(material, next);
+    return { material: next, adapted: 1 };
   }
 
   function modelStampMaterialIsBlank(material) {
@@ -600,20 +816,30 @@
     if (!root) return root;
     let textured = 0;
     let palette = 0;
+    let litMaterials = 0;
+    const materialAdaptCache = new WeakMap();
     root.traverse(node => {
       if (!node.isMesh) return;
       node.castShadow = true;
       node.receiveShadow = true;
-      prepareModelStampTextureMaterial(node.material);
+      const adapted = adaptModelStampMaterialForTinyWorld(node.material, materialAdaptCache);
+      node.material = adapted.material;
+      litMaterials += adapted.adapted;
     });
     const textureRecord = pickModelStampSidecarTexture(asset);
     if (textureRecord) textured = applyModelStampSidecarTexture(root, asset, textureRecord, { flipY: opts.flipY });
     root.traverse(node => {
+      if (node.isMesh) {
+        const adapted = adaptModelStampMaterialForTinyWorld(node.material, materialAdaptCache);
+        node.material = adapted.material;
+        litMaterials += adapted.adapted;
+      }
       if (modelStampMeshNeedsPalette(node) && applyModelStampVertexPalette(node, asset, palette)) palette++;
     });
     if (asset) {
       if (textured) asset.materialStatus = 'sidecar texture';
       else if (palette) asset.materialStatus = 'TinyWorld palette fallback';
+      else if (litMaterials) asset.materialStatus = 'TinyWorld lit materials';
       else asset.materialStatus = 'original materials';
       if (!asset.materialWarning && Array.isArray(asset.warnings) && asset.warnings.length) asset.materialWarning = asset.warnings[0];
     }

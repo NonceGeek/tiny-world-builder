@@ -183,6 +183,22 @@
   sideFillB.color.setHex(0xd9ecff);
   backFill.color.setHex(0xb8ccff);
 
+  // Imported GLB/PBR assets can arrive with no usable indirect lighting. This
+  // non-shadowing safety fill adapts the user-supplied Mugen87 StackOverflow
+  // ambient + directional baseline (CC BY-SA 4.0) into the existing stack.
+  const MODEL_STAMP_IMPORT_AMBIENT_BASE = 0.30;
+  const MODEL_STAMP_IMPORT_DIRECTIONAL_BASE = 0.30;
+  const MODEL_STAMP_IMPORT_LIGHT_OFFSET = new THREE.Vector3(10, 10, 10);
+  var modelStampImportAmbientFill = new THREE.AmbientLight(0xffffff, 0);
+  modelStampImportAmbientFill.name = 'model-stamp-import-ambient-fill';
+  scene.add(modelStampImportAmbientFill);
+  var modelStampImportDirFill = new THREE.DirectionalLight(0xefefff, 0);
+  modelStampImportDirFill.name = 'model-stamp-import-directional-fill';
+  modelStampImportDirFill.position.copy(target).add(MODEL_STAMP_IMPORT_LIGHT_OFFSET);
+  modelStampImportDirFill.target = fillTarget;
+  modelStampImportDirFill.castShadow = false;
+  scene.add(modelStampImportDirFill);
+
   // Fixed sun direction relative to the camera target — same angle of
   // attack everywhere on the map.
   // Lower y → flatter sun angle → longer, more visible shadows.
@@ -237,6 +253,7 @@
     sideFillA.position.copy(target).add(SIDE_FILL_OFFSET_A);
     sideFillB.position.copy(target).add(SIDE_FILL_OFFSET_B);
     backFill.position.copy(target).add(BACK_FILL_OFFSET);
+    modelStampImportDirFill.position.copy(target).add(MODEL_STAMP_IMPORT_LIGHT_OFFSET);
     sun.shadow.camera.updateProjectionMatrix();
   };
 
@@ -251,6 +268,8 @@
     sideFillA.intensity = renderSideFill * 0.13;
     sideFillB.intensity = renderSideFill * 0.13;
     backFill.intensity = renderBackFill * 0.20;
+    modelStampImportAmbientFill.intensity = MODEL_STAMP_IMPORT_AMBIENT_BASE * renderAmbientFill;
+    modelStampImportDirFill.intensity = MODEL_STAMP_IMPORT_DIRECTIONAL_BASE * renderLighting;
   }
 
   function setShadowQuality(value) {
