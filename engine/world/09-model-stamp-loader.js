@@ -230,6 +230,9 @@
       size: Number(raw.size) || 0,
       mtimeMs: Number(raw.mtimeMs) || 0,
       sidecars: normalizeModelStampSidecars(raw.sidecars),
+      frames: Array.isArray(raw.frames) && raw.frames.length > 1
+        ? raw.frames.map(f => ({ url: String((f && f.url) || '').trim(), name: String((f && f.name) || '').slice(0, 96) })).filter(f => f.url)
+        : null,
       warnings: Array.isArray(raw.warnings) ? raw.warnings.map(item => String(item || '').slice(0, 120)).filter(Boolean) : [],
       dropped: !!raw.dropped,
       transient: !!raw.transient,
@@ -457,6 +460,14 @@
     return modelStampDroppedRestorePromise;
   }
 
+  // Strip a trailing frame number ("Frame_0", "smoke_012", "puff3") so VDB files
+  // dropped together as a sequence collapse into one animated asset.
+  function vdbSequenceKey(name) {
+    const base = String(name || '').replace(/\.[^.]+$/, '');
+    const m = base.match(/^(.*?)(\d+)\s*$/);
+    return m ? { base: m[1].toLowerCase(), num: parseInt(m[2], 10) || 0 } : { base: base.toLowerCase(), num: 0 };
+  }
+
   function registerDroppedModelStampFiles(fileList) {
     const files = Array.from(fileList || []).filter(file => file && typeof file.name === 'string');
     if (!files.length) return [];
@@ -465,8 +476,10 @@
     const sidecars = ctx.sidecars;
     const mains = ctx.mains;
     const batchId = Date.now().toString(36);
-    const assets = mains.map((main, index) => {
+    let assetIndex = 0;
+    function buildAssetSpec(main, frames) {
       const slug = modelStampSlug(main.file.name);
+      const index = assetIndex++;
       let id = modelStampIdSafe('drop-' + batchId + '-' + index + '-' + slug);
       if (!id) id = 'drop-' + batchId + '-' + index;
       let suffix = 1;
@@ -474,7 +487,10 @@
         id = modelStampIdSafe('drop-' + batchId + '-' + index + '-' + suffix + '-' + slug) || ('drop-' + batchId + '-' + index + '-' + suffix);
         suffix++;
       }
-      const label = String(main.file.name || id).replace(/\.[^.]+$/, '').slice(0, 64) || id;
+      let label = String(main.file.name || id).replace(/\.[^.]+$/, '').slice(0, 64) || id;
+      if (frames && frames.length > 1) {
+        label = (label.replace(/[\s._-]*\d+$/, '') || label).slice(0, 56) + ' (' + frames.length + 'f)';
+      }
       return {
         id,
         label,
@@ -486,12 +502,31 @@
         size: main.file.size || 0,
         mtimeMs: main.file.lastModified || Date.now(),
         sidecars,
+        frames: frames && frames.length > 1 ? frames : null,
         dropped: true,
         transient: true,
         localFiles,
         warnings: MODEL_STAMP_SUPPORTED_FORMATS.has(main.format) ? [] : [main.format.toUpperCase() + ' detected but not placeable in this build'],
       };
-    }).filter(Boolean);
+    }
+    // Group dropped VDB frames by sequence; every other format is one asset each.
+    const vdbGroups = new Map();
+    const specs = [];
+    mains.forEach(main => {
+      if (main.format === 'vdb') {
+        const key = vdbSequenceKey(main.file.name).base;
+        if (!vdbGroups.has(key)) vdbGroups.set(key, []);
+        vdbGroups.get(key).push(main);
+      } else {
+        specs.push(buildAssetSpec(main, null));
+      }
+    });
+    vdbGroups.forEach(groupMains => {
+      groupMains.sort((a, b) => vdbSequenceKey(a.file.name).num - vdbSequenceKey(b.file.name).num);
+      const frames = groupMains.map(m => ({ url: m.url, name: m.file.name }));
+      specs.push(buildAssetSpec(groupMains[0], frames));
+    });
+    const assets = specs.filter(Boolean);
     if (!assets.length) return [];
     mergeModelStampAssets(assets);
     persistDroppedModelStampAssets(assets, files);
@@ -1346,19 +1381,31 @@
   // stylised "voxel cloud" mesh: downsample to a coarse grid, emit culled cube
   // faces, and colour by height (warm fire at the base → cool smoke up top).
   // Returns a clone-safe plain Mesh wrapped in a Group, or null for empty grids.
-  function buildVdbVoxelMesh(parsed, opts = {}) {
-    if (!parsed || !parsed.count || !parsed.coords || !parsed.coords.length) return null;
-    const coords = parsed.coords;
-    const min = parsed.bbox.min;
-    const max = parsed.bbox.max;
+  // Shared coarse-grid spec for one volume (or a whole frame sequence, when a
+  // union bbox is passed so every frame downsamples into the same grid and the
+  // plume grows in place instead of jumping around).
+  function vdbGridSpec(min, max, targetRes) {
     const spanX = max[0] - min[0] + 1;
     const spanY = max[1] - min[1] + 1;
     const spanZ = max[2] - min[2] + 1;
-    const target = Math.max(8, Math.min(48, opts.targetRes || 30));
+    const target = Math.max(8, Math.min(48, targetRes || 30));
     const factor = Math.max(1, Math.ceil(Math.max(spanX, spanY, spanZ, 1) / target));
-    const gx = Math.max(1, Math.ceil(spanX / factor));
-    const gy = Math.max(1, Math.ceil(spanY / factor));
-    const gz = Math.max(1, Math.ceil(spanZ / factor));
+    return {
+      origin: [min[0], min[1], min[2]],
+      factor,
+      dims: [Math.max(1, Math.ceil(spanX / factor)), Math.max(1, Math.ceil(spanY / factor)), Math.max(1, Math.ceil(spanZ / factor))],
+    };
+  }
+
+  function buildVdbVoxelMesh(parsed, spec) {
+    if (!parsed || !parsed.count || !parsed.coords || !parsed.coords.length) return null;
+    spec = spec || vdbGridSpec(parsed.bbox.min, parsed.bbox.max);
+    const coords = parsed.coords;
+    const min = spec.origin;
+    const factor = spec.factor;
+    const gx = spec.dims[0];
+    const gy = spec.dims[1];
+    const gz = spec.dims[2];
     const occ = new Uint8Array(gx * gy * gz);
     const at = (x, y, z) => x + y * gx + z * gx * gy;
     for (let i = 0; i < coords.length; i += 3) {
@@ -1539,21 +1586,81 @@
         return cache;
       }
       const loader = new THREE.VDBLoader(createModelStampLoadingManager(asset));
-      loader.load(asset.url, parsed => {
-        try {
-          const group = buildVdbVoxelMesh(parsed);
-          if (!group) throw new Error('VDB volume is empty (no active voxels in this frame)');
-          // The cloud mesh already carries per-voxel vertex colours, so skip the
-          // palette fallback; castReceive sets up shadows.
-          castReceive(group);
-          finish(group);
-        } catch (err) { fail(err); }
-      }, undefined, fail);
+      // A VDB stamp may be a single file or a dropped frame sequence (asset.frames).
+      const frameUrls = (asset.frames && asset.frames.length) ? asset.frames.map(f => f.url) : [asset.url];
+      Promise.all(frameUrls.map(url => new Promise((res, rej) => loader.load(url, res, undefined, rej))))
+        .then(frames => {
+          try {
+            // Union bbox across all frames so every frame shares one coarse grid
+            // (the plume then grows in place rather than re-centring each frame).
+            const mn = [Infinity, Infinity, Infinity];
+            const mx = [-Infinity, -Infinity, -Infinity];
+            let any = false;
+            frames.forEach(f => {
+              if (!f || !f.count) return;
+              any = true;
+              for (let i = 0; i < 3; i++) { mn[i] = Math.min(mn[i], f.bbox.min[i]); mx[i] = Math.max(mx[i], f.bbox.max[i]); }
+            });
+            if (!any) throw new Error('VDB volume is empty (no active voxels in any frame)');
+            const spec = vdbGridSpec(mn, mx);
+            const group = new THREE.Group();
+            frames.forEach((f, i) => {
+              // Empty frames (e.g. the simulation start) become an empty placeholder
+              // so the frame index stays aligned and the puff grows from nothing.
+              const child = buildVdbVoxelMesh(f, spec) || new THREE.Group();
+              child.visible = (i === 0);
+              group.add(child);
+            });
+            if (frames.length > 1) {
+              group.userData.vdbAnimation = {
+                frameCount: frames.length,
+                loopSeconds: Math.max(0.8, Math.min(4, frames.length / 12)),
+                current: 0,
+              };
+            }
+            // The cloud meshes already carry per-voxel vertex colours, so skip the
+            // palette fallback; castReceive sets up shadows.
+            castReceive(group);
+            finish(group);
+          } catch (err) { fail(err); }
+        })
+        .catch(fail);
     } else {
       fail(new Error(asset.format.toUpperCase() + ' is detected but not placeable in this build'));
     }
     return cache;
   }
+
+  // Animated VDB clouds: every placed/ghost clone of a frame-sequence stamp keeps
+  // its own copy of the userData.vdbAnimation block. A single ticker (driven from
+  // the render loop) cycles each live clone's frame-mesh visibility by wall time.
+  const vdbAnimatedNodes = new Set();
+  function registerVdbAnimation(root) {
+    if (!root || typeof root.traverse !== 'function') return;
+    root.traverse(node => { if (node.userData && node.userData.vdbAnimation) vdbAnimatedNodes.add(node); });
+  }
+  function vdbNodeLive(node) {
+    let top = node;
+    while (top.parent) top = top.parent;
+    if (typeof scene !== 'undefined' && scene) return top === scene;
+    return !!node.parent;
+  }
+  window.__tinyworldVdbTick = function vdbTick(t) {
+    if (!vdbAnimatedNodes.size) return;
+    for (const node of vdbAnimatedNodes) {
+      try {
+        if (!vdbNodeLive(node)) { vdbAnimatedNodes.delete(node); continue; }
+        const info = node.userData.vdbAnimation;
+        const loop = info.loopSeconds || 1.5;
+        const idx = Math.floor(((t % loop) / loop) * info.frameCount) % info.frameCount;
+        if (idx !== info.current) {
+          const kids = node.children;
+          for (let i = 0; i < kids.length; i++) kids[i].visible = (i === idx);
+          info.current = idx;
+        }
+      } catch (_) { vdbAnimatedNodes.delete(node); }
+    }
+  };
 
   function makeModelStamp(idOrAsset, opts = {}) {
     const asset = typeof idOrAsset === 'string' ? getModelStamp(idOrAsset) : idOrAsset;
@@ -1561,6 +1668,7 @@
     const cache = loadModelStampAsset(asset);
     if (cache && cache.state === 'ready' && cache.scene) {
       const stamp = normalizeModelStampObject(cloneModelStampScene(cache.scene), asset);
+      if (asset.format === 'vdb') registerVdbAnimation(stamp);
       return applyAppearanceToObject(stamp, 'model-stamp', opts.appearance);
     }
     const placeholder = makeModelStampPlaceholder(asset, cache && cache.errorMessage ? cache.errorMessage : 'Loading model');

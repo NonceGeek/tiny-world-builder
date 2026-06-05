@@ -113,7 +113,7 @@ test('dropped OBJ keeps its .mtl + texture sidecars (so it imports textured)', (
 });
 
 test('VDB voxel mesh: occupancy → coloured clone-safe cloud, empty → null', () => {
-  const { buildVdbVoxelMesh } = buildEngineFns(LOADER, ['buildVdbVoxelMesh']);
+  const { buildVdbVoxelMesh } = buildEngineFns(LOADER, ['vdbGridSpec', 'buildVdbVoxelMesh']);
   // Empty volume (e.g. the simulation-start frame) yields no mesh.
   assert.equal(
     buildVdbVoxelMesh({ count: 0, coords: new Int32Array(), bbox: { min: [ 0, 0, 0 ], max: [ 0, 0, 0 ] } }),
@@ -121,17 +121,41 @@ test('VDB voxel mesh: occupancy → coloured clone-safe cloud, empty → null', 
   );
   // A small solid block of active voxels.
   const coords = [];
-  for ( let x = 0; x < 3; x ++ ) for ( let y = 0; y < 3; y ++ ) for ( let z = 0; z < 4; z ++ ) coords.push( x, y, z );
+  for (let x = 0; x < 3; x++) {
+    for (let y = 0; y < 3; y++) {
+      for (let z = 0; z < 4; z++) coords.push(x, y, z);
+    }
+  }
   const parsed = { count: coords.length / 3, coords: new Int32Array( coords ), bbox: { min: [ 0, 0, 0 ], max: [ 2, 2, 3 ] } };
-  const g = buildVdbVoxelMesh( parsed, { targetRes: 8 } );
+  const g = buildVdbVoxelMesh( parsed );
   assert.ok( g, 'mesh built' );
   const mesh = g.children[ 0 ];
   assert.ok( mesh.isMesh );
   assert.equal( mesh.material.vertexColors, true );
   assert.ok( mesh.geometry.attributes.position.count > 0, 'has geometry' );
-  assert.ok( mesh.geometry.attributes.color.count === mesh.geometry.attributes.position.count, 'per-vertex colour' );
+  assert.equal(mesh.geometry.attributes.color.count, mesh.geometry.attributes.position.count, 'per-vertex colour');
   // Placing a stamp clones the cached scene — must not throw.
   assert.doesNotThrow( () => g.clone() );
+});
+
+test('VDB sequence: filenames group by frame number; frames share one grid', () => {
+  const { vdbGridSpec, buildVdbVoxelMesh, vdbSequenceKey } = buildEngineFns(
+    LOADER, ['vdbGridSpec', 'buildVdbVoxelMesh', 'vdbSequenceKey']
+  );
+  // Trailing frame number is stripped so a sequence collapses to one base key.
+  assert.deepEqual(vdbSequenceKey('Frame_0.vdb'), { base: 'frame_', num: 0 });
+  assert.deepEqual(vdbSequenceKey('smoke_012.vdb'), { base: 'smoke_', num: 12 });
+  assert.deepEqual(vdbSequenceKey('puff3'), { base: 'puff', num: 3 });
+
+  // Two frames with different bounding boxes share one union grid, so a given
+  // voxel maps to the same local cell in every frame (the plume grows in place).
+  const spec = vdbGridSpec([0, 0, 0], [9, 9, 9]);
+  const f1 = { count: 1, coords: new Int32Array([0, 0, 0]), bbox: { min: [0, 0, 0], max: [0, 0, 0] } };
+  const f2 = { count: 1, coords: new Int32Array([9, 9, 9]), bbox: { min: [9, 9, 9], max: [9, 9, 9] } };
+  const m1 = buildVdbVoxelMesh(f1, spec);
+  const m2 = buildVdbVoxelMesh(f2, spec);
+  assert.ok(m1 && m2, 'both frames build a mesh');
+  assert.doesNotThrow(() => { m1.clone(); m2.clone(); });
 });
 
 test('VOXMesh is not clone-safe; a plain Mesh wrapper clones cleanly', () => {
