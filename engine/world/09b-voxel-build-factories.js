@@ -20,7 +20,7 @@
   // every engine palette colour toward black to fake the ambient occlusion the
   // geometry above would cast — a "used-universe" shaded look. 1 = untouched,
   // lower = darker. Tune here to taste.
-  const UNDER_ISLAND_ENGINE_SHADE = 0.6;
+  const UNDER_ISLAND_ENGINE_SHADE = 0.45;
   function shadeEngineHex(hex, factor = UNDER_ISLAND_ENGINE_SHADE) {
     const clean = normalizeHexColor(hex) || '#ffffff';
     const n = parseInt(clean.slice(1), 16);
