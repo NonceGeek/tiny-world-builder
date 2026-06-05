@@ -2285,12 +2285,12 @@
 
   const SEASON_FOLIAGE = {
     spring: {
-      grass: 0x9bc349, grass2: 0x74a437, leaves: 0x74b630, leavesDk: 0x4f9220,
+      grass: 0x79a838, grass2: 0x5c8a2b, leaves: 0x5f9e28, leavesDk: 0x47781c,
       cropLeaf: 0x96d943, cropStem: 0x5e9c2e, cornStalk: 0x6fa848, cornLeaf: 0xa8c948,
       pumpkinStem: 0x4d6a18, sunflowerStalk: 0x4d8a2a, rockMoss: 0x6f8a3a,
     },
     summer: {
-      grass: 0x90b93e, grass2: 0x6d9b34, leaves: 0x74b630, leavesDk: 0x4f9220,
+      grass: 0x6f9e30, grass2: 0x547a26, leaves: 0x5f9e28, leavesDk: 0x47781c,
       cropLeaf: 0x96d943, cropStem: 0x5e9c2e, cornStalk: 0x6fa848, cornLeaf: 0xa8c948,
       pumpkinStem: 0x4d6a18, sunflowerStalk: 0x4d8a2a, rockMoss: 0x6f8a3a,
     },
