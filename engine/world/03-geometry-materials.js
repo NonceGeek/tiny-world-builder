@@ -498,13 +498,25 @@
   // box geometries the frames/trims use).
   _windowPaneGeo.userData.cached = true;
 
-  // Window appearance config — single source of truth for both the classic
-  // house primitives (07) and the voxel buildings (09b). `glassRatio` is the
-  // fraction of the frame opening that is glass (rest is the wood border):
-  // larger = bigger glass / thinner wood. Exposed on window.* so a UI setting
-  // can drive it and trigger a rebuild.
-  const WINDOW = { glassRatio: 0.86 };
+  // Window appearance config — global defaults for both the classic house
+  // primitives (07) and the voxel buildings (09b). A per-object appearance may
+  // override any of these (see appearance.window / makeWindowPane). Exposed on
+  // window.* so a UI setting can drive the globals and trigger a rebuild.
+  //   glassRatio  fraction of the frame that is glass (rest is wood border);
+  //               larger = bigger glass / thinner wood. Affects GEOMETRY, so a
+  //               change needs a rebuild.
+  //   tint        glass colour (hex). darkness 0..1 darkens it toward black.
+  //   brightness  interior light scale (how visible the fake room is).
+  //   reflect     sky reflection strength at grazing angles, 0..1.
+  // tint/darkness/brightness/reflect are shader-only, so they update live.
+  const WINDOW = { glassRatio: 0.86, tint: 0xd6e6ff, darkness: 0.04, brightness: 1.0, reflect: 0.5 };
   if (typeof window !== 'undefined') window.__tinyworldWindow = WINDOW;
+
+  // Resolve the effective glass ratio for an optional per-object override.
+  function windowGlassRatio(override) {
+    const r = override && override.glassRatio;
+    return (typeof r === 'number') ? r : WINDOW.glassRatio;
+  }
   const _wiInvMat  = new THREE.Matrix4();
   const _wiCamLoc  = new THREE.Vector3();
   const _wiPos     = new THREE.Vector3();
@@ -524,7 +536,9 @@
         uBack:     { value: new THREE.Color(0x615b54) },
         uLightCol: { value: new THREE.Color(0xffd9a0) },
         uReflect:  { value: new THREE.Color(0x9fc2dd) },// sky tint for glass fresnel
-        uGlass:    { value: new THREE.Color(0.80, 0.86, 0.96) }, // cool glass tint (multiplier)
+        uGlass:    { value: new THREE.Color(0.80, 0.86, 0.96) }, // tint*(1-darkness), set per-mesh
+        uReflectAmt:    { value: 0.5 },                // sky reflection strength, set per-mesh
+        uInteriorBright:{ value: 1.0 },                // interior light scale, set per-mesh
         uLit:      { value: 0.0 },                     // EXTRA interior light strength (per-mesh)
       },
     ]),
@@ -545,7 +559,7 @@
       'uniform vec3 uCamLocal;',
       'uniform float uDepth;',
       'uniform vec3 uWall, uFloor, uCeil, uBack, uLightCol, uReflect, uGlass;',
-      'uniform float uLit;',
+      'uniform float uLit, uReflectAmt, uInteriorBright;',
       'void main() {',
       '  vec3 ro = vLocalPos;',                       // ray origin on the glass plane (z = 0)
       '  vec3 rd = normalize(vLocalPos - uCamLocal);',// view ray, heading into the room (rd.z < 0)
@@ -567,10 +581,10 @@
       '  col *= mix(0.7, 1.05, depthN);',             // gentle depth shading (keep the room readable)
       '  float ld = length(hit.xy - vec2(0.0, 0.05));',           // warm interior light near back-centre
       '  float glow = (0.22 + uLit) * smoothstep(0.75, 0.0, ld) * smoothstep(0.0, 0.4, depthN);',
-      '  col += uLightCol * glow;',                   // always-on fill so the room is visible, +extra when "lit"
+      '  col = (col + uLightCol * glow) * uInteriorBright;',      // fill light (+extra when "lit"), scaled by brightness
       '  vec3 V = normalize(uCamLocal - vLocalPos);', // toward camera (V.z = 1 head-on)
       '  float fres = pow(1.0 - clamp(V.z, 0.0, 1.0), 3.0);',
-      '  col = mix(col, uReflect, fres * 0.5);',      // glassy sky reflection at grazing angles
+      '  col = mix(col, uReflect, fres * uReflectAmt);', // glassy sky reflection at grazing angles
       '  col *= uGlass;',                             // overall dark glass tint
       '  gl_FragColor = vec4(col, 1.0);',
       '  #include <fog_fragment>',
@@ -584,9 +598,13 @@
   // along that axis. The virtual room behind it is `w` wide, `h` tall and
   // roughly as deep as the opening, so tall/narrow sash windows get tall/narrow
   // rooms. Square calls (w === h) reproduce the simple cottage window.
-  function makeWindowPane(w, h, dir, offset) {
+  // `override` is an optional per-object appearance.window spec — any of
+  // { tint, darkness, brightness, reflect } it sets wins over the global WINDOW
+  // defaults for this pane (glassRatio is consumed earlier, for geometry).
+  function makeWindowPane(w, h, dir, offset, override) {
     const mesh = new THREE.Mesh(_windowPaneGeo, M.windowInterior);
     mesh.userData.sharedGeometry = true;              // never dispose the shared plane on teardown
+    mesh.userData.winOverride = override || null;     // per-object shader overrides (read each draw)
     mesh.scale.set(w, h, Math.min(w, h));             // unit pane -> opening; z sets room depth scale
     switch (dir) {
       case '-z': mesh.rotation.y = Math.PI;      mesh.position.z = -offset; break;
@@ -616,6 +634,16 @@
         lit = this.userData.__wiLit = f < 0.32 ? 0.35 + 1.6 * f : 0.0;
       }
       u.uLit.value = lit;
+
+      // Resolve shader appearance: per-object override (if any) over global WINDOW.
+      const o = this.userData.winOverride;
+      const tint     = (o && typeof o.tint === 'number')       ? o.tint       : WINDOW.tint;
+      const darkness = (o && typeof o.darkness === 'number')   ? o.darkness   : WINDOW.darkness;
+      const bright   = (o && typeof o.brightness === 'number') ? o.brightness : WINDOW.brightness;
+      const reflect  = (o && typeof o.reflect === 'number')    ? o.reflect    : WINDOW.reflect;
+      u.uGlass.value.setHex(tint).multiplyScalar(1.0 - Math.max(0, Math.min(1, darkness)));
+      u.uInteriorBright.value = bright;
+      u.uReflectAmt.value = reflect;
     };
   }
 
