@@ -626,6 +626,7 @@
         repaintAfterTextureLoad();
       }, undefined, err => {
         if (opts.warn !== false) console.warn('[model-stamp] texture failed', url, err);
+        if (typeof opts.onError === 'function') { try { opts.onError(err); } catch (_) {} }
       });
       tex.flipY = opts.flipY !== false;
       tex.encoding = THREE.sRGBEncoding;
@@ -813,9 +814,13 @@
   function modelStampMaterialNeedsTinyWorldLighting(material) {
     if (!material || !material.isMaterial) return false;
     if (material.userData && material.userData.modelStampTinyWorldLit) return false;
-    if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial) return true;
+    // FBX defaults to MeshPhongMaterial, which washes out (often to white) under
+    // TinyWorld's tuned exposure — the same reason GLB's PBR materials are
+    // re-lit. Convert Phong to the TinyWorld Lambert material too, preserving
+    // its diffuse colour and texture map.
+    if (material.isMeshStandardMaterial || material.isMeshPhysicalMaterial || material.isMeshPhongMaterial) return true;
     const type = String(material.type || '');
-    return /Mesh(Standard|Physical)Material/.test(type) || material.metalness !== undefined || material.roughness !== undefined;
+    return /Mesh(Standard|Physical|Phong)Material/.test(type) || material.metalness !== undefined || material.roughness !== undefined || material.shininess !== undefined;
   }
 
   function createTinyWorldLitModelStampMaterial(source) {
@@ -1184,10 +1189,27 @@
         transparent: def.opacity < 0.999,
         opacity: def.opacity,
       };
-      if (def.map) params.map = loadModelStampTexture(asset, def.map, { baseUrl, flipY: true, modelStampId: asset && asset.id });
       const mat = new THREE.MeshLambertMaterial(params);
       mat.name = def.name;
       mat.userData.modelStampHydrated = def.map ? 'mtl texture' : 'mtl color';
+      if (def.map) {
+        const tex = loadModelStampTexture(asset, def.map, {
+          baseUrl,
+          flipY: true,
+          modelStampId: asset && asset.id,
+          // OBJ files are frequently shared without their referenced images. When
+          // the map_Kd texture can't be loaded, drop back to the material's Kd
+          // diffuse colour instead of leaving it forced to solid white.
+          onError() {
+            mat.map = null;
+            mat.color.setHex(def.color);
+            mat.userData.modelStampHydrated = 'mtl color (texture missing)';
+            mat.needsUpdate = true;
+            if (asset && asset.id) scheduleModelStampRefresh(asset.id);
+          },
+        });
+        if (tex) mat.map = tex;
+      }
       prepareModelStampTextureMaterial(mat);
       out[def.name] = mat;
     });
@@ -1407,7 +1429,14 @@
         try {
           const group = new THREE.Group();
           (chunks || []).forEach(chunk => {
-            try { group.add(new THREE.VOXMesh(chunk)); } catch (_) {}
+            try {
+              const voxMesh = new THREE.VOXMesh(chunk);
+              // VOXMesh's constructor requires a chunk, so it is NOT clone-safe:
+              // THREE's clone() calls `new VOXMesh()` with no args, which throws.
+              // Placing a stamp clones the cached scene, so re-wrap the generated
+              // geometry + material in a plain Mesh that clones cleanly.
+              group.add(new THREE.Mesh(voxMesh.geometry, voxMesh.material));
+            } catch (_) {}
           });
           if (!group.children.length) throw new Error('VOX file has no voxels');
           // VOX meshes already carry per-voxel vertex colours from the file's
