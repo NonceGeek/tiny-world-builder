@@ -14,6 +14,28 @@
     return voxelBuildMaterialCache.get(key);
   }
 
+  // Lift/rocket engines hang in the island's shadow, but their Lambert materials
+  // still catch full ambient + sky light, so they read far too bright against the
+  // dark underside (they look freshly minted instead of "in shadow"). Multiply
+  // every engine palette colour toward black to fake the ambient occlusion the
+  // geometry above would cast — a "used-universe" shaded look. 1 = untouched,
+  // lower = darker. Tune here to taste.
+  const UNDER_ISLAND_ENGINE_SHADE = 0.45;
+  function shadeEngineHex(hex, factor = UNDER_ISLAND_ENGINE_SHADE) {
+    const clean = normalizeHexColor(hex) || '#ffffff';
+    const n = parseInt(clean.slice(1), 16);
+    const r = Math.round(Math.max(0, Math.min(255, ((n >> 16) & 255) * factor)));
+    const g = Math.round(Math.max(0, Math.min(255, ((n >> 8) & 255) * factor)));
+    const b = Math.round(Math.max(0, Math.min(255, (n & 255) * factor)));
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  }
+  // Same cached MeshLambertMaterial pipeline as voxelBuildMaterial, but with the
+  // under-island shade pre-applied to the colour. Darkened colours cache under
+  // their own key, so engines still merge by material.
+  function engineBuildMaterial(hex, textureKind = null) {
+    return voxelBuildMaterial(shadeEngineHex(hex), textureKind);
+  }
+
   function voxelFallbackColorForMaterialName(name) {
     const key = String(name || '').trim().toLowerCase();
     const direct = normalizeHexColor(key);
@@ -691,22 +713,30 @@
   // A window is built as one positioned sub-group (boxes relative to it) so it
   // can be hovered/selected/moved as a single sub-object part. World positions
   // are identical to the old flat layout (group at the anchor, boxes relative).
-  function voxelWindow(parent, x, y, z, face = 'z', mat = M.windowB) {
+  function voxelWindow(parent, x, y, z, face = 'z') {
     // Boxes keep their ABSOLUTE positions inside a group that stays at the
     // origin — relative-0 coords would hit vbox's `y || h/2` default and shove
     // the window upward. The group's own position is the sub-object move handle.
+    // The glass itself is an interior-mapped pane (a fake recessed room), the
+    // same treatment as the classic house windows.
     const w = new THREE.Group();
     w.userData.windowFace = face;
+    const R = windowGlassRatio();
+    const gw = 0.17 * R, gh = 0.19 * R;               // glass span; rest of the frame is wood border
     if (face === 'x') {
-      vbox(w, 0.034, 0.19, 0.17, x, y, z, M.woodTrim);
-      vbox(w, 0.038, 0.135, 0.120, x + Math.sign(x || 1) * 0.004, y, z, mat);
-      vbox(w, 0.042, 0.016, 0.120, x + Math.sign(x || 1) * 0.008, y, z, M.woodTrim);
-      vbox(w, 0.042, 0.135, 0.014, x + Math.sign(x || 1) * 0.009, y, z, M.woodTrim);
+      const sx = Math.sign(x || 1);
+      vbox(w, 0.034, 0.19, 0.17, x, y, z, M.woodTrim, { noBevel: true });  // frame (noBevel: bevel would inflate it over the glass)
+      const pane = makeWindowPane(gw, gh, sx > 0 ? '+x' : '-x', 0.02);  // interior glass
+      pane.position.set(x + sx * 0.02, y, z); w.add(pane);
+      vbox(w, 0.042, 0.016, gw, x + sx * 0.024, y, z, M.woodTrim, { noBevel: true });  // muntins, proud of the glass
+      vbox(w, 0.042, gh, 0.014, x + sx * 0.024, y, z, M.woodTrim, { noBevel: true });
     } else {
-      vbox(w, 0.17, 0.19, 0.034, x, y, z, M.woodTrim);
-      vbox(w, 0.120, 0.135, 0.038, x, y, z + Math.sign(z || 1) * 0.004, mat);
-      vbox(w, 0.120, 0.016, 0.042, x, y, z + Math.sign(z || 1) * 0.008, M.woodTrim);
-      vbox(w, 0.014, 0.135, 0.042, x, y, z + Math.sign(z || 1) * 0.009, M.woodTrim);
+      const sz = Math.sign(z || 1);
+      vbox(w, 0.17, 0.19, 0.034, x, y, z, M.woodTrim, { noBevel: true });
+      const pane = makeWindowPane(gw, gh, sz > 0 ? '+z' : '-z', 0.02);
+      pane.position.set(x, y, z + sz * 0.02); w.add(pane);
+      vbox(w, gw, 0.016, 0.042, x, y, z + sz * 0.024, M.woodTrim, { noBevel: true });
+      vbox(w, 0.014, gh, 0.042, x, y, z + sz * 0.024, M.woodTrim, { noBevel: true });
     }
     parent.add(w);
     return w;
@@ -1130,14 +1160,14 @@
     root.add(engine);
     const body = new THREE.Group();
     engine.add(body);
-    const liftStone = voxelBuildMaterial('#6f6a60', 'stone');
-    const liftStoneHi = voxelBuildMaterial('#8b8478', 'stone');
-    const liftSteel = voxelBuildMaterial('#4b5660', 'pipe-metal');
-    const liftSteelD = voxelBuildMaterial('#252d34', 'pipe-metal');
-    const liftWood = voxelBuildMaterial('#6a4a2f', 'wood');
-    const liftWoodD = voxelBuildMaterial('#3d2918', 'wood');
-    const liftLabel = voxelBuildMaterial('#a89d85', 'planks');
-    const liftHeat = voxelBuildMaterial('#432018', 'noise');
+    const liftStone = engineBuildMaterial('#6f6a60', 'stone');
+    const liftStoneHi = engineBuildMaterial('#8b8478', 'stone');
+    const liftSteel = engineBuildMaterial('#4b5660', 'pipe-metal');
+    const liftSteelD = engineBuildMaterial('#252d34', 'pipe-metal');
+    const liftWood = engineBuildMaterial('#6a4a2f', 'wood');
+    const liftWoodD = engineBuildMaterial('#3d2918', 'wood');
+    const liftLabel = engineBuildMaterial('#a89d85', 'planks');
+    const liftHeat = engineBuildMaterial('#432018', 'noise');
 
     function sourceCube(parent, x, y, z, sx = 1, sy = 1, sz = 1, mat = liftStone) {
       return vbox(parent, sx, sy, sz, x, y, z, mat, { noGap: true });

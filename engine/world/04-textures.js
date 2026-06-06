@@ -408,13 +408,13 @@
       ctx.fillRect(Math.floor(scale * 0.18), Math.floor(scale * 0.12), Math.floor(scale * 0.12), Math.floor(scale * 0.72));
       ctx.fillRect(Math.floor(scale * 0.55), Math.floor(scale * 0.10), Math.floor(scale * 0.06), Math.floor(scale * 0.72));
     } else if (type === 'grass-side') {
-      ctx.fillStyle = '#6ea033';
+      ctx.fillStyle = '#618e2c';
       ctx.fillRect(0, 0, scale, scale);
       const block = Math.max(42, Math.floor(scale / 1.5));
       for (let y = 0; y < scale + block; y += block) {
         for (let x = 0; x < scale; x += block) {
           const r = rand();
-          ctx.fillStyle = r > 0.68 ? '#a9d251' : (r > 0.30 ? '#84b63b' : '#66952e');
+          ctx.fillStyle = r > 0.68 ? '#93bf45' : (r > 0.30 ? '#76a533' : '#5b8628');
           tileRect(x + 1, y + 1, block - 2, block - 2);
           ctx.fillStyle = 'rgba(255,255,150,0.18)';
           tileRect(x + 2, y + 2, block - 4, 2);
@@ -429,13 +429,13 @@
         ctx.fillRect(x, y, 2, 2 + Math.floor(rand() * 2));
       }
     } else if (type === 'grass-voxel') {
-      ctx.fillStyle = '#86b94a';
+      ctx.fillStyle = '#78ab3c';
       ctx.fillRect(0, 0, scale, scale);
       const chip = Math.max(26, Math.floor(scale / 2.4));
       for (let y = 0; y < scale; y += chip) {
         for (let x = 0; x < scale; x += chip) {
           const r = rand();
-          ctx.fillStyle = r > 0.70 ? '#b6d866' : (r > 0.34 ? '#8eb84d' : '#6f9d38');
+          ctx.fillStyle = r > 0.70 ? '#9ec24f' : (r > 0.34 ? '#80aa3f' : '#629032');
           ctx.fillRect(x, y, chip, chip);
         }
       }
@@ -2089,12 +2089,16 @@
       ? null
       : (value.objectScale !== undefined ? value.objectScale : value.scale);
     const objectScaleNumber = rawScale === null ? NaN : Number(rawScale);
+    // Generous upper cap — let people build giants. This is the master clamp:
+    // every appearance write flows through here, so the radial Size button and
+    // the inspector slider both honor it. Keep in sync with the limits in
+    // 21-object-transform-voxel-build.js and the inspector slider in 28.
     const objectScale = Number.isFinite(objectScaleNumber)
-      ? Math.max(0.2, Math.min(4, objectScaleNumber))
+      ? Math.max(0.2, Math.min(24, objectScaleNumber))
       : null;
     const axisScale = raw => {
       const n = Number(raw);
-      return Number.isFinite(n) ? Math.max(0.15, Math.min(5, n)) : null;
+      return Number.isFinite(n) ? Math.max(0.15, Math.min(24, n)) : null;
     };
     const scaleX = axisScale(value.scaleX !== undefined ? value.scaleX : value.objectScaleX);
     const scaleY = axisScale(value.scaleY !== undefined ? value.scaleY : value.objectScaleY);
@@ -2134,6 +2138,25 @@
           range: lr === null ? 6 : +lr.toFixed(3),
         };
       }
+    }
+    // Per-object window glass overrides: any of glassRatio (geometry — bigger
+    // glass / thinner wood), tint (hex), darkness, brightness, reflect. Only the
+    // keys the caller actually set are kept; missing ones fall back to the global
+    // WINDOW defaults at build/draw time.
+    let win = null;
+    if (value.window && typeof value.window === 'object') {
+      const w = {};
+      const gr = clampNum(value.window.glassRatio, 0.3, 1);
+      if (gr !== null) w.glassRatio = +gr.toFixed(3);
+      const tint = normalizeHexColor(value.window.tint);
+      if (tint) w.tint = tint;
+      const dk = clampNum(value.window.darkness, 0, 1);
+      if (dk !== null) w.darkness = +dk.toFixed(3);
+      const br = clampNum(value.window.brightness, 0, 3);
+      if (br !== null) w.brightness = +br.toFixed(3);
+      const rf = clampNum(value.window.reflect, 0, 1);
+      if (rf !== null) w.reflect = +rf.toFixed(3);
+      if (Object.keys(w).length) win = w;
     }
     // Per-part overrides (sub-object editing, req 9): map of stable partKey →
     // { ox,oy,oz, sx,sy,sz, rx,ry,rz } (offset, scale, rotation). Keys are
@@ -2215,6 +2238,7 @@
     if (opacity !== null && opacity < 0.999) out.opacity = +opacity.toFixed(3);
     if (finish && finish !== 'matte') out.finish = finish;
     if (light) out.light = light;
+    if (win) out.window = win;
     if (parts) out.parts = parts;
     if (voxelsRemoved) out.voxelsRemoved = voxelsRemoved;
     if (voxelsAdded) out.voxelsAdded = voxelsAdded;
@@ -2285,12 +2309,12 @@
 
   const SEASON_FOLIAGE = {
     spring: {
-      grass: 0xa7cf58, grass2: 0x7fb03d, leaves: 0x86d139, leavesDk: 0x5fab26,
+      grass: 0x79a838, grass2: 0x5c8a2b, leaves: 0x5f9e28, leavesDk: 0x47781c,
       cropLeaf: 0x96d943, cropStem: 0x5e9c2e, cornStalk: 0x6fa848, cornLeaf: 0xa8c948,
       pumpkinStem: 0x4d6a18, sunflowerStalk: 0x4d8a2a, rockMoss: 0x6f8a3a,
     },
     summer: {
-      grass: 0x9ec74b, grass2: 0x78a83b, leaves: 0x86d139, leavesDk: 0x5fab26,
+      grass: 0x6f9e30, grass2: 0x547a26, leaves: 0x5f9e28, leavesDk: 0x47781c,
       cropLeaf: 0x96d943, cropStem: 0x5e9c2e, cornStalk: 0x6fa848, cornLeaf: 0xa8c948,
       pumpkinStem: 0x4d6a18, sunflowerStalk: 0x4d8a2a, rockMoss: 0x6f8a3a,
     },

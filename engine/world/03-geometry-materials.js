@@ -220,9 +220,9 @@
   })();
 
   const M = {
-    grass:     new THREE.MeshLambertMaterial({ color: 0xb0d949, side: THREE.FrontSide }),
-    grassEdge: new THREE.MeshLambertMaterial({ color: 0x95c138, side: THREE.FrontSide }),
-    grassHi:   new THREE.MeshLambertMaterial({ color: 0xc6ee68, side: THREE.FrontSide }),
+    grass:     new THREE.MeshLambertMaterial({ color: 0x6f9e30, side: THREE.FrontSide }),
+    grassEdge: new THREE.MeshLambertMaterial({ color: 0x5c8a2b, side: THREE.FrontSide }),
+    grassHi:   new THREE.MeshLambertMaterial({ color: 0x7eab38, side: THREE.FrontSide }),
     grassFlower: new THREE.MeshLambertMaterial({ color: 0xf2c849, side: THREE.FrontSide }),
     dirt:      new THREE.MeshLambertMaterial({ color: 0x7d4519, side: THREE.FrontSide }),
     dirtRich:  new THREE.MeshLambertMaterial({ color: 0x462b15, side: THREE.FrontSide }),
@@ -259,8 +259,8 @@
     bridgeWoodD: new THREE.MeshLambertMaterial({ color: 0x5f3a20 }),
 
     trunk:     new THREE.MeshLambertMaterial({ color: 0x5c3818 }),
-    leaves:    new THREE.MeshLambertMaterial({ color: 0x86d139 }),
-    leavesDk:  new THREE.MeshLambertMaterial({ color: 0x5fab26 }),
+    leaves:    new THREE.MeshLambertMaterial({ color: 0x5f9e28 }),
+    leavesDk:  new THREE.MeshLambertMaterial({ color: 0x47781c }),
 
     wallCream: new THREE.MeshLambertMaterial({ color: 0xf2dfb0 }),
     wallTrim:  new THREE.MeshLambertMaterial({ color: 0xe5cf99 }),
@@ -269,8 +269,11 @@
     boardSide:  new THREE.MeshLambertMaterial({ color: 0x8b8d88, side: THREE.FrontSide }),
     islandUnder:  new THREE.MeshLambertMaterial({ color: 0x34373b, side: THREE.DoubleSide }),
     islandUnderD: new THREE.MeshLambertMaterial({ color: 0x202327, side: THREE.DoubleSide }),
-    rocketSteel:  new THREE.MeshLambertMaterial({ color: 0x767d86, side: THREE.FrontSide }),
-    rocketSteelD: new THREE.MeshLambertMaterial({ color: 0x2f353c, side: THREE.FrontSide }),
+    // Darkened (~0.45x) so the heavy/rocket engine reads as shaded under the
+    // island instead of brightly lit — parity with the lift engine's under-island
+    // shade (engine/world/09b UNDER_ISLAND_ENGINE_SHADE). Rocket-only materials.
+    rocketSteel:  new THREE.MeshLambertMaterial({ color: 0x35383c, side: THREE.FrontSide }),
+    rocketSteelD: new THREE.MeshLambertMaterial({ color: 0x15181b, side: THREE.FrontSide }),
     utilityPipe:  new THREE.MeshLambertMaterial({ color: 0x6f7881, side: THREE.FrontSide }),
     utilityPipeD: new THREE.MeshLambertMaterial({ color: 0x343a40, side: THREE.FrontSide }),
     utilityCable: new THREE.MeshLambertMaterial({ color: 0x171b20, side: THREE.FrontSide }),
@@ -479,6 +482,223 @@
     hover:     new THREE.MeshBasicMaterial({ color: 0x2a2722, transparent: true, opacity: 0.18, depthWrite: false }),
     hoverErase:new THREE.MeshBasicMaterial({ color: 0xb84838, transparent: true, opacity: 0.28, depthWrite: false }),
   };
+
+  // -------- fake-interior window glass (interior mapping) --------
+  // A flat pane sits at the window opening, but its fragment shader raycasts a
+  // VIRTUAL room box that lives behind the glass (the "cube … inside the window
+  // housing"). Because the depth is computed per-pixel from the camera's
+  // position in the pane's own local space, the room shifts with correct
+  // parallax as you orbit — so looking through the window reads as looking into
+  // a recessed room, without needing to punch a hole in the (opaque) wall.
+  //
+  // The pane is a unit PlaneGeometry facing +z; callers scale it to the opening
+  // size and rotate it so +z points out of the wall. attachWindowInterior()
+  // feeds the per-mesh camera-in-local-space uniform on every draw, so a single
+  // shared material can back every window in the scene.
+  const _windowPaneGeo = new THREE.PlaneGeometry(1, 1);
+  // Shared across every window in the scene — never dispose it when a single
+  // house is torn down (safeDisposeGeometry honours this flag, like the cached
+  // box geometries the frames/trims use).
+  _windowPaneGeo.userData.cached = true;
+
+  // Window appearance config — global defaults for both the classic house
+  // primitives (07) and the voxel buildings (09b). A per-object appearance may
+  // override any of these (see appearance.window / makeWindowPane). Exposed on
+  // window.* so a UI setting can drive the globals and trigger a rebuild.
+  //   glassRatio  fraction of the frame that is glass (rest is wood border);
+  //               larger = bigger glass / thinner wood. Affects GEOMETRY, so a
+  //               change needs a rebuild.
+  //   tint        glass colour (hex). darkness 0..1 darkens it toward black.
+  //   brightness  interior light scale (how visible the fake room is).
+  //   reflect     sky reflection strength at grazing angles, 0..1.
+  // tint/darkness/brightness/reflect are shader-only, so they update live.
+  const WINDOW = { glassRatio: 0.86, tint: 0xc4d6ea, darkness: 0.12, brightness: 1.0, reflect: 0.5 };
+  if (typeof window !== 'undefined') window.__tinyworldWindow = WINDOW;
+
+  // Build-scoped per-object override (an appearance.window spec). renderCellObject
+  // (17) sets this around an object's build so the deep window builders pick up
+  // the editing object's overrides without threading it through every call site;
+  // it is cleared after each render. undefined override args fall back to it.
+  let _activeWindowOverride = null;
+  function setActiveWindowOverride(o) { _activeWindowOverride = o || null; }
+
+  // Resolve the effective glass ratio for an optional per-object override
+  // (defaults to the active build override, then the global WINDOW default).
+  function windowGlassRatio(override) {
+    const o = (override === undefined) ? _activeWindowOverride : override;
+    const r = o && o.glassRatio;
+    return (typeof r === 'number') ? r : WINDOW.glassRatio;
+  }
+  const _wiPos = new THREE.Vector3();
+
+  M.windowInterior = new THREE.ShaderMaterial({
+    // Opaque pane (no transparency sorting); only the outward face is drawn.
+    side: THREE.FrontSide,
+    fog: true,                                        // honour scene.fog like the standard materials
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uDepth:    { value: 1.0 },                     // room depth, in opening-widths (shallower reads better from above)
+        uWall:     { value: new THREE.Color(0x44505f) },// cool, glassy interior (not warm wood)
+        uFloor:    { value: new THREE.Color(0x3c4654) },
+        uCeil:     { value: new THREE.Color(0x2f3742) },
+        uBack:     { value: new THREE.Color(0x5a6a82) },
+        uLightCol: { value: new THREE.Color(0xffcf94) },// warm lamp accent (mostly on "lit" windows)
+        uReflect:  { value: new THREE.Color(0x9fc2dd) },// sky tint for glass fresnel
+        uGlass:    { value: new THREE.Color(0.78, 0.84, 0.92) }, // tint*(1-darkness), set per-mesh
+        uReflectAmt:    { value: 0.5 },                // sky reflection strength, set per-mesh
+        uInteriorBright:{ value: 1.0 },                // interior light scale, set per-mesh
+        uLit:      { value: 0.0 },                     // EXTRA interior light strength (per-mesh)
+      },
+    ]),
+    vertexShader: [
+      '#include <fog_pars_vertex>',
+      'varying vec3 vLocalPos;',
+      'varying vec3 vRayLocal;',
+      'void main() {',
+      '  vLocalPos = position;',                     // unit pane: xy in [-0.5,0.5], z = 0
+      // The interior-mapping ray MUST match the projection. Under perspective the
+      // rays diverge from the eye; under the editor's default ORTHOGRAPHIC camera
+      // they are parallel (the camera forward). projectionMatrix[2].w is -1 for
+      // perspective, 0 for orthographic — use it to pick the right ray so the
+      // room reads correctly at the normal (ortho) view, not just up close.
+      '  vec3 ax = modelMatrix[0].xyz, ay = modelMatrix[1].xyz, az = modelMatrix[2].xyz;',
+      '  vec4 wp = modelMatrix * vec4(position, 1.0);',
+      '  bool isOrtho = abs(projectionMatrix[2].w) < 0.5;',
+      '  vec3 camFwd = -normalize(vec3(viewMatrix[0].z, viewMatrix[1].z, viewMatrix[2].z));', // camera -z in world
+      '  vec3 dirWorld = isOrtho ? camFwd : normalize(wp.xyz - cameraPosition);',
+      // Express the world view ray in the pane's local (geometry) basis. Columns
+      // are orthogonal (rotation*scale), so projecting onto each / its squared
+      // length converts a world direction to local without inverse() (WebGL1).
+      '  vRayLocal = vec3(dot(dirWorld, ax) / max(dot(ax, ax), 1e-6),',
+      '                   dot(dirWorld, ay) / max(dot(ay, ay), 1e-6),',
+      '                   dot(dirWorld, az) / max(dot(az, az), 1e-6));',
+      '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
+      '  gl_Position = projectionMatrix * mvPosition;',
+      '  #include <fog_vertex>',
+      '}',
+    ].join('\n'),
+    fragmentShader: [
+      'precision highp float;',
+      '#include <fog_pars_fragment>',
+      'varying vec3 vLocalPos;',
+      'varying vec3 vRayLocal;',
+      'uniform float uDepth;',
+      'uniform vec3 uWall, uFloor, uCeil, uBack, uLightCol, uReflect, uGlass;',
+      'uniform float uLit, uReflectAmt, uInteriorBright;',
+      'void main() {',
+      '  vec3 ro = vLocalPos;',                       // ray origin on the glass plane (z = 0)
+      '  vec3 rd = normalize(vRayLocal);',            // view ray into the room (rd.z < 0 when looking in)
+      '  float rz = min(rd.z, -1e-3);',               // never look "outward"
+      '  float tBack = (-uDepth - ro.z) / rz;',       // back wall at z = -uDepth
+      '  float dx = abs(rd.x) < 1e-4 ? (rd.x < 0.0 ? -1e-4 : 1e-4) : rd.x;',
+      '  float dy = abs(rd.y) < 1e-4 ? (rd.y < 0.0 ? -1e-4 : 1e-4) : rd.y;',
+      '  float tX = ((rd.x > 0.0 ? 0.5 : -0.5) - ro.x) / dx;',   // side walls  x = +/-0.5
+      '  float tY = ((rd.y > 0.0 ? 0.5 : -0.5) - ro.y) / dy;',   // floor/ceil  y = +/-0.5
+      '  tX = tX <= 0.0 ? 1e9 : tX;',
+      '  tY = tY <= 0.0 ? 1e9 : tY;',
+      '  float t = min(tBack, min(tX, tY));',
+      '  vec3 hit = ro + rd * t;',
+      '  float depthN = clamp(-hit.z / uDepth, 0.0, 1.0);',      // 0 at glass, 1 at back wall
+      '  vec3 col;',
+      '  if (t == tBack)      { col = uBack; }',
+      '  else if (t == tX)    { col = uWall; }',
+      '  else                 { col = (hit.y < 0.0) ? uFloor : uCeil; }',
+      '  col *= mix(0.45, 1.2, depthN);',             // strong front-dark -> back-bright gradient = depth read from any angle
+      '  float ld = length(hit.xy);',                 // warm interior light pooled at the back-centre
+      '  float glow = (0.04 + uLit * 0.18) * smoothstep(0.9, 0.0, ld) * smoothstep(0.0, 0.40, depthN);',
+      '  col = (col + uLightCol * glow) * uInteriorBright;',      // fill light (+extra when "lit"), scaled by brightness
+      '  float vz = clamp(-rd.z, 0.0, 1.0);',         // head-on component (rd.z = -1 looking straight in)
+      '  float fres = pow(1.0 - vz, 3.0);',
+      '  col = mix(col, uReflect, fres * uReflectAmt);', // glassy sky reflection at grazing angles
+      '  col *= uGlass;',                             // overall dark glass tint
+      '  gl_FragColor = vec4(col, 1.0);',
+      '  #include <fog_fragment>',
+      '}',
+    ].join('\n'),
+  });
+
+  // Build an interior-mapped glass pane for a `w` x `h` window opening. `dir` is
+  // the outward wall-normal the glass faces — '+z' (gable, default), '-z',
+  // '+x' or '-x'. `offset` is how far the pane sits proud of the frame centre
+  // along that axis. The virtual room behind it is `w` wide, `h` tall and
+  // roughly as deep as the opening, so tall/narrow sash windows get tall/narrow
+  // rooms. Square calls (w === h) reproduce the simple cottage window.
+  // `override` is an optional per-object appearance.window spec — any of
+  // { tint, darkness, brightness, reflect } it sets wins over the global WINDOW
+  // defaults for this pane (glassRatio is consumed earlier, for geometry).
+  function makeWindowPane(w, h, dir, offset, override) {
+    const o = (override === undefined) ? _activeWindowOverride : override;
+    const mesh = new THREE.Mesh(_windowPaneGeo, M.windowInterior);
+    mesh.userData.sharedGeometry = true;              // never dispose the shared plane on teardown
+    mesh.userData.winOverride = o || null;            // per-object shader overrides (read each draw)
+    // Keep each pane its own mesh: the voxel build optimizer batches meshes that
+    // share geometry+material, which would drop the per-pane onBeforeRender that
+    // feeds the interior shader its camera-in-local-space (collapsing the room to
+    // a flat panel). noBatch opts every window pane out of that merge.
+    mesh.userData.noBatch = true;
+    mesh.scale.set(w, h, Math.min(w, h));             // unit pane -> opening; z sets room depth scale
+    switch (dir) {
+      case '-z': mesh.rotation.y = Math.PI;      mesh.position.z = -offset; break;
+      case '+x': mesh.rotation.y =  Math.PI / 2; mesh.position.x =  offset; break;
+      case '-x': mesh.rotation.y = -Math.PI / 2; mesh.position.x = -offset; break;
+      default:   /* '+z' */                      mesh.position.z =  offset; break;
+    }
+    attachWindowInterior(mesh);
+    return mesh;
+  }
+
+  // Per-draw feed for the SHADER APPEARANCE (the camera/parallax is handled in
+  // the vertex shader). Sets the per-mesh "lit" glow and resolves this pane's
+  // appearance (per-object override over the global WINDOW) into the shared
+  // material uniforms right before it draws — fine because panes are noBatch, so
+  // each is its own mesh drawn sequentially.
+  function attachWindowInterior(mesh) {
+    mesh.onBeforeRender = function (renderer, scene, camera) {
+      const u = M.windowInterior.uniforms;
+      let lit = this.userData.__wiLit;
+      if (lit === undefined) {
+        _wiPos.setFromMatrixPosition(this.matrixWorld);
+        const h = Math.abs(Math.sin(_wiPos.x * 12.9898 + _wiPos.y * 4.1414 + _wiPos.z * 78.233) * 43758.5453);
+        const f = h - Math.floor(h);
+        lit = this.userData.__wiLit = f < 0.32 ? 0.35 + 1.6 * f : 0.0;
+      }
+      u.uLit.value = lit;
+
+      // Resolve shader appearance: per-object override (if any) over global WINDOW.
+      // tint may be a number (global default, e.g. 0xc4d6ea) or a '#rrggbb' string
+      // (per-object, from the inspector colour picker).
+      const o = this.userData.winOverride;
+      const tint     = (o && o.tint != null)                   ? o.tint       : WINDOW.tint;
+      const darkness = (o && typeof o.darkness === 'number')   ? o.darkness   : WINDOW.darkness;
+      const bright   = (o && typeof o.brightness === 'number') ? o.brightness : WINDOW.brightness;
+      const reflect  = (o && typeof o.reflect === 'number')    ? o.reflect    : WINDOW.reflect;
+      if (typeof tint === 'string') u.uGlass.value.set(tint); else u.uGlass.value.setHex(tint);
+      u.uGlass.value.multiplyScalar(1.0 - Math.max(0, Math.min(1, darkness)));
+      u.uInteriorBright.value = bright;
+      u.uReflectAmt.value = reflect;
+    };
+  }
+
+  // Return a cached, darkened clone of a Lambert/standard material. Used to make
+  // hardware that hangs in the island's shadow (engines, utility pipes, hanging
+  // dressing cubes) read as occluded instead of brightly lit, without touching
+  // the shared material used on the sunlit top surfaces. Keyed by source material
+  // uuid + factor so darkened meshes still batch/merge by material. 1 = unchanged.
+  const shadedMaterialCache = new Map();
+  function shadeLambertMaterial(mat, factor) {
+    if (!mat || !mat.color || !(factor >= 0) || factor === 1) return mat;
+    const key = mat.uuid + ':' + factor;
+    let out = shadedMaterialCache.get(key);
+    if (!out) {
+      out = mat.clone();
+      out.color.multiplyScalar(factor);
+      if (out.emissive) out.emissive.multiplyScalar(factor);
+      out.userData = Object.assign({}, mat.userData, { underIslandShaded: true });
+      shadedMaterialCache.set(key, out);
+    }
+    return out;
+  }
 
   const islandShellMaterialCache = new Map();
   function syncIslandShellMaterial(baseMat, shellMat) {
