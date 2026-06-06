@@ -51,6 +51,7 @@
     // ---- session state ----
     let editing = false;
     let applied = false;
+    let appliedSnap = null;      // in-memory last-applied { vpt, cellH, mats } for revert
     let gridAtEnter = 8;
     let half = 4;
     let N = 0;
@@ -62,7 +63,7 @@
     let positions = null, colors = null, normals = null;
 
     let surfaceMesh = null, brushRing = null, grabHandle = null, geom = null;
-    let ray = null, drag = null, tmpColor = null;
+    let ray = null, drag = null, tmpColor = null, ndc = null;
 
     // ---- real-material wiring ----
     let useRealMats = false;
@@ -74,7 +75,7 @@
 
     // ---- DOM ----
     let toggleBtn = null, panel = null, builtUI = false;
-    let modeSeg = null, swatchWrap = null, brushInput = null, brushVal = null;
+    let modeSeg = null, resSeg = null, swatchWrap = null, brushInput = null, brushVal = null;
 
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
     function shown() { return !!surfaceMesh; }
@@ -111,6 +112,11 @@
       if (!Array.isArray(d.cellH) || d.cellH.length !== cellH.length) return false;
       if (!Array.isArray(d.mats) || d.mats.length !== mats.length) return false;
       cellH.set(d.cellH); mats.set(d.mats); return true;
+    }
+    // Snapshot the current design in memory as the last-applied state, so Cancel
+    // can revert to it without relying on (or rewriting) localStorage mid-edit.
+    function captureApplied() {
+      appliedSnap = (cellH && mats) ? { vpt, cellH: cellH.slice(), mats: mats.slice() } : null;
     }
 
     // ---- sizing / buffers ----
@@ -371,7 +377,8 @@
     // ---- picking ----
     function pointerNDC(clientX, clientY) {
       const rect = renderer.domElement.getBoundingClientRect();
-      return new THREE.Vector2(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+      if (!ndc) ndc = new THREE.Vector2();
+      return ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     }
     function raycastSurface(clientX, clientY) {
       if (!surfaceMesh) return null;
@@ -483,7 +490,8 @@
         e.stopPropagation();
         try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (_) {}
         drag = null;
-        saveDesign();
+        // No persistence here: edits stay in memory so Cancel can truly discard.
+        // The design is only written to storage on Apply.
       }
     }
     function attachPointer() {
@@ -498,14 +506,14 @@
     }
 
     // ---- hide/show the flat home tiles under the block terrain ----
+    // Only the ground TILE meshes are toggled; placed objects stay visible so
+    // the block terrain replaces the ground without wiping the board.
     function setHomeMeshesVisible(visible) {
       if (typeof cellMeshes !== 'object' || !cellMeshes) return;
       for (let x = 0; x < gridAtEnter; x++) {
         for (let z = 0; z < gridAtEnter; z++) {
           const m = cellMeshes[x + ',' + z];
-          if (!m) continue;
-          if (m.tile) m.tile.visible = visible;
-          if (m.object) m.object.visible = visible;
+          if (m && m.tile) m.tile.visible = visible;
         }
       }
     }
@@ -522,6 +530,7 @@
         const d = readDesign();
         if (d) { applied = !!d.applied; if (!loadDesignInto(d)) applied = false; }
         buildSceneMeshes();
+        if (applied) captureApplied();
       }
       setHomeMeshesVisible(false);
       attachPointer();
@@ -539,29 +548,47 @@
       if (toggleBtn) toggleBtn.setAttribute('aria-pressed', 'false');
     }
     function applyDesign() {
-      applied = true; saveDesign();
+      applied = true;
+      captureApplied();   // remember this as the revert target
+      saveDesign();       // the only place that writes to storage
       setHomeMeshesVisible(false);
       leaveEditOnly(); repaint();
     }
     function cancelEdit() {
-      const d = readDesign();
-      if (d && d.applied && d.gridSize === gridAtEnter && d.vpt === vpt && loadDesignInto(d)) {
-        applied = true; rebuildGeometry(); setHomeMeshesVisible(false); leaveEditOnly();
+      if (appliedSnap) {
+        // revert to the last applied design (kept in memory, so this also
+        // recovers correctly after a resolution change during the edit)
+        if (appliedSnap.vpt !== vpt) {
+          vpt = appliedSnap.vpt; savePrefs();
+          if (resSeg) syncSeg(resSeg, () => vpt);
+          recomputeDims(); allocBuffers();
+          cellH.set(appliedSnap.cellH); mats.set(appliedSnap.mats);
+          if (shown()) { disposeMeshes(); buildSceneMeshes(); }
+        } else {
+          cellH.set(appliedSnap.cellH); mats.set(appliedSnap.mats);
+          rebuildGeometry();
+        }
+        applied = true;
+        setHomeMeshesVisible(false);
+        leaveEditOnly();
       } else {
+        // nothing was ever applied -> discard the session entirely and make
+        // sure no uncommitted draft is left in storage
         leaveEditOnly(); disposeMeshes();
         cellH = mats = positions = colors = normals = null;
-        setHomeMeshesVisible(true); applied = false;
+        setHomeMeshesVisible(true); applied = false; clearDesign();
       }
       repaint();
     }
     function removeDesign() {
       leaveEditOnly(); disposeMeshes();
       cellH = mats = positions = colors = normals = null;
-      setHomeMeshesVisible(true); applied = false; clearDesign(); repaint();
+      setHomeMeshesVisible(true); applied = false; appliedSnap = null; clearDesign(); repaint();
     }
     function flatten() {
       if (!cellH) return;
-      cellH.fill(0); mats.fill(0); rebuildGeometry(); saveDesign();
+      // in-memory only; persisted on Apply
+      cellH.fill(0); mats.fill(0); rebuildGeometry();
     }
 
     function changeResolution(newVpt) {
@@ -580,7 +607,7 @@
         }
       }
       if (wasShown) { disposeMeshes(); buildSceneMeshes(); }
-      saveDesign(); repaint();
+      repaint(); // in-memory only; persisted on Apply
     }
 
     function restoreApplied() {
@@ -593,6 +620,7 @@
       if (!loadDesignInto(d)) return;
       applied = true;
       buildSceneMeshes();
+      captureApplied();
       setHomeMeshesVisible(false);
       setTimeout(applyDisplayHiding, 600);
       setTimeout(applyDisplayHiding, 1800);
@@ -678,14 +706,16 @@
       const head = document.createElement('h4');
       head.innerHTML = '<span>Mesh Terrain</span>';
       const close = document.createElement('button');
-      close.type = 'button'; close.className = 'mt-close'; close.textContent = '×'; close.title = 'Close (revert this edit)';
+      close.type = 'button'; close.className = 'mt-close'; close.textContent = '×';
+      close.title = 'Close (revert this edit)'; close.setAttribute('aria-label', 'Close Mesh Terrain (revert this edit)');
       close.addEventListener('click', cancelEdit);
       head.appendChild(close); panel.appendChild(head);
 
       const resRow = document.createElement('div'); resRow.className = 'mt-row';
       const resLab = document.createElement('div'); resLab.className = 'mt-label'; resLab.textContent = 'Voxels / tile';
       resRow.appendChild(resLab);
-      resRow.appendChild(makeSeg(VPT_OPTIONS.map(v => ({ label: v + '²', val: v })), () => vpt, v => changeResolution(v)));
+      resSeg = makeSeg(VPT_OPTIONS.map(v => ({ label: v + '²', val: v })), () => vpt, v => changeResolution(v));
+      resRow.appendChild(resSeg);
       panel.appendChild(resRow);
 
       const modeRow = document.createElement('div'); modeRow.className = 'mt-row';
@@ -699,9 +729,14 @@
       MATERIALS.forEach((m, i) => {
         const b = document.createElement('button');
         b.type = 'button'; b.title = m.label;
+        b.setAttribute('aria-label', 'Paint material: ' + m.label);
+        b.setAttribute('aria-pressed', String(i === paintMatIndex));
         b.style.background = '#' + m.color.toString(16).padStart(6, '0');
         b.classList.toggle('on', i === paintMatIndex);
-        b.addEventListener('click', () => { paintMatIndex = i; savePrefs(); swatchWrap.querySelectorAll('button').forEach((el, k) => el.classList.toggle('on', k === i)); });
+        b.addEventListener('click', () => {
+          paintMatIndex = i; savePrefs();
+          swatchWrap.querySelectorAll('button').forEach((el, k) => { el.classList.toggle('on', k === i); el.setAttribute('aria-pressed', String(k === i)); });
+        });
         swatchWrap.appendChild(b);
       });
       swRow.appendChild(swLab); swRow.appendChild(swatchWrap); panel.appendChild(swRow);

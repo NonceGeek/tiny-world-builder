@@ -52,12 +52,19 @@ terrain instead of baking into per-tile `setCell`.
 
 ## Apply keeps blocks — it does NOT bake into world tiles
 
-- `applyDesign()` sets `applied = true`, persists, hides the flat home tiles
-  (`setHomeMeshesVisible(false)`), and leaves the block mesh in the scene. There
+- Persistence is **Apply-only**. Edits (sculpt drags, paint, Flatten, resolution
+  changes) mutate in-memory state and are NOT written to storage; `applyDesign()`
+  is the only writer (`saveDesign()`), and it also snapshots the design in memory
+  (`captureApplied()` -> `appliedSnap`). This is what lets Cancel truly discard.
+- `applyDesign()` sets `applied = true`, snapshots + persists, hides the flat home
+  **tiles** (`setHomeMeshesVisible(false)` toggles only `m.tile`, never `m.object`,
+  so placed objects stay visible), and leaves the block mesh in the scene. There
   is **no** `setCell` bake, so there are no full GRID tiles afterwards.
-- `cancelEdit()` reverts to the last applied snapshot (stays displayed) or, if
-  nothing was committed, disposes the mesh and restores the flat tiles.
-- `removeDesign()` deletes the block terrain and restores the flat tiles.
+- `cancelEdit()` reverts from the in-memory `appliedSnap` (recovering correctly
+  even if the resolution changed mid-edit); if nothing was ever applied it
+  disposes the mesh, restores the flat tiles, and `clearDesign()`s any draft.
+- `removeDesign()` deletes the block terrain, restores the flat tiles, clears
+  `appliedSnap`, and `clearDesign()`s storage.
 - Boot `restoreApplied()` rebuilds an applied design and re-hides home tiles
   (with delayed retries + a `tinyworld:world-changed` listener, because world
   tiles can render slightly after this module boots).
