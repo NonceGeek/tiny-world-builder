@@ -876,6 +876,13 @@
       renderCloudStyle = 'soft';
       renderPlanesEnabled = false;
       if (typeof setPlanesEnabled === 'function') setPlanesEnabled(false);
+      renderEnhancedWater = true;
+      if (typeof refreshWaterShaderMaterials === 'function') refreshWaterShaderMaterials();
+      if (landscapeEngineInstance && landscapeEngineInstance.waterMat
+          && landscapeEngineInstance.waterMat.uniforms
+          && landscapeEngineInstance.waterMat.uniforms.uEnhance) {
+        landscapeEngineInstance.waterMat.uniforms.uEnhance.value = 1.0;
+      }
       renderStarVault = true;
       renderStarVaultStrength = 0.92;
       renderCloudRimLight = 0.78;

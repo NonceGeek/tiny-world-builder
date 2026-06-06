@@ -490,6 +490,19 @@
   }
   enqueueDeferredVisualStartup('home-border-dressing', buildHomeBorder);
 
+  // The island side cap opens where a perimeter cell is water (addIslandSideBacking
+  // reads the live grid). buildHomeBorder only runs at startup/resize, so when a
+  // perimeter cell toggles water at runtime, rebuild it — debounced so a drag of
+  // edits coalesces into a single rebuild.
+  let homeBorderEdgeRefreshTimer = 0;
+  function scheduleHomeBorderEdgeRefresh() {
+    if (homeBorderEdgeRefreshTimer) return;
+    homeBorderEdgeRefreshTimer = setTimeout(() => {
+      homeBorderEdgeRefreshTimer = 0;
+      if (typeof buildHomeBorder === 'function') buildHomeBorder();
+    }, 80);
+  }
+
   // -------- ghost worlds --------
   // Non-editable neighbouring boards. They preview the multiplayer shape of
   // the world without changing the central board's world/cellMeshes contract.

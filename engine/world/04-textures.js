@@ -1117,8 +1117,10 @@
         ${WATER_SHADER_NOISE_GLSL}
         `
       );
+      // Inject before <fog_fragment> (not <dithering_fragment>) so the shimmer
+      // gets fogged with distance instead of bypassing fog/tonemapping.
       shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <dithering_fragment>',
+        '#include <fog_fragment>',
         `
         {
           float twTop = smoothstep(0.45, 0.82, vTwWaterNrm.y);
@@ -1151,7 +1153,7 @@
             gl_FragColor.rgb += addCol * twTop;
           }
         }
-        #include <dithering_fragment>
+        #include <fog_fragment>
         `
       );
     };

@@ -83,11 +83,9 @@
       document.body.classList.toggle('hide-groups', !show);
       if (checkbox) {
         checkbox.checked = show;
-        // The toggle is forced on (and disabled) while on a small screen.
-        const forced = isSmallScreenForGroups();
-        checkbox.disabled = forced;
-        const row = checkbox.closest('label, .gen-check, .render-row');
-        if (row) row.title = forced ? 'Always on for small screens' : '';
+        // Forced on (and disabled) on small screens, where the floating
+        // all-blocks palette is unusable.
+        checkbox.disabled = isSmallScreenForGroups();
       }
       if (show) {
         palette.hidden = true;
