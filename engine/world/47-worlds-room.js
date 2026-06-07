@@ -1,0 +1,266 @@
+  // Worlds MMO — published-world room client. Connects to the authoritative
+  // PartyKit room ('world-<slug>'), keeps the local mirror of you / peers / nodes /
+  // animals, renders a 2D minimap, and turns input into server-validated move /
+  // harvest requests. The 3D scene shows the world's tiles via applyState().
+  //
+  // Exposes window.__tinyworldWorlds.enterRoom/leaveRoom/harvest + a tiny event
+  // emitter the HUD (48) subscribes to. IIFE-wrapped; no globals leak.
+  (function wireWorldsRoom() {
+    'use strict';
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  
+    const WS = (window.__tinyworldWorlds = window.__tinyworldWorlds || {});
+    function T(k, p) { return typeof window.t === 'function' ? window.t(k, p) : k; }
+    function toast(m) { if (typeof twToast === 'function') twToast(m); else console.log('[worlds]', m); }
+  
+    // ---- tiny event emitter ----
+    const listeners = {};
+    function on(ev, cb) { (listeners[ev] = listeners[ev] || []).push(cb); }
+    function emit(ev, data) { (listeners[ev] || []).forEach(cb => { try { cb(data); } catch (_) {} }); }
+    WS.on = on;
+  
+    // ---- room state ----
+    let socket = null;
+    let world = null;
+    let token = '';
+    let role = 'observe';
+    let gridSize = 8;
+    let taxPercent = null;
+    let you = { x: 0, z: 0, hearts: 10, role: 'observe' };
+    let myId = '';
+    const peers = new Map();
+    let nodes = {};
+    let animals = [];
+    let cells = [];           // tile cells for minimap (from world.data)
+    let connected = false;
+  
+    function host() {
+      const explicit = window.__TINY_WORLD_PARTYKIT_HOST__ || '';
+      const h = String(explicit || '').trim().replace(/\/+$/, '');
+      if (h) return h.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://');
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return 'ws://localhost:1999';
+      return 'wss://tinyworld-shared-building.jasonkneen.partykit.dev';
+    }
+    function connToken() {
+      try {
+        let v = localStorage.getItem('tinyworld:multiplayer:client-id');
+        if (!v) { v = 'u_' + Math.random().toString(36).slice(2, 10); localStorage.setItem('tinyworld:multiplayer:client-id', v); }
+        return v;
+      } catch (_) { return 'u_' + Math.random().toString(36).slice(2, 10); }
+    }
+    function playerName() {
+      try { return (localStorage.getItem('tinyworld:multiplayer:name') || '').slice(0, 48) || 'Player'; } catch (_) { return 'Player'; }
+    }
+  
+    function send(obj) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(obj)); }
+  
+    function enterRoom(w, joinToken, joinRole) {
+      leaveRoom();
+      world = w; token = joinToken || ''; role = joinRole || 'observe';
+      gridSize = w.gridSize || 8; taxPercent = w.taxPercent != null ? w.taxPercent : null;
+      cells = w.data && Array.isArray(w.data.cells) ? w.data.cells : [];
+      if (w.data && typeof applyState === 'function') { try { applyState(w.data); } catch (_) {} }
+      emit('enter', { world: w, role });
+      const roomId = 'world-' + w.slug;
+      const url = host() + '/party/' + encodeURIComponent(roomId) + '?_pk=' + encodeURIComponent(connToken());
+      try { socket = new WebSocket(url); } catch (_) { toast(T('worlds.error')); return; }
+      socket.addEventListener('open', () => { connected = true; send({ type: 'world.join', token, worldId: w.id, name: playerName() }); emit('status', { connected: true }); });
+      socket.addEventListener('close', () => { connected = false; emit('status', { connected: false }); });
+      socket.addEventListener('message', (e) => { const d = safeParse(e.data); if (d) onMessage(d); });
+      bindInput();
+      showMinimap();
+    }
+    WS.enterRoom = enterRoom;
+  
+    function leaveRoom() {
+      if (socket) { try { socket.close(); } catch (_) {} socket = null; }
+      connected = false; peers.clear(); nodes = {}; animals = [];
+      unbindInput(); hideMinimap();
+      emit('leave', {});
+    }
+    WS.leaveRoom = function () {
+      leaveRoom();
+      if (typeof WS.restoreFreeform === 'function') WS.restoreFreeform();
+    };
+  
+    function safeParse(s) { try { return JSON.parse(s); } catch (_) { return null; } }
+  
+    function onMessage(d) {
+      switch (d.type) {
+        case 'welcome': myId = d.id || myId; role = d.role || role; emit('status', { connected: true, role }); break;
+        case 'world.state':
+          gridSize = d.gridSize || gridSize; taxPercent = d.taxPercent != null ? d.taxPercent : taxPercent;
+          you = Object.assign(you, d.you || {});
+          nodes = d.nodes || {}; animals = d.animals || [];
+          peers.clear(); (d.peers || []).forEach(p => { if (p.id) peers.set(p.id, p); });
+          role = (d.you && d.you.role) || role;
+          emit('state', snapshot()); drawMinimap(); break;
+        case 'presence': {
+          const p = d.presence; if (!p || !p.id) break;
+          if (p.id === myId) {
+            // Our own presence echo carries the authoritative position + hearts.
+            if (p.cursor) { you.x = p.cursor.x; you.z = p.cursor.z; }
+            if (p.hearts != null) you.hearts = p.hearts;
+            emit('you', you);
+          } else {
+            peers.set(p.id, p);
+            emit('peers', Array.from(peers.values()));
+          }
+          drawMinimap(); break;
+        }
+        case 'leave': peers.delete(d.id); emit('peers', Array.from(peers.values())); drawMinimap(); break;
+        case 'node.update': if (d.node && d.node.id) { if (d.node.gone) delete nodes[d.node.id]; else nodes[d.node.id] = d.node; emit('nodes', nodes); drawMinimap(); } break;
+        case 'animal.spawn': if (d.animal) { animals.push(d.animal); drawMinimap(); } break;
+        case 'animal.remove': animals = animals.filter(a => a.id !== d.id); drawMinimap(); break;
+        case 'harvest.progress': if (d.hearts != null) { you.hearts = d.hearts; emit('you', you); } emit('progress', d); break;
+        case 'harvest.result':
+          if (d.hearts != null) { you.hearts = d.hearts; emit('you', you); }
+          emit('result', d);
+          // Track local resource counts for the HUD (server is the bank of record).
+          addLocalResource(d.resource, Math.floor((d.harvesterMilli || 0) / 1000));
+          break;
+        case 'harvest.deny': emit('deny', d); break;
+        case 'chat': emit('chat', d); break;
+        case 'chat.typing': emit('typing', d); break;
+        default: break;
+      }
+    }
+  
+    // Local optimistic resource tally (whole units). The authoritative balance is
+    // in Postgres; this just gives the HUD immediate feedback.
+    const localRes = { fish: 0, meat: 0, plants: 0, ore: 0 };
+    function addLocalResource(r, n) { if (localRes[r] != null && n > 0) { localRes[r] += n; emit('resources', Object.assign({}, localRes)); } }
+    WS.getResources = () => Object.assign({}, localRes);
+  
+    function myPresencePos() {
+      // The server tracks our position and broadcasts it in presence.cursor; mirror
+      // it from the latest 'you' we last saw plus presence echoes.
+      return { x: you.x, z: you.z };
+    }
+  
+    function snapshot() {
+      return { world, role, gridSize, taxPercent, you, peers: Array.from(peers.values()), nodes, animals };
+    }
+    WS.getState = snapshot;
+  
+    // ---- movement ----
+    function step(dx, dz) {
+      const nx = Math.max(0, Math.min(gridSize - 1, you.x + dx));
+      const nz = Math.max(0, Math.min(gridSize - 1, you.z + dz));
+      if (nx === you.x && nz === you.z) return;
+      you.x = nx; you.z = nz;       // optimistic; server presence will correct
+      send({ type: 'move', x: nx, z: nz });
+      emit('you', you); drawMinimap();
+    }
+  
+    // ---- harvest ----
+    function nodeKindToAction(type) { return type === 'fish' ? 'fish' : type === 'ore' ? 'mine' : 'gather'; }
+    function reach(a, b) { return Math.abs(a.x - b.x) <= 1 && Math.abs(a.z - b.z) <= 1; }
+    function nodeCellPos(n) { if (!n.cell) return null; const p = n.cell.split(',').map(Number); return { x: p[0], z: p[1] }; }
+  
+    // Find an in-reach node/animal that matches `action` and request a harvest.
+    function harvest(action) {
+      if (role !== 'play') { toast(T('worlds.observing')); return; }
+      if (action === 'hunt') {
+        const a = animals.find(an => reach(you, an));
+        if (!a) { toast(T('worlds.actionHunt') + ' — no animal nearby'); return; }
+        send({ type: 'harvest.start', action: 'hunt', animalId: a.id }); return;
+      }
+      for (const id of Object.keys(nodes)) {
+        const n = nodes[id];
+        if (!n || nodeKindToAction(n.type) !== action) continue;
+        const pos = nodeCellPos(n);
+        if (!pos || !reach(you, pos)) continue;
+        if ((n.charges || 0) < 1 || n.locked) continue;
+        send({ type: 'harvest.start', action, x: pos.x, z: pos.z }); return;
+      }
+      toast('No ' + action + ' node in reach');
+    }
+    WS.harvest = harvest;
+    WS.sendChat = (text) => { const t2 = String(text || '').slice(0, 280).trim(); if (t2) send({ type: 'chat', text: t2 }); };
+  
+    // ---- input ----
+    function onKey(e) {
+      if (!connected) return;
+      const tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      let handled = true;
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') step(0, -1);
+      else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') step(0, 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') step(-1, 0);
+      else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') step(1, 0);
+      else handled = false;
+      if (handled) e.preventDefault();
+    }
+    function bindInput() { window.addEventListener('keydown', onKey); }
+    function unbindInput() { window.removeEventListener('keydown', onKey); }
+  
+    // ---- minimap ----
+    let mapWrap = null, canvas = null, ctx = null;
+    const CELL = 16;
+    function showMinimap() {
+      if (mapWrap) { mapWrap.style.display = 'block'; drawMinimap(); return; }
+      if (!document.getElementById('tw-worlds-map-style')) {
+        const css = '.tw-worlds-map{position:fixed;right:12px;top:64px;z-index:65;background:#0c1424cc;border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:8px}'
+          + '.tw-worlds-map h4{margin:0 0 6px;font:600 11px system-ui;color:#cfe0ff;text-transform:uppercase;letter-spacing:.05em}'
+          + '.tw-worlds-map canvas{display:block;border-radius:6px;cursor:pointer;background:#13243f}';
+        document.head.appendChild(Object.assign(document.createElement('style'), { id: 'tw-worlds-map-style', textContent: css }));
+      }
+      mapWrap = document.createElement('div'); mapWrap.className = 'tw-worlds-map';
+      const h = document.createElement('h4'); h.textContent = T('worlds.minimap');
+      canvas = document.createElement('canvas');
+      canvas.addEventListener('click', onMapClick);
+      mapWrap.appendChild(h); mapWrap.appendChild(canvas);
+      document.body.appendChild(mapWrap);
+      ctx = canvas.getContext('2d');
+      drawMinimap();
+    }
+    function hideMinimap() { if (mapWrap) mapWrap.style.display = 'none'; }
+  
+    function onMapClick(e) {
+      const rect = canvas.getBoundingClientRect();
+      const cx = Math.floor((e.clientX - rect.left) / CELL);
+      const cz = Math.floor((e.clientY - rect.top) / CELL);
+      if (cx < 0 || cz < 0 || cx >= gridSize || cz >= gridSize) return;
+      // One step toward the clicked cell (server enforces single-cell moves).
+      const dx = Math.sign(cx - you.x), dz = Math.sign(cz - you.z);
+      if (dx || dz) step(dx, dz);
+    }
+  
+    function terrainColor(t) {
+      return t === 'water' ? '#2f6fb0' : t === 'stone' ? '#7d8794' : t === 'sand' ? '#cdb98a'
+        : t === 'dirt' ? '#7a5a3a' : t === 'path' ? '#b9a06a' : t === 'lava' ? '#c0431f' : t === 'snow' ? '#e6eef6' : '#3f8f53';
+    }
+    function drawMinimap() {
+      if (!ctx || !canvas) return;
+      canvas.width = gridSize * CELL; canvas.height = gridSize * CELL;
+      ctx.fillStyle = '#13243f'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // base grass
+      ctx.fillStyle = '#3f8f53'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // tiles
+      for (const c of cells) {
+        const x = Array.isArray(c) ? c[0] : c.x, z = Array.isArray(c) ? c[1] : c.z, ter = Array.isArray(c) ? c[2] : c.terrain;
+        if (x == null || z == null || x < 0 || z < 0 || x >= gridSize || z >= gridSize) continue;
+        ctx.fillStyle = terrainColor(ter); ctx.fillRect(x * CELL, z * CELL, CELL, CELL);
+      }
+      // nodes
+      for (const id of Object.keys(nodes)) {
+        const n = nodes[id]; const pos = nodeCellPos(n); if (!pos && n.type !== 'fish') continue;
+        const p = pos || null; if (!p) continue;
+        ctx.fillStyle = n.charges > 0 ? (n.type === 'ore' ? '#d8c150' : '#9fe0ff') : '#555';
+        ctx.beginPath(); ctx.arc(p.x * CELL + CELL / 2, p.z * CELL + CELL / 2, 4, 0, 7); ctx.fill();
+      }
+      // animals
+      ctx.fillStyle = '#f0c0a0';
+      for (const a of animals) { ctx.fillRect(a.x * CELL + 4, a.z * CELL + 4, CELL - 8, CELL - 8); }
+      // peers
+      for (const p of peers.values()) {
+        const pos = p.cursor || p; if (pos.x == null) continue;
+        ctx.fillStyle = p.color || '#ffd166';
+        ctx.beginPath(); ctx.arc(pos.x * CELL + CELL / 2, pos.z * CELL + CELL / 2, 5, 0, 7); ctx.fill();
+      }
+      // you
+      ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f6feb'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(you.x * CELL + CELL / 2, you.z * CELL + CELL / 2, 5, 0, 7); ctx.fill(); ctx.stroke();
+    }
+  })();
