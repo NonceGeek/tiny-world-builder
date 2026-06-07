@@ -45,6 +45,7 @@
     'worlds.chat': '聊天',
     'worlds.noHearts': '体力耗尽 — 会随时间恢复。',
     'worlds.cooldown': '冷却中…',
+    'worlds.serverOld': '该世界的服务器需要最新部署 — 采集和聊天暂不可用。',
 
     'brand.sub': '点击放置 · 拖动旋转 · 捏合或滚动缩放',
     'minimap.fps': '每秒帧数',

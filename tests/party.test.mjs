@@ -16,7 +16,7 @@ import TinyWorldParty, {
   heartsNow, oreRespawnMs, plantRipenMs, nodeActionForCell, deriveWorldState,
   verifyJoinTokenWeb, GROSS_REWARD, HEART_MAX, ACTION_COOLDOWN_MS,
 } from '../party/index.js';
-import { signJoinToken } from '../netlify/functions/lib/worlds.mjs';
+import { signJoinToken, worldPreview } from '../netlify/functions/lib/worlds.mjs';
 
 // ---- mock PartyKit room + connections ----------------------------------
 function makeRoom() {
@@ -472,6 +472,37 @@ test('a node locked by another player blocks a second miner', () => {
   party.handleHarvestStart('p1', { action: 'mine', x: 5, z: 5 });
   party.handleHarvestStart('p2', { action: 'mine', x: 5, z: 5 });
   assert.equal(party.getPlayer('p2').busyNode, null, 'second miner is denied the locked node');
+});
+
+test('worldPreview emits sparse terrain/kind tuples for the card minimap', () => {
+  const p = worldPreview({ cells: [
+    { x: 1, z: 1, terrain: 'water' },
+    { x: 2, z: 2, terrain: 'stone' },
+    { x: 3, z: 3, terrain: 'dirt', kind: 'corn' },
+  ] });
+  assert.deepEqual(p[0], [1, 1, 'water']);
+  assert.deepEqual(p[1], [2, 2, 'stone']);
+  assert.deepEqual(p[2], [3, 3, 'dirt', 'corn'], 'kind preserved for object cells');
+  assert.equal(worldPreview({ cells: [] }).length, 0);
+});
+
+test('open testing mode (no join secret) seeds from client cells and lets a declared player harvest', async () => {
+  const room = makeRoom();
+  room.id = 'world-open';            // env has no WORLDS_JOIN_SECRET => open mode
+  const party = new TinyWorldParty(room);
+  party.onConnect(room.addConn('p1'));
+  await party.onWorldMessage({
+    type: 'world.join', role: 'play', profileId: 7, gridSize: 8,
+    cells: [[5, 5, 'stone'], [1, 1, 'water']],
+  }, { id: 'p1' });
+  assert.equal(party.openMode, true, 'open mode engaged without a secret');
+  const p = party.getPlayer('p1');
+  assert.equal(p.role, 'play', 'declared role honored in open mode');
+  p.x = 5; p.z = 4;
+  const seq = party.handleHarvestStart('p1', { action: 'mine', x: 5, z: 5 });
+  assert.ok(seq, 'harvest starts in open mode');
+  party.resolveHarvest('p1', seq);
+  assert.equal(party.pendingResources.get('7').ore, 3, 'ownerless world => full gross to harvester');
 });
 
 test('movement is one standable cell at a time and locked during a harvest', () => {

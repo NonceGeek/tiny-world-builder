@@ -47,6 +47,28 @@ Netlify (functions) env:
 PartyKit (room) env (`party/index.js` reads `room.env`): `SITE_URL` (the Netlify origin),
 `WORLDS_SERVICE_TOKEN`, and `WORLDS_JOIN_SECRET`.
 
+## Deploying (important)
+
+The Worlds gameplay (movement, harvest, chat, multiplayer) runs on the **PartyKit room
+server**, which is **separate infrastructure from the Netlify site**. A Netlify deploy (or
+deploy preview) does **not** redeploy PartyKit — there is no `partykit deploy` in
+`publish.sh` or CI. So after changing `party/index.js` you must run:
+
+```bash
+npx partykit deploy        # publishes party/index.js to the room server
+```
+
+Until that happens, the client connects to the previous PartyKit build, which has no
+world-room handlers — the 2nd browser lands in a collab lobby and chat/harvest do nothing.
+The client now detects this and shows `worlds.serverOld` ("this world server needs the
+latest deploy").
+
+**Open testing mode:** if `WORLDS_JOIN_SECRET` is *not* set on the room, the room runs in
+open mode — it trusts the client's declared role and seeds nodes from the published world
+data the client sends, so a plain `npx partykit deploy` is fully playable (harvest + chat +
+multiplayer) with **zero env vars**. The durable economy (DB writes) stays disabled in this
+mode; set the secrets below to enable verified play + real resource/tax persistence.
+
 ## Run & test locally
 
 ```bash

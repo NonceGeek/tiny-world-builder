@@ -45,6 +45,7 @@
     'worlds.chat': 'Discuter',
     'worlds.noHearts': 'Plus de cœurs — ils se rechargent avec le temps.',
     'worlds.cooldown': 'Récupération…',
+    'worlds.serverOld': 'Le serveur de ce monde doit être redéployé — récolte et chat indisponibles.',
 
     'brand.sub': 'Touchez pour placer · glissez pour pivoter · pincez ou défilez pour zoomer',
     'minimap.fps': 'Images par seconde',

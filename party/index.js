@@ -455,6 +455,9 @@ export default class TinyWorldParty {
     this.fracTax = new Map();           // ownerId -> { ... } milli remainders
     this.tickArmed = false;
     this.lastTickAt = Date.now();
+    // True once any client joins without a verifiable token (no join secret
+    // configured). In this mode the durable economy is disabled.
+    this.openMode = false;
   }
 
   sendTo(id, obj) {
@@ -929,14 +932,32 @@ export default class TinyWorldParty {
       let role = 'observe';
       let profileId = null;
       const secret = this.env.WORLDS_JOIN_SECRET || this.env.WORLDS_SERVICE_TOKEN || '';
-      const payload = await verifyJoinTokenWeb(data.token, secret);
       const slug = String(this.room.id || '').slice(WORLD_ROOM_PREFIX.length);
-      if (payload && (!payload.slug || payload.slug === slug)) {
-        role = payload.r === 'play' ? 'play' : 'observe';
-        profileId = payload.r === 'play' ? (payload.p || null) : null;
-        if (payload.w) await this.ensureWorldLoaded(payload.w);
-      } else if (data.worldId) {
-        await this.ensureWorldLoaded(data.worldId);
+      if (secret) {
+        // Production: trust ONLY a valid signed join token. Resources flush to the
+        // durable bank, so the role/profile must be cryptographically verified.
+        const payload = await verifyJoinTokenWeb(data.token, secret);
+        if (payload && (!payload.slug || payload.slug === slug)) {
+          role = payload.r === 'play' ? 'play' : 'observe';
+          profileId = payload.r === 'play' ? (payload.p || null) : null;
+          if (payload.w) await this.ensureWorldLoaded(payload.w);
+        }
+        if (!this.worldState && data.worldId) await this.ensureWorldLoaded(data.worldId);
+      } else {
+        // Open testing mode (no WORLDS_JOIN_SECRET configured): trust the client's
+        // declared role so a plain `partykit deploy` is playable with zero env.
+        // No durable economy is engaged here — flushPending() is disabled in this
+        // mode — so a spoofed profile only affects this room's local tallies.
+        this.openMode = true;
+        role = data.role === 'observe' ? 'observe' : 'play';
+        profileId = data.profileId != null ? data.profileId : ('guest:' + id);
+        if (this.siteBase() && data.worldId) await this.ensureWorldLoaded(data.worldId);
+        if (!this.worldState) {
+          this.setWorldStateFromData(
+            { v: 4, gridSize: data.gridSize || 8, cells: Array.isArray(data.cells) ? data.cells : [] },
+            { id: data.worldId, taxPercent: data.taxPercent != null ? data.taxPercent : null, ownerProfileId: data.ownerProfileId != null ? data.ownerProfileId : null },
+          );
+        }
       }
       const seat = this.admitted.get(id) || { role: 'observe', island: null };
       seat.role = role;
@@ -1156,6 +1177,7 @@ export default class TinyWorldParty {
   // Flush whole-unit resource + tax deltas to the durable bank. Cleared only on
   // a 2xx so a transient failure never loses grants.
   async flushPending() {
+    if (this.openMode) return;          // testing mode never touches the durable bank
     if (!this.hasPending()) return;
     const base = this.siteBase();
     const token = this.env.WORLDS_SERVICE_TOKEN || '';

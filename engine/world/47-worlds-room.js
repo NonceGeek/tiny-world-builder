@@ -53,7 +53,24 @@
     }
   
     function send(obj) { if (socket && socket.readyState === 1) socket.send(JSON.stringify(obj)); }
-  
+
+    // Compact [x,z,terrain,kind?] tuples — small enough for the join envelope and
+    // exactly what the server's deriveWorldState() consumes to seed nodes.
+    function compactCells(data) {
+      const out = [];
+      const cs = (data && Array.isArray(data.cells)) ? data.cells : [];
+      for (const c of cs) {
+        const x = Array.isArray(c) ? c[0] : c.x, z = Array.isArray(c) ? c[1] : c.z;
+        if (x == null || z == null) continue;
+        const ter = (Array.isArray(c) ? c[2] : c.terrain) || 'grass';
+        const k = Array.isArray(c) ? c[3] : c.kind;
+        out.push(k ? [x, z, ter, k] : [x, z, ter]);
+        if (out.length >= 1500) break;
+      }
+      return out;
+    }
+
+    let stateTimer = null, sawWorldState = false;
     function enterRoom(w, joinToken, joinRole) {
       leaveRoom();
       world = w; token = joinToken || ''; role = joinRole || 'observe';
@@ -64,7 +81,19 @@
       const roomId = 'world-' + w.slug;
       const url = host() + '/party/' + encodeURIComponent(roomId) + '?_pk=' + encodeURIComponent(connToken());
       try { socket = new WebSocket(url); } catch (_) { toast(T('worlds.error')); return; }
-      socket.addEventListener('open', () => { connected = true; send({ type: 'world.join', token, worldId: w.id, name: playerName() }); emit('status', { connected: true }); });
+      sawWorldState = false;
+      socket.addEventListener('open', () => {
+        connected = true;
+        send({
+          type: 'world.join', token, worldId: w.id, name: playerName(),
+          role, profileId: (WS.myProfileId != null ? WS.myProfileId : null),
+          gridSize, cells: compactCells(w.data), taxPercent: w.taxPercent, ownerProfileId: w.ownerProfileId,
+        });
+        emit('status', { connected: true });
+        // If the room never answers with world.state, it's an un-upgraded server.
+        if (stateTimer) clearTimeout(stateTimer);
+        stateTimer = setTimeout(() => { if (!sawWorldState) toast(T('worlds.serverOld')); }, 4000);
+      });
       socket.addEventListener('close', () => { connected = false; emit('status', { connected: false }); });
       socket.addEventListener('message', (e) => { const d = safeParse(e.data); if (d) onMessage(d); });
       bindInput();
@@ -87,8 +116,13 @@
   
     function onMessage(d) {
       switch (d.type) {
-        case 'welcome': myId = d.id || myId; role = d.role || role; emit('status', { connected: true, role }); break;
+        case 'welcome':
+          myId = d.id || myId; role = d.role || role; emit('status', { connected: true, role });
+          // An upgraded world server flags the welcome; an old collab server does not.
+          if (d.world !== true) { sawWorldState = true; toast(T('worlds.serverOld')); }
+          break;
         case 'world.state':
+          sawWorldState = true;
           gridSize = d.gridSize || gridSize; taxPercent = d.taxPercent != null ? d.taxPercent : taxPercent;
           you = Object.assign(you, d.you || {});
           nodes = d.nodes || {}; animals = d.animals || [];
@@ -231,6 +265,30 @@
       return t === 'water' ? '#2f6fb0' : t === 'stone' ? '#7d8794' : t === 'sand' ? '#cdb98a'
         : t === 'dirt' ? '#7a5a3a' : t === 'path' ? '#b9a06a' : t === 'lava' ? '#c0431f' : t === 'snow' ? '#e6eef6' : '#3f8f53';
     }
+
+    // Shared top-down tile preview (used by the universe cards in 46). Draws the
+    // grass base, terrain tiles, and a small marker for harvestable objects.
+    const PREVIEW_PLANTS = new Set(['crop', 'corn', 'wheat', 'pumpkin', 'carrot', 'sunflower']);
+    function renderPreview(cnv, preview) {
+      if (!cnv || !preview) return;
+      const g = Math.max(1, preview.gridSize || 8);
+      const list = Array.isArray(preview.cells) ? preview.cells : [];
+      const px = cnv.width || 200;
+      const cell = Math.max(2, Math.floor(px / g));
+      cnv.width = cell * g; cnv.height = cell * g;
+      const c2 = cnv.getContext('2d');
+      c2.fillStyle = '#3f8f53'; c2.fillRect(0, 0, cnv.width, cnv.height);
+      const dot = (x, z, color) => { c2.fillStyle = color; c2.beginPath(); c2.arc(x * cell + cell / 2, z * cell + cell / 2, Math.max(1, cell * 0.26), 0, 7); c2.fill(); };
+      for (const c of list) {
+        const x = c[0], z = c[1], ter = c[2], kind = c[3];
+        if (x == null || z == null || x < 0 || z < 0 || x >= g || z >= g) continue;
+        c2.fillStyle = terrainColor(ter); c2.fillRect(x * cell, z * cell, cell, cell);
+        if (kind === 'tree' || kind === 'bush') dot(x, z, '#1f6f3a');
+        else if (PREVIEW_PLANTS.has(kind)) dot(x, z, '#d8e85a');
+        else if (kind === 'cow' || kind === 'sheep') dot(x, z, '#f0c8a8');
+      }
+    }
+    WS.renderPreview = renderPreview;
     function drawMinimap() {
       if (!ctx || !canvas) return;
       canvas.width = gridSize * CELL; canvas.height = gridSize * CELL;

@@ -149,6 +149,24 @@ export async function verifyUsdcTransfer({ signature, recipient, mint, minAmount
   return { ok: false, reason: 'no matching USDC credit to recipient' };
 }
 
+// Compact top-down preview for world cards: sparse [x, z, terrain, kind?] for
+// the non-default cells, capped so the universe list payload stays small. The
+// tuple shape is also what deriveWorldState() consumes, so it can seed a room.
+export function worldPreview(data, max = 1500) {
+  const cells = data && Array.isArray(data.cells) ? data.cells : [];
+  const out = [];
+  for (const c of cells) {
+    const x = Array.isArray(c) ? c[0] : (c && c.x);
+    const z = Array.isArray(c) ? c[1] : (c && c.z);
+    if (x == null || z == null) continue;
+    const terrain = (Array.isArray(c) ? c[2] : (c && c.terrain)) || 'grass';
+    const kind = Array.isArray(c) ? c[3] : (c && c.kind);
+    out.push(kind ? [x, z, terrain, kind] : [x, z, terrain]);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 export function worldDto(row, { includeData = false } = {}) {
   if (!row) return null;
   const out = {

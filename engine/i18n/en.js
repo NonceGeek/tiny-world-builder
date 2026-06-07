@@ -57,6 +57,7 @@
     'worlds.chat': 'Chat',
     'worlds.noHearts': 'Out of hearts — they refill over time.',
     'worlds.cooldown': 'Cooling down…',
+    'worlds.serverOld': 'This world server needs the latest deploy — harvesting and chat are offline.',
 
     // ---- brand / chrome ----
     'brand.sub': 'Tap to place · drag to orbit · pinch or scroll to zoom',

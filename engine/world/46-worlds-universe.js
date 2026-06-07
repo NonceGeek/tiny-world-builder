@@ -54,6 +54,7 @@
   .tw-worlds-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
   .tw-worlds-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;
     padding:14px;display:flex;flex-direction:column;gap:8px}
+  .tw-worlds-prev{width:100%;aspect-ratio:1/1;border-radius:10px;background:#13243f;image-rendering:pixelated;display:block}
   .tw-worlds-card h3{margin:0;font-size:16px;display:flex;justify-content:space-between;align-items:center;gap:8px}
   .tw-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:999px}
   .tw-badge.unclaimed{background:#2b6cff33;color:#9cc0ff}
@@ -138,9 +139,14 @@
         actions.appendChild(el('button', { class: 'tw-btn alt', text: T('worlds.manage'), onclick: () => manageFlow(w) }));
       }
       const title = w.name || (w.kind === 'starter' ? w.slug : T('worlds.statusUnclaimed'));
-      return el('div', { class: 'tw-worlds-card' }, [
+      const prev = el('canvas', { class: 'tw-worlds-prev', width: '220', height: '220' });
+      const card = el('div', { class: 'tw-worlds-card' }, [
+        prev,
         el('h3', {}, [document.createTextNode(title), statusBadge(w.status)]), meta, actions,
       ]);
+      // Top-down minimap-style preview of the world's tiles.
+      if (typeof WS.renderPreview === 'function') WS.renderPreview(prev, w.preview || { gridSize: w.gridSize, cells: [] });
+      return card;
     }
   
     function modal(titleText, bodyNodes, buttons) {
@@ -265,6 +271,7 @@
     async function enterWorld(w) {
       const full = await api('/api/worlds?id=' + w.id, 'GET');
       if (!full || full.error || !full.world) { toast(full && full.error ? full.error : T('worlds.error')); return; }
+      WS.myProfileId = (full.me && full.me.id != null) ? full.me.id : (me && me.id != null ? me.id : null);
       rememberFreeform();
       closeOverlay();
       if (typeof WS.enterRoom === 'function') WS.enterRoom(full.world, full.token || '', full.role || 'observe');

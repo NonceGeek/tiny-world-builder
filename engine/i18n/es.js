@@ -45,6 +45,7 @@
     'worlds.chat': 'Chat',
     'worlds.noHearts': 'Sin corazones: se recargan con el tiempo.',
     'worlds.cooldown': 'Enfriando…',
+    'worlds.serverOld': 'El servidor de este mundo necesita el último despliegue: recolección y chat no disponibles.',
 
     'brand.sub': 'Toca para colocar · arrastra para orbitar · pellizca o desplázate para acercar',
     'minimap.fps': 'Fotogramas por segundo',
