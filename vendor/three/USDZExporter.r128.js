@@ -25,12 +25,17 @@
 
   class USDZExporter {
 
-    async parse( scene ) {
+    async parse( scene, options ) {
 
-      let output = buildHeader();
+      options = options || {};
+      const turntable = options.turntable || null; // { seconds } → bake a looping Y-spin
+
+      let output = buildHeader( turntable );
 
       const materials = {};
       const textures = {};
+
+      let body = '';
 
       scene.traverse( ( object ) => {
 
@@ -48,11 +53,17 @@
           if ( material.metalnessMap !== null ) textures[ material.metalnessMap.uuid ] = material.metalnessMap;
           if ( material.emissiveMap !== null ) textures[ material.emissiveMap.uuid ] = material.emissiveMap;
 
-          output += buildXform( object, buildMesh( geometry, material ) );
+          body += buildXform( object, buildMesh( geometry, material ) );
 
         }
 
       } );
+
+      // Turntable: nest every mesh under one Xform that spins about its local Y
+      // (the diorama is pre-centred on the origin), so AR Quick Look auto-plays a
+      // looping rotation without per-mesh keyframes. Material/texture bindings use
+      // absolute paths, so nesting the meshes does not affect them.
+      output += turntable ? buildTurntableRoot( body, turntable ) : body;
 
       output += buildMaterials( materials );
       output += buildTextures( textures );
@@ -125,8 +136,21 @@
   //
 
   const PRECISION = 7;
+  const TURNTABLE_FPS = 30; // (Local addition to the r128 exporter.)
 
-  function buildHeader() {
+  function turntableFrames( turntable ) {
+
+    const seconds = ( turntable && turntable.seconds ) || 14;
+    return Math.max( 1, Math.round( seconds * TURNTABLE_FPS ) );
+
+  }
+
+  function buildHeader( turntable ) {
+
+    const timing = turntable ? `
+    timeCodesPerSecond = ${ TURNTABLE_FPS }
+    startTimeCode = 0
+    endTimeCode = ${ turntableFrames( turntable ) }` : '';
 
     return `#usda 1.0
 (
@@ -134,8 +158,27 @@
         string creator = "Three.js USDZExporter"
     }
     metersPerUnit = 1
-    upAxis = "Y"
+    upAxis = "Y"${ timing }
 )
+
+`;
+
+  }
+
+  // (Local addition to the r128 exporter.)
+  function buildTurntableRoot( body, turntable ) {
+
+    const frames = turntableFrames( turntable );
+
+    return `def Xform "TurntableRoot"
+{
+    double xformOp:rotateY.timeSamples = {
+        0: 0,
+        ${ frames }: 360,
+    }
+    uniform token[] xformOpOrder = ["xformOp:rotateY"]
+
+${ body }}
 
 `;
 
