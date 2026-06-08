@@ -1,3 +1,19 @@
+  /* Self-hosted pixel display fonts (OFL) for the retro game UI. latin subset. */
+  @font-face {
+    font-family: 'Pixelify Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('fonts/PixelifySans-latin.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'Bitcount Single';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('fonts/BitcountSingle-latin.woff') format('woff');
+  }
+
   :root {
     --bg: #f4ede0;
     --panel: #ffffff;
@@ -447,7 +463,7 @@
     right: auto;
     bottom: auto;
     z-index: 12;
-    display: block;
+    display: none; /* hidden from main view (was: block) */
     line-height: 0;
     border-radius: 8px;
     overflow: hidden;
@@ -2186,13 +2202,18 @@
     align-items: center;
     justify-content: center;
     gap: 1px;
-    font-family: inherit;
-    font-size: 10.5px;
+    font-family: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.02em;
     color: #8d887d;
     font-weight: 700;
     transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.08s;
     flex-shrink: 0;
     padding: 3px 3px 2px;
+  }
+  /* Pixel font across the toolbar chrome (group buttons, shortcut keys, brand title). */
+  .tool-group-btn, .tool kbd, .tool-group-btn > span, .toolbar .brand-title-btn {
+    font-family: 'Pixelify Sans', ui-monospace, 'SF Mono', Menlo, monospace !important;
   }
   .tool:hover {
     background: rgba(255, 255, 255, 0.55);

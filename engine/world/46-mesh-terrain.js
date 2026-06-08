@@ -26,7 +26,17 @@
     const PREF_KEY = 'tinyworld:meshTerrain:prefs:v1';
     const MAX_N = 96;            // hard cap on voxels-per-side across the board
     const VPT_OPTIONS = [4, 6, 8, 10, 12];
-    const FLOATS_PER_VOXEL = 90; // top quad + 4 wall quads, 2 tris each, 3 verts, 3 floats
+    // Worst case per voxel (real-mats path): 1 top + 4 bevel chamfers + 4 bevel
+    // corner fills + 4 grass-band strips + 4 dirt walls = 17 quads * 18 = 306 floats.
+    // 360 leaves headroom; the fixed-stride fallback only writes its first 90 and
+    // leaves the tail zero (degenerate tris = invisible), so the larger slot is safe.
+    const FLOATS_PER_VOXEL = 360;
+    // Top-edge bevel as a FRACTION of voxel spacing (scales with voxel size). Only
+    // applied on EXPOSED edges so flat interiors stay seamless. Set to 0 to disable.
+    const BEVEL = 0.22;
+    // Grass voxels show a band of the grass TOP colour draping down each exposed
+    // side before the dirt riser, like the home-island edge. World units; ~thick.
+    const GRASS_BAND = 0.16;
     const BASE_SKIRT = 0.25;     // how far boundary walls drop below the lowest block
     const MAX_HEIGHT = 40;       // cap on how high a voxel can be pulled
     // Ground level is the floor: voxels cannot be pushed below 0 (no digging
@@ -262,6 +272,22 @@
       return surfaceY + Math.min(0, gmin) - BASE_SKIRT;
     }
 
+    // Board cells the user painted water/stone are SUNKEN features they want kept when
+    // the mesh is on. The mesh floor-clamps to ground (can't dig below it), so rather
+    // than paving them over we (1) keep those home tiles visible (setHomeMeshesVisible)
+    // and (2) skip mesh voxels sitting over them — leaving a hole so the sunken
+    // water/stone shows through. Voxel grid is gridAtEnter * effVpt, aligned to the board.
+    function preserveSunkenTerrain(tr) { return tr === 'water' || tr === 'stone'; }
+    function boardTerrainForVoxel(i, j) {
+      if (typeof world === 'undefined' || !world || !(gridAtEnter > 0) || !(N > 0)) return null;
+      const bx = Math.min(gridAtEnter - 1, Math.max(0, Math.floor(i * gridAtEnter / N)));
+      const bz = Math.min(gridAtEnter - 1, Math.max(0, Math.floor(j * gridAtEnter / N)));
+      const col = world[bx];
+      const cell = col ? col[bz] : null;
+      return cell ? cell.terrain : null;
+    }
+    function voxelIsPreservedSunken(i, j) { return preserveSunkenTerrain(boardTerrainForVoxel(i, j)); }
+
     // Rebuild the block mesh. Real-material path lays voxels out grouped by
     // terrain (tops, then sides) so each group draws with the right shader.
     function rebuildGeometry() {
@@ -269,45 +295,104 @@
       if (!useRealMats) { rebuildVertexColored(baseY); return; }
 
       const present = presentTerrains();
+      const grassT = matIndexById('grass');
       const matList = [];
       const groups = [];
       let fo = 0; // float cursor
+      const cap = positions.length;            // hard ceiling — typed-array OOB writes are silently dropped
+      const bevAbs = Math.min(BEVEL * spacing, spacing * 0.45);
 
-      // tops
+      // Per-voxel geometry scratch (scalars only, no per-voxel allocation — matches the
+      // low-level writer contract). vg() fills these from the heightfield + neighbours.
+      let _topY, _nE, _nW, _nS, _nN, _eE, _eW, _eS, _eN, _bd, _wy, _x0b, _x1b, _z0b, _z1b;
+      function vg(i, j, idx, x0, x1, z0, z1) {
+        _topY = surfaceY + cellH[idx];
+        _nE = (i + 1 < N) ? surfaceY + cellH[idx + 1] : baseY;
+        _nW = (i - 1 >= 0) ? surfaceY + cellH[idx - 1] : baseY;
+        _nS = (j + 1 < N) ? surfaceY + cellH[idx + N] : baseY;
+        _nN = (j - 1 >= 0) ? surfaceY + cellH[idx - N] : baseY;
+        _eE = _topY > _nE + 1e-6; _eW = _topY > _nW + 1e-6;
+        _eS = _topY > _nS + 1e-6; _eN = _topY > _nN + 1e-6;
+        let md = Infinity;
+        if (_eE) md = Math.min(md, _topY - _nE);
+        if (_eW) md = Math.min(md, _topY - _nW);
+        if (_eS) md = Math.min(md, _topY - _nS);
+        if (_eN) md = Math.min(md, _topY - _nN);
+        _bd = isFinite(md) ? Math.min(bevAbs, md * 0.5) : 0; // never eat more than half the shortest exposed drop
+        _wy = _topY - _bd;                                   // wall / chamfer-bottom height
+        // inset the top rect ONLY on exposed edges → flat interiors stay seamless (no quilting)
+        _x0b = x0 + (_eW ? bevAbs : 0); _x1b = x1 - (_eE ? bevAbs : 0);
+        _z0b = z0 + (_eN ? bevAbs : 0); _z1b = z1 - (_eS ? bevAbs : 0);
+      }
+
+      // tops (+ bevel chamfers/corners on EXPOSED edges only)
       for (const t of present) {
         const vStart = fo / 3;
         for (let j = 0; j < N; j++) {
           const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
           for (let i = 0; i < N; i++) {
             const idx = j * N + i; if (mats[idx] !== t) continue;
+            if (voxelIsPreservedSunken(i, j)) continue; // hole over board water/stone
             const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
-            const topY = surfaceY + cellH[idx];
+            vg(i, j, idx, x0, x1, z0, z1);
             const c = matColor(t);
-            quad(fo, x0, topY, z0, x0, topY, z1, x1, topY, z1, x1, topY, z0, 0, 1, 0, c.r, c.g, c.b);
-            fo += 18;
+            if (fo + 18 > cap) break;
+            quad(fo, _x0b, _topY, _z0b, _x0b, _topY, _z1b, _x1b, _topY, _z1b, _x1b, _topY, _z0b, 0, 1, 0, c.r, c.g, c.b); fo += 18;
+            if (_bd > 1e-6) {
+              if (_eE && fo + 18 <= cap) { quad(fo, _x1b, _topY, _z0b, _x1b, _topY, _z1b, x1, _wy, _z1b, x1, _wy, _z0b, 0.7071, 0.7071, 0, c.r, c.g, c.b); fo += 18; }
+              if (_eW && fo + 18 <= cap) { quad(fo, _x0b, _topY, _z1b, _x0b, _topY, _z0b, x0, _wy, _z0b, x0, _wy, _z1b, -0.7071, 0.7071, 0, c.r, c.g, c.b); fo += 18; }
+              if (_eS && fo + 18 <= cap) { quad(fo, _x0b, _topY, _z1b, _x1b, _topY, _z1b, _x1b, _wy, z1, _x0b, _wy, z1, 0, 0.7071, 0.7071, c.r, c.g, c.b); fo += 18; }
+              if (_eN && fo + 18 <= cap) { quad(fo, _x1b, _topY, _z0b, _x0b, _topY, _z0b, _x0b, _wy, z0, _x1b, _wy, z0, 0, 0.7071, -0.7071, c.r, c.g, c.b); fo += 18; }
+              // corner fills where two adjacent edges are exposed (closes the L-notch)
+              if (_eE && _eS && fo + 18 <= cap) { quad(fo, _x1b, _topY, _z1b, x1, _wy, _z1b, x1, _wy, z1, _x1b, _wy, z1, 0.577, 0.577, 0.577, c.r, c.g, c.b); fo += 18; }
+              if (_eW && _eS && fo + 18 <= cap) { quad(fo, _x0b, _topY, _z1b, _x0b, _wy, z1, x0, _wy, z1, x0, _wy, _z1b, -0.577, 0.577, 0.577, c.r, c.g, c.b); fo += 18; }
+              if (_eE && _eN && fo + 18 <= cap) { quad(fo, _x1b, _topY, _z0b, x1, _wy, _z0b, x1, _wy, z0, _x1b, _wy, z0, 0.577, 0.577, -0.577, c.r, c.g, c.b); fo += 18; }
+              if (_eW && _eN && fo + 18 <= cap) { quad(fo, _x0b, _topY, _z0b, _x0b, _wy, z0, x0, _wy, z0, x0, _wy, _z0b, -0.577, 0.577, -0.577, c.r, c.g, c.b); fo += 18; }
+            }
           }
         }
         const count = fo / 3 - vStart;
         if (count > 0) { matList.push(topMatReady(t)); groups.push([vStart, count, matList.length - 1]); }
       }
-      // sides
+      // grass bands: a strip of the grass TOP material draping down each exposed grass
+      // side before the dirt riser (home-island edge look). Grass voxels only.
+      if (grassT >= 0) {
+        const vStart = fo / 3;
+        const c = matColor(grassT);
+        for (let j = 0; j < N; j++) {
+          const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
+          for (let i = 0; i < N; i++) {
+            const idx = j * N + i; if (mats[idx] !== grassT) continue;
+            if (voxelIsPreservedSunken(i, j)) continue; // hole over board water/stone
+            const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
+            vg(i, j, idx, x0, x1, z0, z1);
+            let bb;
+            if (_eE && fo + 18 <= cap) { bb = Math.max(_nE, _wy - GRASS_BAND); if (_wy > bb + 1e-6) { quad(fo, x1, bb, z0, x1, bb, z1, x1, _wy, z1, x1, _wy, z0, 1, 0, 0, c.r, c.g, c.b); fo += 18; } }
+            if (_eW && fo + 18 <= cap) { bb = Math.max(_nW, _wy - GRASS_BAND); if (_wy > bb + 1e-6) { quad(fo, x0, bb, z1, x0, bb, z0, x0, _wy, z0, x0, _wy, z1, -1, 0, 0, c.r, c.g, c.b); fo += 18; } }
+            if (_eS && fo + 18 <= cap) { bb = Math.max(_nS, _wy - GRASS_BAND); if (_wy > bb + 1e-6) { quad(fo, x0, bb, z1, x1, bb, z1, x1, _wy, z1, x0, _wy, z1, 0, 0, 1, c.r, c.g, c.b); fo += 18; } }
+            if (_eN && fo + 18 <= cap) { bb = Math.max(_nN, _wy - GRASS_BAND); if (_wy > bb + 1e-6) { quad(fo, x1, bb, z0, x0, bb, z0, x0, _wy, z0, x1, _wy, z0, 0, 0, -1, c.r, c.g, c.b); fo += 18; } }
+          }
+        }
+        const count = fo / 3 - vStart;
+        if (count > 0) { matList.push(topMatReady(grassT)); groups.push([vStart, count, matList.length - 1]); }
+      }
+      // sides (dirt risers). For grass the wall stops below the grass band.
       for (const t of present) {
+        const isGrass = (t === grassT);
         const vStart = fo / 3;
         for (let j = 0; j < N; j++) {
           const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
           for (let i = 0; i < N; i++) {
             const idx = j * N + i; if (mats[idx] !== t) continue;
+            if (voxelIsPreservedSunken(i, j)) continue; // hole over board water/stone
             const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
-            const topY = surfaceY + cellH[idx];
+            vg(i, j, idx, x0, x1, z0, z1);
             const c = matColor(t);
-            const nE = (i + 1 < N) ? surfaceY + cellH[idx + 1] : baseY;
-            if (topY > nE + 1e-6) { quad(fo, x1, nE, z0, x1, nE, z1, x1, topY, z1, x1, topY, z0, 1, 0, 0, c.r, c.g, c.b); fo += 18; }
-            const nW = (i - 1 >= 0) ? surfaceY + cellH[idx - 1] : baseY;
-            if (topY > nW + 1e-6) { quad(fo, x0, nW, z1, x0, nW, z0, x0, topY, z0, x0, topY, z1, -1, 0, 0, c.r, c.g, c.b); fo += 18; }
-            const nS = (j + 1 < N) ? surfaceY + cellH[idx + N] : baseY;
-            if (topY > nS + 1e-6) { quad(fo, x0, nS, z1, x1, nS, z1, x1, topY, z1, x0, topY, z1, 0, 0, 1, c.r, c.g, c.b); fo += 18; }
-            const nN = (j - 1 >= 0) ? surfaceY + cellH[idx - N] : baseY;
-            if (topY > nN + 1e-6) { quad(fo, x1, nN, z0, x0, nN, z0, x0, topY, z0, x1, topY, z0, 0, 0, -1, c.r, c.g, c.b); fo += 18; }
+            let wt;
+            if (_eE && fo + 18 <= cap) { wt = isGrass ? Math.max(_nE, _wy - GRASS_BAND) : _wy; if (wt > _nE + 1e-6) { quad(fo, x1, _nE, z0, x1, _nE, z1, x1, wt, z1, x1, wt, z0, 1, 0, 0, c.r, c.g, c.b); fo += 18; } }
+            if (_eW && fo + 18 <= cap) { wt = isGrass ? Math.max(_nW, _wy - GRASS_BAND) : _wy; if (wt > _nW + 1e-6) { quad(fo, x0, _nW, z1, x0, _nW, z0, x0, wt, z0, x0, wt, z1, -1, 0, 0, c.r, c.g, c.b); fo += 18; } }
+            if (_eS && fo + 18 <= cap) { wt = isGrass ? Math.max(_nS, _wy - GRASS_BAND) : _wy; if (wt > _nS + 1e-6) { quad(fo, x0, _nS, z1, x1, _nS, z1, x1, wt, z1, x0, wt, z1, 0, 0, 1, c.r, c.g, c.b); fo += 18; } }
+            if (_eN && fo + 18 <= cap) { wt = isGrass ? Math.max(_nN, _wy - GRASS_BAND) : _wy; if (wt > _nN + 1e-6) { quad(fo, x1, _nN, z0, x0, _nN, z0, x0, wt, z0, x1, wt, z0, 0, 0, -1, c.r, c.g, c.b); fo += 18; } }
           }
         }
         const count = fo / 3 - vStart;
@@ -328,6 +413,7 @@
         const z0 = j * spacing - half, z1 = (j + 1) * spacing - half;
         for (let i = 0; i < N; i++) {
           const idx = j * N + i;
+          if (voxelIsPreservedSunken(i, j)) { const oo = idx * FLOATS_PER_VOXEL; for (let k = 0; k < FLOATS_PER_VOXEL; k++) positions[oo + k] = 0; continue; }
           const x0 = i * spacing - half, x1 = (i + 1) * spacing - half;
           const topY = surfaceY + cellH[idx];
           const c = matColor(mats[idx]);
@@ -539,7 +625,13 @@
       for (let x = 0; x < gridAtEnter; x++) {
         for (let z = 0; z < gridAtEnter; z++) {
           const m = cellMeshes[x + ',' + z];
-          if (m && m.tile) m.tile.visible = visible;
+          if (!m || !m.tile) continue;
+          // Keep sunken water/stone tiles visible under the block terrain so the mesh
+          // (which leaves holes over them) doesn't erase those features.
+          const col = (typeof world !== 'undefined' && world) ? world[x] : null;
+          const cell = col ? col[z] : null;
+          const keepSunken = !visible && cell && preserveSunkenTerrain(cell.terrain);
+          m.tile.visible = visible || !!keepSunken;
         }
       }
     }
@@ -782,6 +874,7 @@
       toggleBtn.title = 'Mesh Terrain — sculpt & paint a voxel-block landscape';
       toggleBtn.innerHTML = '<span class="glyph">◰</span><span>Mesh Terrain</span>';
       toggleBtn.addEventListener('click', () => { editing ? cancelEdit() : openEditor(); });
+      toggleBtn.style.display = 'none'; // hidden for now (temporary — remove this line to restore)
       document.body.appendChild(toggleBtn);
 
       panel = document.createElement('div');

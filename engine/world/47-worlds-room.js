@@ -26,6 +26,7 @@
     let role = 'play';
     let gridSize = 8;
     let taxPercent = null;
+    let restoreAmbientCrowdVisible = null;
     let you = { x: 0, z: 0, hearts: 10, role: 'play' };
     let myId = '';
     const peers = new Map();
@@ -80,6 +81,7 @@
       if (w.data && typeof applyState === 'function') { try { applyState(w.data); } catch (_) {} }
       // One map: hide the builder's own minimap, and lock out builder tools.
       hideBaseMinimap(true);
+      setAmbientCrowdVisibleForRoom(false);
       if (typeof WS.setPlayChrome === 'function') WS.setPlayChrome(true);
       emit('enter', { world: w, role });
       const roomId = 'world-' + w.slug;
@@ -112,6 +114,7 @@
       if (socket) { try { socket.close(); } catch (_) {} socket = null; }
       connected = false; peers.clear(); nodes = {}; animals = [];
       unbindInput(); hideMinimap();
+      setAmbientCrowdVisibleForRoom(true);
       hideBaseMinimap(false);
       if (typeof WS.setPlayChrome === 'function') WS.setPlayChrome(false);
       emit('leave', {});
@@ -124,6 +127,22 @@
       if (!baseMapEl) return;
       if (hide) { baseMapPrevDisplay = baseMapEl.style.display; baseMapEl.style.display = 'none'; }
       else { baseMapEl.style.display = baseMapPrevDisplay || ''; }
+    }
+
+    function setAmbientCrowdVisibleForRoom(visible) {
+      const api = window.__tinyworldCrowd;
+      if (!api || typeof api.setRuntimeVisible !== 'function') return;
+      if (!visible) {
+        if (restoreAmbientCrowdVisible === null) {
+          restoreAmbientCrowdVisible = typeof api.runtimeVisible === 'function' ? api.runtimeVisible() : true;
+        }
+        api.setRuntimeVisible(false);
+        return;
+      }
+      if (restoreAmbientCrowdVisible !== null) {
+        api.setRuntimeVisible(restoreAmbientCrowdVisible);
+        restoreAmbientCrowdVisible = null;
+      }
     }
     WS.leaveRoom = function () {
       leaveRoom();
@@ -146,7 +165,7 @@
           you = Object.assign(you, d.you || {});
           you.role = 'play';
           nodes = d.nodes || {}; animals = d.animals || [];
-          peers.clear(); (d.peers || []).forEach(p => { if (p.id && p.id !== myId) peers.set(p.id, p); });
+          peers.clear(); (d.peers || []).forEach(p => { if (p.id && p.id !== myId) { p._t = Date.now(); peers.set(p.id, p); } });
           role = 'play';
           emit('state', snapshot()); drawMinimap(); updateSelfAvatar(); updatePeerAvatars(); break;
         case 'presence': {
@@ -157,7 +176,7 @@
             if (p.hearts != null) you.hearts = p.hearts;
             emit('you', you); updateSelfAvatar();
           } else {
-            peers.set(p.id, p);
+            p._t = Date.now(); peers.set(p.id, p);
             emit('peers', Array.from(peers.values())); updatePeerAvatars();
           }
           drawMinimap(); break;
@@ -529,15 +548,71 @@
       attack: { baseUrl: 'models/people/25D/attack/Sprite Sheet/attack full sprite sheet (transparent BG).png', sw: 672, sh: 768, frame: 96, cols: 7, fps: 16 },
     };
     const AVATAR_CLASSES = ['knight', 'baird', 'wizard', 'knave', 'template'];
+    // open-pets pets (vendored under models/pets/<id>/, @open-pets/pet-format atlas).
+    // Mutually exclusive with classes: a selected pet renders as a billboard using its
+    // idle / left / right animation frame ranges (not 8-directional). frame index ->
+    // col = f % cols, row = floor(f / cols) within a cols x rows atlas.
+    const PETS = {
+      boba: {
+        id: 'boba', sheet: 'models/pets/boba/spritesheet.webp', cols: 8, rows: 9, aspect: 192 / 208,
+        anims: {
+          idle: { f: [0, 1, 2, 3, 4, 5], fps: 5 },
+          left: { f: [8, 9, 10, 11, 12, 13, 14, 15], fps: 10 },
+          right: { f: [16, 17, 18, 19, 20, 21, 22, 23], fps: 10 },
+        },
+      },
+    };
+    // ---- side-view STRIP avatars (hybrid) ----
+    // Texture storage like the class path (ent.tex = {idle,walk,run,attack}, swap
+    // material.map per state); animation like the pet path (named anim, single facing,
+    // flip L/R via scale.x sign). Sheets are 64px grids with animation frames in
+    // columns and direction rows stacked vertically; sample one row, never the full
+    // 256px column, or the avatar renders as four stacked bodies.
+    const STRIPS = (function buildStrips() {
+      const out = {};
+      // Swordsman levels 1-6 (provider 'warriors'). lv1-3 use the long 'Swordsman_lvlN_'
+      // prefix; lv4-6 use the short 'lvlN_' prefix. attack frames: lv1-3 = 8, lv4-6 = 7.
+      const swDir = function (n) { return 'models/people/swordsman/PNG/Swordsman_lvl' + n + '/Without_shadow/'; };
+      for (let n = 1; n <= 6; n++) {
+        const pre = n <= 3 ? ('Swordsman_lvl' + n + '_') : ('lvl' + n + '_');
+        const atkF = n <= 3 ? 8 : 7;
+        out['swordsman-l' + n] = {
+          id: 'swordsman-l' + n, aspect: 1, facing: 'right',
+          anims: {
+            idle: { sheet: swDir(n) + pre + 'Idle_without_shadow.png', fw: 64, fh: 64, frames: 12, rows: 4, row: 0, fps: 7 },
+            walk: { sheet: swDir(n) + pre + 'Walk_without_shadow.png', fw: 64, fh: 64, frames: 6, rows: 4, row: 0, fps: 10 },
+            run: { sheet: swDir(n) + pre + 'Run_without_shadow.png', fw: 64, fh: 64, frames: 8, rows: 4, row: 0, fps: 12 },
+            attack: { sheet: swDir(n) + pre + 'attack_without_shadow.png', fw: 64, fh: 64, frames: atkF, rows: 4, row: 0, fps: 14 },
+          },
+        };
+      }
+      // Orcs 1-3 (provider 'orcs'). No 'run'. attack = 8 frames.
+      for (let n = 1; n <= 3; n++) {
+        const oDir = 'models/people/orcs/PNG/Orc' + n + '/Without_shadow/';
+        out['orc-' + n] = {
+          id: 'orc-' + n, aspect: 1, facing: 'right',
+          anims: {
+            idle: { sheet: oDir + 'orc' + n + '_idle_without_shadow.png', fw: 64, fh: 64, frames: 4, rows: 4, row: 0, fps: 7 },
+            walk: { sheet: oDir + 'orc' + n + '_walk_without_shadow.png', fw: 64, fh: 64, frames: 6, rows: 4, row: 0, fps: 10 },
+            attack: { sheet: oDir + 'orc' + n + '_attack_without_shadow.png', fw: 64, fh: 64, frames: 8, rows: 4, row: 0, fps: 12 },
+          },
+        };
+      }
+      return out;
+    })();
     const JUMP_MS = 460, ATTACK_KEY = 'f';
     // Sheet row (top->bottom) for each movement sector. Sectors: 0=S 1=SE 2=E 3=NE
     // 4=N 5=NW 6=W 7=SW. If a character faces the wrong way, reorder this array.
     const SECTOR_TO_ROW = [0, 1, 2, 3, 4, 5, 6, 7];
+    // 4-row side-view sheets use the common down/left/right/up order.
+    const STRIP_SECTOR_TO_ROW = [0, 0, 2, 3, 3, 3, 1, 0];
     let selfEnt = null;
     const peerEnts = new Map();
     let avatarRaf = null;
     let avatarErrored = false;
     let avatarClassName = 'knight';
+    let avatarPetId = null; // non-null => pet mode (overrides class)
+    let avatarStripId = null; // non-null => strip mode (overrides class). Mutually exclusive with avatarPetId.
     let _texLoader = null;
 
     function avatarParent() {
@@ -592,6 +667,8 @@
     function loadAvatarTextures(ent, className) {
       if (!ent) return;
       disposeAvatarTextures(ent);
+      ent.pet = null; // leaving pet mode
+      ent.strip = null; // leaving strip mode
       ent.avatarClassName = className;
       for (const k of Object.keys(SHEET)) {
         const s = SHEET[k];
@@ -600,11 +677,16 @@
         t.offset.set(0, 1 - s.frame / s.sh);
         ent.tex[k] = t;
       }
-      if (ent.sprite && ent.sprite.material) ent.sprite.material.map = ent.tex[ent.state] || ent.tex.idle;
+      if (ent.sprite && ent.sprite.material) {
+        ent.sprite.material.map = ent.tex[ent.state] || ent.tex.idle;
+        ent.sprite.scale.set(1.7, 1.7, 1); // restore class sprite size (pet mode rescales)
+      }
     }
     function setAvatarClass(name) {
       const next = AVATAR_CLASSES.includes(name) ? name : 'knight';
       avatarClassName = next;
+      avatarPetId = null; // class, pet and strip avatars are mutually exclusive
+      avatarStripId = null;
       if (selfEnt) loadAvatarTextures(selfEnt, avatarClassName);
       return avatarClassName;
     }
@@ -612,10 +694,76 @@
       const current = Math.max(0, AVATAR_CLASSES.indexOf(avatarClassName));
       return setAvatarClass(AVATAR_CLASSES[(current + delta + AVATAR_CLASSES.length) % AVATAR_CLASSES.length]);
     }
+    // ---- pet avatars (open-pets billboards) ----
+    function loadPetTextures(ent, pet) {
+      if (!ent || !pet) return;
+      disposeAvatarTextures(ent);
+      ent.pet = pet; ent.strip = null; ent.avatarClassName = null; ent._petAnim = null; ent.frame = 0; ent.frameTime = 0;
+      const t = loadSheetTexture(pet.sheet);
+      t.repeat.set(1 / pet.cols, 1 / pet.rows);
+      t.offset.set(0, 1 - 1 / pet.rows); // frame 0 (top-left)
+      ent.tex = { pet: t };
+      if (ent.sprite && ent.sprite.material) {
+        ent.sprite.material.map = t; ent.sprite.material.needsUpdate = true;
+        const s = 1.9; ent.sprite.scale.set(s * pet.aspect, s, 1);
+      }
+    }
+    function setAvatarPet(petId) {
+      const pet = PETS[petId];
+      if (!pet) return null;
+      avatarPetId = petId;
+      avatarStripId = null; // pet and strip avatars are mutually exclusive
+      if (selfEnt) loadPetTextures(selfEnt, pet);
+      return avatarPetId;
+    }
+    // ---- strip avatars (side-view hybrid: class-style tex storage, pet-style anim) ----
+    function loadStripTextures(ent, strip) {
+      if (!ent || !strip) return;
+      disposeAvatarTextures(ent);
+      ent.strip = strip; ent.pet = null; ent.avatarClassName = null;
+      ent.state = 'idle'; ent.frame = 0; ent.frameTime = 0;
+      ent.tex = {};
+      for (const k of Object.keys(strip.anims)) {
+        const anim = strip.anims[k];
+        const t = loadSheetTexture(anim.sheet);
+        t.repeat.set(1 / anim.frames, 1 / (anim.rows || 1));
+        setStripTextureFrame(t, anim, 0);
+        ent.tex[k] = t;
+      }
+      if (ent.sprite && ent.sprite.material) {
+        ent.sprite.material.map = ent.tex[ent.state] || ent.tex.idle;
+        ent.sprite.material.needsUpdate = true;
+        const s = 2.0; ent.sprite.scale.set(s * strip.aspect, s, 1);
+      }
+    }
+    function setAvatarStrip(id) {
+      const strip = STRIPS[id];
+      if (!strip) return null;
+      avatarStripId = id;
+      avatarPetId = null; // strip and pet avatars are mutually exclusive
+      if (selfEnt) loadStripTextures(selfEnt, strip);
+      return avatarStripId;
+    }
+    function stripRowForSector(sector) {
+      const idx = Number.isFinite(sector) ? Math.max(0, Math.min(7, sector | 0)) : 0;
+      return STRIP_SECTOR_TO_ROW[idx] || 0;
+    }
+    function setStripTextureFrame(tex, anim, frame, sector) {
+      if (!tex || !anim) return;
+      const rows = Math.max(1, anim.rows || 1);
+      const row = Math.max(0, Math.min(rows - 1, sector == null ? (anim.row || 0) : stripRowForSector(sector)));
+      tex.offset.set((frame || 0) / anim.frames, 1 - (row + 1) / rows);
+    }
     WS.setAvatarClass = setAvatarClass;
     WS.cycleAvatarClass = cycleAvatarClass;
     WS.avatarClasses = () => AVATAR_CLASSES.slice();
-    WS.avatarClass = () => avatarClassName;
+    WS.avatarClass = () => ((avatarPetId || avatarStripId) ? null : avatarClassName);
+    WS.setAvatarPet = setAvatarPet;
+    WS.avatarPet = () => avatarPetId;
+    WS.pets = () => Object.keys(PETS);
+    WS.setAvatarStrip = setAvatarStrip;
+    WS.avatarStrip = () => avatarStripId;
+    WS.strips = () => Object.keys(STRIPS);
     // A fresh texture per avatar+sheet so each can hold its own frame/row offset.
     function createAvatar() {
       const ent = { x: 0, z: 0, sector: 0, lastMove: 0, lastDx: 0, lastDz: 0, state: 'idle', frame: 0, frameTime: 0, tex: {}, sprite: null, disposed: false, avatarClassName };
@@ -650,8 +798,57 @@
       if (ent.sprite && ent.sprite.parent) ent.sprite.parent.remove(ent.sprite);
       disposeAvatarTextures(ent);
     }
+    // Pet billboards animate via named anims (idle / left / right), not 8-way sheets.
+    function animPet(ent, dt) {
+      const pet = ent.pet, tex = ent.tex && ent.tex.pet;
+      if (!pet || !tex) return;
+      const moving = (Date.now() - ent.lastMove) < 200;
+      const name = moving ? (ent.lastDx < 0 ? 'left' : 'right') : 'idle';
+      const anim = pet.anims[name] || pet.anims.idle;
+      if (ent._petAnim !== name) { ent._petAnim = name; ent.frame = 0; ent.frameTime = 0; }
+      ent.frameTime += dt;
+      const fdur = 1 / (anim.fps || 6);
+      while (ent.frameTime >= fdur) { ent.frameTime -= fdur; ent.frame = (ent.frame + 1) % anim.f.length; }
+      const f = anim.f[ent.frame] | 0;
+      const col = f % pet.cols, rw = (f / pet.cols) | 0;
+      tex.offset.set(col / pet.cols, 1 - (rw + 1) / pet.rows);
+      let py = 0.02;
+      if (ent.jumpStart) { const jt = (Date.now() - ent.jumpStart) / JUMP_MS; if (jt >= 1) ent.jumpStart = 0; else py += Math.sin(jt * Math.PI) * 0.8; }
+      ent.sprite.position.y = py;
+    }
+    // Strip billboards: hybrid. State (attack/walk/idle) drives which tex.map is bound
+    // (class-style); a single horizontal row of frames is advanced (pet-style) and the
+    // sprite is flipped L/R via scale.x SIGN (never negative repeat).
+    function animStrip(ent, dt) {
+      const strip = ent.strip;
+      const s = 2.0;
+      if (!strip || !ent.tex) return;
+      const moving = (Date.now() - ent.lastMove) < 200;
+      let state = ent.attacking ? 'attack' : (moving ? 'walk' : 'idle');
+      if (state === 'walk' && !strip.anims.walk) state = 'idle';
+      const anim = strip.anims[state] || strip.anims.idle;
+      if (state !== ent.state) {
+        ent.state = state; ent.frame = 0; ent.frameTime = 0;
+        ent.sprite.material.map = ent.tex[state] || ent.tex.idle;
+        ent.sprite.material.needsUpdate = true;
+      }
+      ent.frameTime += dt;
+      const fdur = 1 / (anim.fps || 6);
+      while (ent.frameTime >= fdur) {
+        ent.frameTime -= fdur; ent.frame += 1;
+        if (ent.frame >= anim.frames) { ent.frame = 0; if (ent.attacking) ent.attacking = false; } // attack plays once
+      }
+      const tex = ent.tex[ent.state] || ent.tex.idle;
+      setStripTextureFrame(tex, anim, ent.frame, ent.sector);
+      ent.sprite.scale.x = Math.abs(s * strip.aspect);
+      let py = 0.02;
+      if (ent.jumpStart) { const jt = (Date.now() - ent.jumpStart) / JUMP_MS; if (jt >= 1) ent.jumpStart = 0; else py += Math.sin(jt * Math.PI) * 0.8; }
+      ent.sprite.position.y = py;
+    }
     function animEntity(ent, dt) {
       if (!ent.sprite) return;
+      if (ent.strip) { animStrip(ent, dt); return; }
+      if (ent.pet) { animPet(ent, dt); return; }
       const state = ent.attacking ? 'attack' : ((Date.now() - ent.lastMove) < 200 ? 'walk' : 'idle');
       if (state !== ent.state) { ent.state = state; ent.frame = 0; ent.frameTime = 0; ent.sprite.material.map = ent.tex[state]; }
       const sh = SHEET[state];
@@ -661,7 +858,7 @@
         ent.frameTime -= fdur; ent.frame += 1;
         if (ent.frame >= sh.cols) { ent.frame = 0; if (ent.attacking) ent.attacking = false; }   // attack plays once
       }
-      const row = ent === selfEnt ? 0 : (SECTOR_TO_ROW[ent.sector] || 0);
+      const row = SECTOR_TO_ROW[ent.sector] || 0;
       ent.tex[ent.state].offset.set(ent.frame * (sh.frame / sh.sw), 1 - (row + 1) * (sh.frame / sh.sh));
       let y = 0.02;
       if (ent.jumpStart) { const jt = (Date.now() - ent.jumpStart) / JUMP_MS; if (jt >= 1) ent.jumpStart = 0; else y += Math.sin(jt * Math.PI) * 0.8; }
@@ -674,20 +871,27 @@
     function updateAvatarCameraOrbit(dt) {
       if (!selfEnt || !selfEnt.sprite || typeof tilePos !== 'function' || typeof updateCamera !== 'function' || typeof target === 'undefined' || !target) return;
       const p = tilePos(selfEnt.x, selfEnt.z);
+      // Smoothly follow the avatar's POSITION only. Do NOT auto-rotate the camera to
+      // face movement direction — the player controls the orbit (azimuth) themselves.
       target.x += (p.x - target.x) * 0.15;
       target.z += (p.z - target.z) * 0.15;
-      if (typeof azimuth === 'number' && (selfEnt.lastDx || selfEnt.lastDz) && Date.now() - selfEnt.lastMove < 900) {
-        const desired = Math.atan2(-selfEnt.lastDz, -selfEnt.lastDx);
-        azimuth = avatarAngleLerp(azimuth, desired, Math.min(0.18, Math.max(0.04, dt * 5)));
-      }
       updateCamera();
     }
 
     function updateSelfAvatar() {
       if (!selfEnt) selfEnt = createAvatar();
+      // Pet choice is SELF-ONLY and local (peers keep their class avatars; createAvatar
+      // is shared with the peer path, so the pet must never be applied there).
+      if (avatarPetId && PETS[avatarPetId] && (!selfEnt.pet || selfEnt.pet.id !== avatarPetId)) loadPetTextures(selfEnt, PETS[avatarPetId]);
+      if (avatarStripId && STRIPS[avatarStripId] && (!selfEnt.strip || selfEnt.strip.id !== avatarStripId)) loadStripTextures(selfEnt, STRIPS[avatarStripId]);
       moveEntity(selfEnt, you.x, you.z);
     }
+    const STALE_PEER_MS = 9000; // ~3 missed presence heartbeats => treat as gone
     function updatePeerAvatars() {
+      // Drop ghost peers that stopped heartbeating (missed 'leave', hard refresh, or a
+      // stale server session) so the player never sees phantom duplicate avatars.
+      const nowMs = Date.now();
+      peers.forEach((p, id) => { if (p && p._t && nowMs - p._t > STALE_PEER_MS) peers.delete(id); });
       const seen = new Set();
       peers.forEach((p) => {
         if (!p || p.id == null || p.id === myId) return;   // never draw yourself as a peer
@@ -702,12 +906,16 @@
     function startAvatars() {
       if (avatarRaf || typeof requestAnimationFrame !== 'function') return;
       let prev = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+      let prunePrev = prev;
       const tick = () => {
         const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
         const dt = Math.min(0.05, (now - prev) / 1000); prev = now;
         if (selfEnt) animEntity(selfEnt, dt);
         peerEnts.forEach((e) => animEntity(e, dt));
-        // Follow camera: keep the player centered and orbit behind recent movement.
+        // Sweep stale/ghost peers ~every 1.5s even when no messages arrive, so a peer
+        // that hard-disconnected (missed 'leave') stops rendering as a phantom avatar.
+        if (now - prunePrev > 1500) { prunePrev = now; if (peerEnts.size) updatePeerAvatars(); }
+        // Follow camera: keep the player centered (player controls the orbit).
         updateAvatarCameraOrbit(dt);
         avatarRaf = requestAnimationFrame(tick);
       };

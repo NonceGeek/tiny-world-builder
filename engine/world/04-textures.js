@@ -1470,9 +1470,9 @@
     return materialTextureMap[normalizeMaterialTextureKey(key)] || null;
   }
 
-  M.grass.color.set(0x75b84b);
-  M.grassEdge.color.set(0x5da23d);
-  M.grassHi.color.set(0x8ccc5d);
+  M.grass.color.set(0x57842b);
+  M.grassEdge.color.set(0x46701f);
+  M.grassHi.color.set(0x6a9632);
   M.door.color.set(0x7b4b2a);
   M.woodTrim.color.set(0x5c361d);
   M.bridgeWood.color.set(0x7b4b2a);
@@ -1484,16 +1484,16 @@
   applyWorldUVs(M.grass, initialGrassTex, 1.0);
   applyWorldUVs(M.grassEdge, initialGrassTex, 1.0);
   applyWorldUVs(M.grassHi, initialGrassTex, 1.0);
-  M.boardSide.color.set(0xc4bdb2);
-  applyWorldUVs(M.boardSide, texRockFace, 1.7, { voxelSeams: true });
+  M.boardSide.color.set(0xffffff);
+  applyWorldUVs(M.boardSide, texSoilSide, 0.22, { voxelSeams: true });
   M.boardSideEdge = makeIslandSideStrataMaterial();
 
   M.path.color.set(0xf2d29c);
   M.pathTrim.color.set(0xd9b780);
   M.pathScuff.color.set(0xc9aa70);
-  applyWorldUVs(M.path, texNoise, 1.0);
-  applyWorldUVs(M.pathTrim, texNoise, 1.0);
-  applyWorldUVs(M.pathScuff, texNoise, 1.0);
+  applyWorldUVs(M.path, texPathPavers, 0.22);
+  applyWorldUVs(M.pathTrim, texPathPavers, 0.22);
+  applyWorldUVs(M.pathScuff, texPathPavers, 0.22);
 
   M.dirt.color.set(0xffffff);
   M.dirtRich.color.set(0xffffff);

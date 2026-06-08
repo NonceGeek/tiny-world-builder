@@ -19,6 +19,16 @@ Runtime:
 - The world-room avatar class API is exposed via `window.__tinyworldWorlds`:
   `setAvatarClass(name)`, `cycleAvatarClass(delta)`, `avatarClass()`, and
   `avatarClasses()`.
+- Warrior/orc side-view avatars in `engine/world/47-worlds-room.js` are also
+  64px grid sheets: columns are animation frames and rows are directions. Crop to
+  a single row with `repeat.y = 1 / rows`; do not sample a full 256px-tall
+  column, or four stacked bodies render in-world.
+- The Worlds avatar picker/runtime should use the side-view `Without_shadow`
+  sheets for swordsman/orc avatars unless the user explicitly asks for baked
+  ground shadows.
+- Side-view swordsman/orc row order is `front/down`, `left`, `right`, `back/up`.
+  Movement should update the sampled row from the camera-relative sector; do not
+  fake left/right by flipping a single side row when the sheet has real side rows.
 
 Assets:
 
