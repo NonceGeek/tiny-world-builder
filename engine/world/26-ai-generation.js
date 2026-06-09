@@ -397,6 +397,7 @@
     if (data.planetLandscape !== undefined && data.planetLandscape !== null) {
       if (typeof data.planetLandscape !== 'object') return 'planetLandscape invalid';
       if (data.planetLandscape.enabled !== undefined && typeof data.planetLandscape.enabled !== 'boolean') return 'planetLandscape.enabled invalid';
+      if (data.planetLandscape.seed !== undefined && typeof data.planetLandscape.seed !== 'number' && typeof data.planetLandscape.seed !== 'string') return 'planetLandscape.seed invalid';
       if (data.planetLandscape.biome !== undefined && !['grassland','desert','snow'].includes(data.planetLandscape.biome)) return 'planetLandscape.biome invalid';
       if (data.planetLandscape.styleMode !== undefined && !['lowpoly','realistic'].includes(data.planetLandscape.styleMode)) return 'planetLandscape.styleMode invalid';
       if (data.planetLandscape.drop !== undefined && (typeof data.planetLandscape.drop !== 'number' || data.planetLandscape.drop < 20 || data.planetLandscape.drop > 300)) return 'planetLandscape.drop invalid';
@@ -449,9 +450,12 @@
       if (transform !== undefined && transform !== null) {
         if (Array.isArray(transform)) {
           if (transform.length < 3 || transform.length > 4) return 'cells[' + i + '].transform array invalid length';
+          if (!transform.every(n => typeof n === 'number' && Number.isFinite(n))) return 'cells[' + i + '].transform array items must be finite numbers';
         } else if (typeof transform === 'object') {
           if (transform.rotationY !== undefined && typeof transform.rotationY !== 'number') return 'cells[' + i + '].transform.rotationY invalid';
           if (transform.offsetX !== undefined && typeof transform.offsetX !== 'number') return 'cells[' + i + '].transform.offsetX invalid';
+          if (transform.offsetZ !== undefined && typeof transform.offsetZ !== 'number') return 'cells[' + i + '].transform.offsetZ invalid';
+          if (transform.offsetY !== undefined && typeof transform.offsetY !== 'number') return 'cells[' + i + '].transform.offsetY invalid';
         } else {
           return 'cells[' + i + '].transform invalid type';
         }
