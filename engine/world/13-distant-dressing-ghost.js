@@ -1,4 +1,6 @@
-  // -------- distant world dressing --------
+
+
+// -------- distant world dressing --------
   const distantWorldGroup = new THREE.Group();
   distantWorldGroup.name = 'distant-worlds';
   xrWorldRoot.add(distantWorldGroup);
@@ -145,6 +147,10 @@
     const thickness = 0.16;
     const sideFaceOutset = TILE * 0.055;
     const inset = thickness * 0.5 - sideFaceOutset;
+     const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y;
+    const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT;
+    const wallBottomY = wallTopY - wallH;
+    const mat = islandShellMaterial(M.boardSideEdge || M.boardSide);
     const spanOuter = span + sideFaceOutset * 2;
     const wallTopY = ISLAND_SIDE_STRATA_RENDER_TOP_Y;
     const wallH = ISLAND_SIDE_STRATA_RENDER_HEIGHT;
@@ -489,6 +495,7 @@
     } else {
       voxelInvertedSteppedRoof(homeBorderGroup, GRID * TILE, GRID * TILE, -DIRT_H - 0.020, M.islandUnder, M.islandUnderD);
     }
+    addIslandSideBacking(homeBorderGroup);
     addIslandUtilityUnderside(homeBorderGroup);
     addIslandRocketEngines(homeBorderGroup);
     addIslandEdgeDressing(homeBorderGroup);
