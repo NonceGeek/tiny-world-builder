@@ -69,6 +69,9 @@
       const hull = new THREE.Mesh(m.geometry, mat);
       hull.matrixAutoUpdate = false;
       hull.matrix.copy(m.matrixWorld).multiply(new THREE.Matrix4().makeScale(scale, scale, scale));
+      // Scene matrix updates are non-forced; flag the manual matrix so the
+      // next traversal computes this hull's matrixWorld.
+      hull.matrixWorldNeedsUpdate = true;
       hull.renderOrder = renderOrder;
       group.add(hull);
     }

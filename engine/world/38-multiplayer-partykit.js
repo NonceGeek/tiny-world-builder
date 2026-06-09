@@ -1549,6 +1549,15 @@
     // ---- snapshot: host serializes + chunks the full world + env ----
     function sendSnapshotTo(forId) {
       if (!isHost || !forId) return;
+      // Defer off the WebSocket message tick: serializing a dense world takes
+      // tens of ms, and doing it inline stalled the frame in progress every
+      // time a peer joined. The serialize itself still runs on the main
+      // thread, but the current frame completes first.
+      setTimeout(() => sendSnapshotNow(forId), 0);
+    }
+
+    function sendSnapshotNow(forId) {
+      if (!isHost || !forId) return;
       if (typeof window.buildWorldStateObject !== 'function') return;
       let payload;
       try {
@@ -1808,7 +1817,12 @@
       }
     }, { passive: true });
     renderer.domElement.addEventListener('pointerleave', () => schedulePresence(true), { passive: true });
-    setInterval(() => schedulePresence(true), 2500);
+    // Non-forced: the lastPresenceKey dedupe suppresses sends while idle, so
+    // a quiet room no longer fans out presence to every peer each 2.5s.
+    setInterval(() => schedulePresence(false), 2500);
+    // Slow forced keepalive so idle proxies don't reap the WebSocket and the
+    // room still hears from quiet-but-alive peers.
+    setInterval(() => schedulePresence(true), 25000);
 
     // -------- live environment + mooring broadcast wiring (host only) --------
     // The host watches its own env controls and re-broadcasts on change. Each

@@ -137,7 +137,10 @@
       try {
         twSafeSetItem(STORAGE_KEY, JSON.stringify(buildWorldStateObject()), 'World');
       } catch (_) {}
-    }, 200);
+      // 800ms (was 200ms): a long paint stroke now serializes the world once
+      // or twice instead of several times a second. Matches the world-menu
+      // snapshot debounce; sub-second localStorage persistence buys nothing.
+    }, 800);
   }
 
   // Apply a parsed state object to the world. Used by both localStorage
@@ -1040,7 +1043,10 @@
     const safe = sanitizeWorldUrl(rawUrl);
     if (!safe) return false;
     try {
-      const r = await fetch(safe, { credentials: 'omit' });
+      const timeoutSignal = (() => {
+        try { return AbortSignal.timeout(10000); } catch (_) { return undefined; }
+      })();
+      const r = await fetch(safe, { credentials: 'omit', signal: timeoutSignal });
       if (!r.ok) return false;
       const json = await r.json();
       const ok = applyState(json, { keepCamera: false });
@@ -1057,8 +1063,25 @@
   // file was missing/invalid so callers fall back to loadInitialScene().
   function applyDefaultIslandState(opts) {
     const d = window.__tinyworldDefaultIsland;
-    if (!d || !Array.isArray(d.cells)) return false;
-    return applyState(d, opts || { keepCamera: false });
+    if (d && Array.isArray(d.cells)) return applyState(d, opts || { keepCamera: false });
+    // The bootstrap fetch is async; if it hasn't settled yet (slow network),
+    // apply the island when it lands and report handled so callers don't
+    // build the procedural scene only to have it overwritten.
+    const ready = window.__tinyworldDefaultIslandReady;
+    if (ready && typeof ready.then === 'function' && !window.__tinyworldDefaultIslandSettled) {
+      ready.then(() => {
+        const late = window.__tinyworldDefaultIsland;
+        if (late && Array.isArray(late.cells)) {
+          applyState(late, opts || { keepCamera: false });
+        } else if (typeof loadInitialScene === 'function') {
+          loadInitialScene();
+        }
+        resetCameraDefaults();
+        if (typeof ensureGhostBoardsAroundTarget === 'function') ensureGhostBoardsAroundTarget();
+      });
+      return true;
+    }
+    return false;
   }
 
   function loadState() {

@@ -508,11 +508,19 @@
         'authorization': 'Bearer ' + key,
       },
       body: JSON.stringify(body),
+      signal: aiFetchTimeoutSignal(),
     });
     if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 200));
     const j = await r.json();
     const text = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     return text;
+  }
+
+  // Hang guard for LLM calls: generous (worlds can take a while to generate)
+  // but bounded, so a stalled connection surfaces as an error instead of a
+  // spinner that never resolves.
+  function aiFetchTimeoutSignal() {
+    try { return AbortSignal.timeout(120000); } catch (_) { return undefined; }
   }
 
   async function callAnthropic(endpoint, key, model, system, user, toolSpec, opts = {}) {
@@ -552,6 +560,7 @@
         tool_choice: { type: 'tool', name: toolName },
         messages: [{ role: 'user', content }],
       }),
+      signal: aiFetchTimeoutSignal(),
     });
     if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 200));
     const j = await r.json();
@@ -583,6 +592,7 @@
           maxOutputTokens: 8000,
         },
       }),
+      signal: aiFetchTimeoutSignal(),
     });
     if (!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 200));
     const j = await r.json();

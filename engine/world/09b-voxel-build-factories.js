@@ -1,9 +1,16 @@
   // -------- voxel-build & object factories --------
+  const VOXEL_BUILD_MATERIAL_CACHE_CAP = 1024;
   function voxelBuildMaterial(hex, textureKind = null) {
     const clean = normalizeHexColor(hex) || '#ffffff';
     const kind = inferProceduralTextureKind(clean, textureKind);
     const key = clean + ':' + kind;
     if (!voxelBuildMaterialCache.has(key)) {
+      // Bounded like customMaterialCache: evict the oldest entry (no dispose —
+      // live meshes may still reference it; GC reclaims it when they go).
+      if (voxelBuildMaterialCache.size >= VOXEL_BUILD_MATERIAL_CACHE_CAP) {
+        const oldest = voxelBuildMaterialCache.keys().next().value;
+        if (oldest !== undefined) voxelBuildMaterialCache.delete(oldest);
+      }
       const mat = new THREE.MeshLambertMaterial({ color: clean });
       const tex = proceduralPixelTextures[kind] || texNoise;
       applyWorldUVs(mat, tex, proceduralTextureScaleForKind(kind));
@@ -12,6 +19,25 @@
       voxelBuildMaterialCache.set(key, mat);
     }
     return voxelBuildMaterialCache.get(key);
+  }
+
+  // Per-part recolour cache: one shared clone per (base material, colour)
+  // instead of a fresh clone per voxel. Bounded like the other material
+  // caches; eviction drops the reference only (live meshes keep theirs).
+  const voxelBuildPartRecolorCache = new Map();
+  function voxelBuildPartRecolorMaterial(baseMat, col) {
+    const key = baseMat.uuid + ':' + String(col);
+    let mat = voxelBuildPartRecolorCache.get(key);
+    if (!mat) {
+      if (voxelBuildPartRecolorCache.size >= VOXEL_BUILD_MATERIAL_CACHE_CAP) {
+        const oldest = voxelBuildPartRecolorCache.keys().next().value;
+        if (oldest !== undefined) voxelBuildPartRecolorCache.delete(oldest);
+      }
+      mat = baseMat.clone();
+      mat.color.set(col);
+      voxelBuildPartRecolorCache.set(key, mat);
+    }
+    return mat;
   }
 
   // Lift/rocket engines hang in the island's shadow, but their Lambert materials
@@ -277,6 +303,37 @@
     bounds.maxZ = Math.max(bounds.maxZ, point.z + radius);
   }
 
+  // Cable tubes are expensive to tessellate (CatmullRom subdivision) and are
+  // rebuilt on every stamp re-render. The curve is fully determined by the
+  // endpoints, sag, radius and segment count, so identical cables share one
+  // geometry. Bounded; entries are marked cached so disposeGroup skips them.
+  const cableGeometryCache = new Map();
+  const CABLE_GEOMETRY_CACHE_CAP = 256;
+  function getCableTubeGeometry(points, segments, radius) {
+    const q = (v) => Math.round(v * 1000) / 1000;
+    const key = points.map(p => q(p.x) + ',' + q(p.y) + ',' + q(p.z)).join('|')
+      + '|' + segments + '|' + q(radius);
+    let geo = cableGeometryCache.get(key);
+    if (!geo) {
+      if (cableGeometryCache.size >= CABLE_GEOMETRY_CACHE_CAP) {
+        const oldest = cableGeometryCache.keys().next().value;
+        if (oldest !== undefined) {
+          // Dispose on evict so a long editing session (cable endpoints vary
+          // continuously while dragging) can't accumulate GL buffers. If a
+          // live mesh still references it, three re-uploads on next render.
+          const evicted = cableGeometryCache.get(oldest);
+          cableGeometryCache.delete(oldest);
+          if (evicted && evicted.dispose) evicted.dispose();
+        }
+      }
+      const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.32);
+      geo = new THREE.TubeGeometry(curve, segments, radius, 5, false);
+      geo.userData.cached = true;
+      cableGeometryCache.set(key, geo);
+    }
+    return geo;
+  }
+
   function addCustomPartCable(parent, part, centerX, floorY, centerZ, unit, platformSink, mat, trimBounds) {
     const start = customPartLocalPoint(part.from, centerX, floorY, centerZ, unit, platformSink);
     const end = customPartLocalPoint(part.to, centerX, floorY, centerZ, unit, platformSink);
@@ -290,8 +347,7 @@
     const p2 = start.clone().lerp(end, 0.58).addScaledVector(side, -0.35).add(new THREE.Vector3(0, -sag, 0));
     const p3 = start.clone().lerp(end, 0.83).addScaledVector(side, -0.15).add(new THREE.Vector3(0, -sag * 0.45, 0));
     const points = [start, p1, p2, p3, end];
-    const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.32);
-    const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, part.segments || 24, radius, 5, false), mat);
+    const mesh = new THREE.Mesh(getCableTubeGeometry(points, part.segments || 24, radius), mat);
     mesh.castShadow = true;
     mesh.receiveShadow = false;
     mesh.userData.noBatch = true;
@@ -419,9 +475,11 @@
       const z = (v.z - centerZ) * unit + (ov ? ov.oz * unit : 0);
       const mat = voxelAppearanceMaterialNorm(voxelBuildMaterial(v.color), voxelAppearanceRoleForColor(v.color), normApp);
       trimBase = trimBase || mat;  // keep referencing the SHARED cached mat (never the per-voxel clone)
-      // Per-part recolour: clone so we don't poison the shared cached material.
+      // Per-part recolour: shared cached material per (base, colour) pair —
+      // an uncached clone per voxel defeated instanced batching (keyed on
+      // material.uuid) and minted a GL program per recoloured part.
       let voxMat = mat;
-      if (ov && ov.col) { voxMat = mat.clone(); voxMat.color.set(ov.col); }
+      if (ov && ov.col) voxMat = voxelBuildPartRecolorMaterial(mat, ov.col);
       const vm = vbox(g, unit * sx, unit * sy, unit * sz, x, y, z, voxMat);
       if (ov && vm && (ov.rx || ov.ry || ov.rz)) {
         vm.rotation.x += ov.rx || 0;

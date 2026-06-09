@@ -165,7 +165,7 @@ function pngBrownBandAverage(file) {
   return count ? { count, r: rSum / count, g: gSum / count, b: bSum / count } : null;
 }
 
-if (!/<script src="engine\/world\/[^"]+\.js">/.test(htmlRaw)) {
+if (!/<script (?:defer )?src="engine\/world\/[^"]+\.js">/.test(htmlRaw)) {
   fail('app module scripts missing: expected <script src="engine/world/*.js"> tags');
 }
 if (!appModules.length) fail('inline app script missing');
@@ -343,7 +343,10 @@ if (/uniform sampler2D uMap/.test(islandStrataShaderBody) || /texture2D\(uMap/.t
 if (!/col = max\(col, vec3\(0\.14, 0\.13, 0\.11\)\)/.test(islandStrataShaderBody)) {
   fail('island side edge shader must keep a brightness floor so procedural rock cannot render black');
 }
-if (!/const ISLAND_SIDE_STRATA_TOP_OVERLAP = 0\.075/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_TOP_Y = ISLAND_SIDE_STRATA_TOP_Y \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_HEIGHT = ISLAND_SIDE_STRATA_HEIGHT \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html)) {
+// Guard the structure (overlap constant + derived render top/height), not the
+// exact overlap value — that's a tuning knob (commit 5d48469 changed it from
+// 0.075 to 0.015 and this check went stale, blocking publish).
+if (!/const ISLAND_SIDE_STRATA_TOP_OVERLAP = 0\.\d+/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_TOP_Y = ISLAND_SIDE_STRATA_TOP_Y \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html) || !/const ISLAND_SIDE_STRATA_RENDER_HEIGHT = ISLAND_SIDE_STRATA_HEIGHT \+ ISLAND_SIDE_STRATA_TOP_OVERLAP/.test(html)) {
   fail('island side edge strata must define a raised render top and full render height for the texture carrier');
 }
 if (!/uTopY: \{ value: ISLAND_SIDE_STRATA_RENDER_TOP_Y \}/.test(islandStrataShaderBody) || !/uHeight: \{ value: ISLAND_SIDE_STRATA_RENDER_HEIGHT \}/.test(islandStrataShaderBody)) {

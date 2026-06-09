@@ -241,9 +241,10 @@
     applyPlaceableLightSourceSettings();
   }
 
+  const CLOUD_RIM_WARM = new THREE.Color(0xff9a64);
   function applyCloudRimLightSetting() {
     const strength = cloudRimLightStrength();
-    const warm = new THREE.Color(0xff9a64);
+    const warm = CLOUD_RIM_WARM;
     if (typeof clouds !== 'undefined' && clouds) {
       for (const c of clouds) {
         c.traverse(o => {

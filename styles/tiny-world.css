@@ -80,6 +80,12 @@
       #000 100%
     );
   }
+  /* Tilt blur disabled in settings: skip the full-viewport backdrop-filter
+     layer entirely (blur(0) is not free — the compositor still snapshots
+     the whole backdrop each frame). */
+  body.tilt-blur-off::before {
+    display: none;
+  }
   body::after {
     content: '';
     position: fixed;
@@ -1438,11 +1444,12 @@
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
     cursor: grab;
+    /* top/left transitions removed: animating layout properties forces a
+       layout + paint per interpolation frame. Snap is instant now; the
+       transform/opacity show-hide animation is unchanged. */
     transition:
       transform 0.32s cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 0.28s ease,
-      top 0.1s ease,
-      left 0.1s ease;
+      opacity 0.28s ease;
   }
   .crowd-panel.dragging { cursor: grabbing; transition: none; }
   .crowd-panel.hidden {
@@ -5871,7 +5878,9 @@
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.95) inset,
       0 1px 2px rgba(20, 30, 50, 0.18);
-    transition: left 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    /* transform, not left: the thumb slide stays on the compositor instead
+       of relayouting every visible checkbox per animation frame. */
+    transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .check-row input[type="checkbox"]:checked,
   .modal-card input[type="checkbox"]:checked,
@@ -5882,7 +5891,7 @@
   .check-row input[type="checkbox"]:checked::before,
   .modal-card input[type="checkbox"]:checked::before,
   .settings-panel input[type="checkbox"]:checked::before {
-    left: 18px;
+    transform: translateX(16px);
   }
   .settings-card {
     width: min(780px, calc(100vw - 32px));

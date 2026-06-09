@@ -498,6 +498,12 @@
   applyStageSize();
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // The scene is mostly static, and the post-processing path calls
+  // renderer.render() up to three times per frame — with autoUpdate the
+  // shadow pass re-renders on each call. Refresh on a fixed cadence from
+  // renderScene() instead (plus on demand via requestShadowMapUpdate).
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.localClippingEnabled = true;
   renderer.toneMapping = THREE.NoToneMapping;
@@ -578,6 +584,7 @@
 
   const DISTANCE_MIST_NEUTRAL = new THREE.Color(0xf2eee4);
   const distanceMistFogColor = new THREE.Color();
+  const distanceMistFog = new THREE.Fog(0xf2eee4, 1, 100);
   function distanceMistFogHex(colorHex) {
     const bgHex = Number.isFinite(colorHex)
       ? colorHex
@@ -606,7 +613,12 @@
     const zoomFade = Math.max(0, Math.min(1, ((viewSize || DEFAULT_VIEW_SIZE) - DEFAULT_VIEW_SIZE * 1.55) / (DEFAULT_VIEW_SIZE * 2.2)));
     const near = camDistance + span * (0.24 + (1 - amount) * 0.64) - span * zoomFade * (0.72 + amount * 0.58);
     const far = camDistance + span * (1.08 + (1 - amount) * 1.05) - span * zoomFade * 0.16;
-    scene.fog = new THREE.Fog(fogHex, near, Math.max(near + span * 0.45, far));
+    // Mutate a persistent Fog instance: updateCamera() calls this on every
+    // orbit/pan/zoom and a fresh allocation per gesture frame churns GC.
+    distanceMistFog.color.setHex(fogHex);
+    distanceMistFog.near = near;
+    distanceMistFog.far = Math.max(near + span * 0.45, far);
+    if (scene.fog !== distanceMistFog) scene.fog = distanceMistFog;
   }
 
   function setRenderResolutionScale(value) {
@@ -686,6 +698,9 @@
     const soft = Math.min(18, clearTop);
     const edge = Math.min(28, clearTop);
     document.body.style.setProperty('--tilt-blur', blur.toFixed(1) + 'px');
+    // blur(0) still pays for a full-viewport backdrop snapshot every
+    // compositor frame — remove the overlay entirely when the effect is off.
+    document.body.classList.toggle('tilt-blur-off', blur <= 0.01);
     document.body.style.setProperty('--tilt-clear-top', clearTop.toFixed(1) + '%');
     document.body.style.setProperty('--tilt-clear-bottom', clearBottom.toFixed(1) + '%');
     document.body.style.setProperty('--tilt-soft-top', Math.max(0, clearTop - soft).toFixed(1) + '%');
@@ -1243,9 +1258,11 @@
   function updateSceneVisibilityForCamera() {
     resetRenderCullStats();
     if (typeof worldGroup === 'undefined' || !worldGroup || typeof cellMeshes === 'undefined') return;
-    camera.updateMatrixWorld(true);
-    worldGroup.updateMatrixWorld(true);
-    xrWorldRoot.updateMatrixWorld(true);
+    // Non-forced: only dirty subtrees recompute their world matrices. Objects
+    // with matrixAutoUpdate=false (selection hulls, XR reticle) set
+    // matrixWorldNeedsUpdate themselves when they write .matrix directly.
+    camera.updateMatrixWorld();
+    scene.updateMatrixWorld();
     renderCullMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     renderCullFrustum.setFromProjectionMatrix(renderCullMatrix);
 
@@ -1319,7 +1336,6 @@
       );
       for (const island of editableIslands) {
         if (!island || !island.group) continue;
-        island.group.updateMatrixWorld(true);
         renderCullIslandBox.copy(renderCullBox).applyMatrix4(island.group.matrixWorld);
         const visible = renderCullFrustum.intersectsBox(renderCullIslandBox);
         const lod = island.lod || 'hidden';
@@ -1350,8 +1366,22 @@
     updateUnderOcclusionCloudWipe(wipeStrength, wipePhase);
   }
 
+  let shadowUpdateCounter = 0;
+  function requestShadowMapUpdate() {
+    if (renderer && renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
+  }
+  window.requestShadowMapUpdate = requestShadowMapUpdate;
+
   function renderScene() {
     renderer.info.reset();
+    // Half-rate shadow refresh: swaying trees and moving vehicles keep their
+    // shadows live at 30Hz, which is imperceptible, while the shadow pass
+    // cost halves. The needsUpdate flag is consumed by the first render()
+    // call below, so the normals/post passes never re-render shadows.
+    if (++shadowUpdateCounter >= 2) {
+      shadowUpdateCounter = 0;
+      renderer.shadowMap.needsUpdate = true;
+    }
     updateSceneVisibilityForCamera();
     const xrPresenting = renderer.xr && renderer.xr.isPresenting;
     const usePixelation = renderPixelSize > 1 && !xrPresenting;

@@ -850,6 +850,22 @@
     renderer.domElement.classList.add('dragging');
   });
 
+  // Coalesce hover raycasts to one per rendered frame. pointermove fires at
+  // the device rate (240Hz mice, 8-15 events per frame), and each hover
+  // update runs a scene raycast — uncoalesced this dominated input latency.
+  let hoverRafPending = false;
+  let hoverRafX = 0;
+  let hoverRafY = 0;
+  function queueHoverUpdate(cx, cy) {
+    hoverRafX = cx; hoverRafY = cy;
+    if (hoverRafPending) return;
+    hoverRafPending = true;
+    requestAnimationFrame(() => {
+      hoverRafPending = false;
+      updateHoverAt(hoverRafX, hoverRafY);
+    });
+  }
+
   renderer.domElement.addEventListener('pointermove', e => {
     if (generationViewLocked) {
       e.preventDefault();
@@ -894,7 +910,7 @@
 
     // hover update for mouse devices (touch hover handled on press)
     if (e.pointerType === 'mouse' || !pointerDown) {
-      updateHoverAt(e.clientX, e.clientY);
+      queueHoverUpdate(e.clientX, e.clientY);
     }
 
     if (pointerDown) {
@@ -2101,7 +2117,7 @@
     markCameraMoving();
     fp.yaw -= e.movementX * 0.0022;
     fp.pitch = Math.max(-1.4, Math.min(1.4, fp.pitch - e.movementY * 0.0022));
-  });
+  }, { passive: true });
   window.addEventListener('keydown', e => {
     if (!fp.active) return;
     if (e.key === 'Escape') { setCameraMode('ortho'); return; }

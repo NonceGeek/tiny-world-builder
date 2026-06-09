@@ -138,7 +138,7 @@
   async function loadModelStampDefaultsConfig() {
     if (!modelStampApiEnabled()) return;
     try {
-      const res = await fetch('/api/model-stamp-defaults?ts=' + Date.now(), { cache: 'no-store' });
+      const res = await fetch('/api/model-stamp-defaults?ts=' + Date.now(), { cache: 'no-store', signal: bootFetchTimeoutSignal() });
       if (!res.ok) return;
       const data = await res.json();
       const src = data && data.stamps && typeof data.stamps === 'object' ? data.stamps : null;
@@ -549,8 +549,14 @@
     return MODEL_STAMP_ASSETS;
   }
 
-  async function fetchModelStampList(url) {
-    const res = await fetch(url, { cache: 'no-store' });
+  function bootFetchTimeoutSignal() {
+    // Bound boot-path fetches so a cold function start or stalled CDN edge
+    // can't hang the stamp library indefinitely.
+    try { return AbortSignal.timeout(5000); } catch (_) { return undefined; }
+  }
+
+  async function fetchModelStampList(url, opts) {
+    const res = await fetch(url, Object.assign({ signal: bootFetchTimeoutSignal() }, opts || {}));
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     return Array.isArray(data) ? data : (data.models || data.stamps || []);
@@ -559,9 +565,13 @@
   async function refreshModelStampManifest() {
     const endpoints = [];
     if (modelStampScanApiEnabled()) {
+      // The scan API is a live filesystem scan — keep it deliberately fresh.
       endpoints.push('/api/model-stamps?ts=' + Date.now());
     }
-    endpoints.push(MODEL_STAMP_MANIFEST_URL + '?ts=' + Date.now());
+    // Static manifest: rely on HTTP caching (etag revalidation via
+    // netlify.toml) instead of a ?ts= cache-buster that forced a full
+    // download on every boot.
+    endpoints.push(MODEL_STAMP_MANIFEST_URL);
     let loaded = false;
     let lastErr = null;
     for (const endpoint of endpoints) {

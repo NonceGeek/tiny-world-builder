@@ -28,6 +28,38 @@
     return g;
   }
 
+  // Precise variant for deterministic part dimensions (house/manor/tower
+  // trim). 1 mm quantum: these callers pass fixed constants, so the cache
+  // stays bounded by the part catalogue while tiny pieces (0.012-thick
+  // weathervanes etc.) keep their exact size. Sharing one VBO per distinct
+  // dimension also lets optimizeVoxelObjectGroup batch identical parts
+  // across houses (instancing is keyed on geometry uuid).
+  function getBoxGeometryPrecise(w, h, d) {
+    const qw = Math.round(w * 1000) / 1000;
+    const qh = Math.round(h * 1000) / 1000;
+    const qd = Math.round(d * 1000) / 1000;
+    const key = 'boxp|' + qw + '|' + qh + '|' + qd;
+    const hit = geomCache.get(key);
+    if (hit) return hit;
+    const g = new THREE.BoxGeometry(qw, qh, qd);
+    g.userData.cached = true;
+    geomCache.set(key, g);
+    return g;
+  }
+
+  function getSphereGeometry(radius, widthSegments = 8, heightSegments = 8) {
+    const qr = Math.round(radius * 1000) / 1000;
+    const ws = Math.max(4, Math.min(24, Math.round(widthSegments || 8)));
+    const hs = Math.max(3, Math.min(16, Math.round(heightSegments || 8)));
+    const key = 'sphere|' + qr + '|' + ws + '|' + hs;
+    const hit = geomCache.get(key);
+    if (hit) return hit;
+    const g = new THREE.SphereGeometry(qr, ws, hs);
+    g.userData.cached = true;
+    geomCache.set(key, g);
+    return g;
+  }
+
   function getCylinderGeometry(radius, height, segments = 12) {
     const qr = Math.round(radius * 1000) / 1000;
     const qh = Math.round(height * 100) / 100;
@@ -234,7 +266,10 @@
     wearMoss:  new THREE.MeshLambertMaterial({ color: 0x6f8732, side: THREE.FrontSide }),
     water:     new THREE.MeshLambertMaterial({ color: 0x3a8fcc, side: THREE.FrontSide }),
     waterDk:   new THREE.MeshLambertMaterial({ color: 0x2f77ad, side: THREE.FrontSide }),
-    waterFoam: new THREE.MeshLambertMaterial({ color: 0xeaf7ff, transparent: true, opacity: 0.86, side: THREE.FrontSide }),
+    // Opaque on purpose: 0.86 opacity was visually indistinguishable from
+    // opaque for this near-white foam, and transparency put every water-edge
+    // strip into the sort pass + overdraw on a fill-bound app.
+    waterFoam: new THREE.MeshLambertMaterial({ color: 0xeaf7ff, side: THREE.FrontSide }),
     waterfall: new THREE.MeshBasicMaterial({ color: 0x28b5f0, transparent: true, opacity: 0.56, depthWrite: true, side: THREE.FrontSide }),
     waterfallHi: new THREE.MeshBasicMaterial({ color: 0x96e7ff, transparent: true, opacity: 0.68, depthWrite: true, side: THREE.FrontSide }),
     waterfallFoamPuff: new THREE.MeshBasicMaterial({ color: 0xf4fdff, transparent: true, opacity: 0.82, depthWrite: true }),

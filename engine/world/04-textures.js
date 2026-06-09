@@ -870,6 +870,9 @@
     ctx.imageSmoothingEnabled = false;
     const fallback = createIslandSideStrataReferenceTexture(width, height);
     if (fallback && fallback.image) ctx.drawImage(fallback.image, 0, 0, width, height);
+    // Only the canvas pixels were needed; release the texture wrapper so it
+    // can't be uploaded or retained.
+    if (fallback && fallback.dispose) fallback.dispose();
     const tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;

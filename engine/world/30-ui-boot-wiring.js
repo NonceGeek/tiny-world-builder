@@ -2600,43 +2600,11 @@
     return 'w_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
   }
   function snapshotCurrentState() {
-    try {
-      const cells = [];
-      for (const xKey of Object.keys(world)) {
-        const x = parseInt(xKey, 10);
-        if (!Number.isFinite(x)) continue;
-        const row = world[xKey];
-        if (!row) continue;
-        const insideHomeX = x >= 0 && x < GRID;
-        for (const zKey of Object.keys(row)) {
-          const z = parseInt(zKey, 10);
-          if (!Number.isFinite(z)) continue;
-          const c = row[zKey];
-          if (!c) continue;
-          const insideHome = insideHomeX && z >= 0 && z < GRID;
-          if (!insideHome && !c.userEdited) continue;
-          const entry = serializeCell(x, z, c);
-          if (entry) cells.push(entry);
-        }
-      }
-      return {
-        v: STORAGE_VERSION,
-        gridSize: GRID,
-        islands: serializeEditableIslands(),
-        moorings: serializeMooringCables(),
-        cells,
-        voxelBuildStamps: referencedVoxelBuildStamps(cells),
-        cameraMode,
-        toolId: selectedTool && selectedTool.id,
-        useLandscapeEngine,
-        landscapeMeshMode,
-        landscapeMeshBiome,
-        landscapeMeshStyle,
-        landscapeEngineSeed: landscapeEngineInstance ? landscapeEngineInstance.seed : null,
-        landscapeEngineBiome: landscapeEngineInstance ? landscapeEngineInstance.currentBiomeName : null,
-        planetLandscape: serializePlanetLandscapeState(),
-      };
-    } catch (_) { return null; }
+    // Delegates to the canonical serializer in 29-persistence-api.js — this
+    // used to be a byte-for-byte duplicate of that cell walk, which meant the
+    // world was serialized twice per edit burst (once for localStorage, once
+    // for the world-menu slot).
+    try { return buildWorldStateObject(); } catch (_) { return null; }
   }
   function relativeTime(ts) {
     if (!ts) return '';
@@ -3306,8 +3274,15 @@
       const item = e.target.closest('.palette-item');
       if (!item) return;
       const i = Number(item.getAttribute('data-i')) || 0;
-      if (i !== cursor) { cursor = i; paint(); }
-    });
+      if (i !== cursor) {
+        // Swap the active class in place — a full paint() here rebuilt the
+        // 80-item list's innerHTML on every mousemove across the palette.
+        cursor = i;
+        const prev = results.querySelector('.palette-item.active');
+        if (prev) prev.classList.remove('active');
+        item.classList.add('active');
+      }
+    }, { passive: true });
     overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
     window.addEventListener('keydown', e => {
       const isK = (e.key === 'k' || e.key === 'K');

@@ -47,7 +47,7 @@
       const slabLen   = Math.sqrt(halfW * halfW + rise * rise);
       const slabAngle = Math.atan2(rise, halfW);
       const sa = Math.sin(slabAngle), ca = Math.cos(slabAngle);
-      const slabGeo = new THREE.BoxGeometry(slabLen, H.T, ROOF_DEPTH);
+      const slabGeo = getBoxGeometryPrecise(slabLen, H.T, ROOF_DEPTH);
 
       const slabL = new THREE.Mesh(slabGeo, M.roofBlue);
       slabL.position.set(-halfW / 2 - (H.T / 2) * sa, (H.WALL_H + H.PEAK_Y) / 2 + (H.T / 2) * ca, ROOF_Z);
@@ -59,7 +59,7 @@
       slabR.rotation.z = -slabAngle;
       g.add(slabR);
 
-      const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, ROOF_DEPTH + 0.02), M.roofBlueD);
+      const ridge = new THREE.Mesh(getBoxGeometryPrecise(0.10, 0.06, ROOF_DEPTH + 0.02), M.roofBlueD);
       ridge.position.set(0, H.PEAK_Y + (H.T / 2) * ca + 0.005, ROOF_Z);
       g.add(ridge);
       return g;
@@ -101,22 +101,22 @@
     door(orientation) {
       const g = new THREE.Group();
       if (orientation === 'gable') {
-        const door = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.48, 0.04), M.door);
+        const door = new THREE.Mesh(getBoxGeometryPrecise(0.2, 0.48, 0.04), M.door);
         door.position.set(0, 0.24, 0); g.add(door);
         const trimV = getBoxGeometry(0.04, 0.48, 0.04);
         const aL = new THREE.Mesh(trimV, M.woodTrim); aL.position.set(-0.10, 0.24, 0.01); g.add(aL);
         const aR = new THREE.Mesh(trimV, M.woodTrim); aR.position.set( 0.10, 0.24, 0.01); g.add(aR);
         const aT = new THREE.Mesh(getBoxGeometry(0.24, 0.04, 0.04), M.woodTrim); aT.position.set(0, 0.50, 0.01); g.add(aT);
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), M.knob);
+        const knob = new THREE.Mesh(getSphereGeometry(0.022, 8, 8), M.knob);
         knob.position.set(0.08, 0.24, 0.03); g.add(knob);
       } else {
-        const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.48, 0.2), M.door);
+        const door = new THREE.Mesh(getBoxGeometryPrecise(0.04, 0.48, 0.2), M.door);
         door.position.set(0, 0.24, 0); g.add(door);
         const trimV = getBoxGeometry(0.04, 0.48, 0.04);
         const aL = new THREE.Mesh(trimV, M.woodTrim); aL.position.set(0.01, 0.24, -0.10); g.add(aL);
         const aR = new THREE.Mesh(trimV, M.woodTrim); aR.position.set(0.01, 0.24,  0.10); g.add(aR);
         const aT = new THREE.Mesh(getBoxGeometry(0.04, 0.04, 0.24), M.woodTrim); aT.position.set(0.01, 0.50, 0); g.add(aT);
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), M.knob);
+        const knob = new THREE.Mesh(getSphereGeometry(0.022, 8, 8), M.knob);
         knob.position.set(0.03, 0.24, 0.05); g.add(knob);
       }
       return g;
@@ -146,14 +146,14 @@
     // Chimney stack. Origin at chimney CENTRE in y (so a position of y=0.85 puts
     // the bottom inside the wall and the top at y=1.15).
     chimney() {
-      return new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.14), M.chimney);
+      return new THREE.Mesh(getBoxGeometryPrecise(0.14, 0.6, 0.14), M.chimney);
     },
 
     // Doorstep slab. Origin at step CENTRE.
     step(orientation) {
       return orientation === 'side'
-        ? new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.26), M.step)
-        : new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.12), M.step);
+        ? new THREE.Mesh(getBoxGeometryPrecise(0.12, 0.06, 0.26), M.step)
+        : new THREE.Mesh(getBoxGeometryPrecise(0.26, 0.06, 0.12), M.step);
     },
 
     // External staircase — chunky stylized stair climbing toward -z and +y
@@ -168,7 +168,7 @@
       const width    = 0.22;
       for (let i = 0; i < N; i++) {
         const s = new THREE.Mesh(
-          new THREE.BoxGeometry(width, stepRise, stepRun * 1.4),
+          getBoxGeometryPrecise(width, stepRise, stepRun * 1.4),
           M.step
         );
         s.position.set(0, stepRise * (i + 0.5), -i * stepRun);
@@ -181,13 +181,13 @@
     // door but smaller, intended to sit on a +x face.
     upperDoor() {
       const g = new THREE.Group();
-      const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.42, 0.18), M.door);
+      const door = new THREE.Mesh(getBoxGeometryPrecise(0.04, 0.42, 0.18), M.door);
       door.position.set(0, 0.21, 0); g.add(door);
       const trimV = getBoxGeometry(0.04, 0.42, 0.04);
       const aL = new THREE.Mesh(trimV, M.woodTrim); aL.position.set(0.01, 0.21, -0.09); g.add(aL);
       const aR = new THREE.Mesh(trimV, M.woodTrim); aR.position.set(0.01, 0.21,  0.09); g.add(aR);
       const aT = new THREE.Mesh(getBoxGeometry(0.04, 0.04, 0.22), M.woodTrim); aT.position.set(0.01, 0.44, 0); g.add(aT);
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 8), M.knob);
+      const knob = new THREE.Mesh(getSphereGeometry(0.020, 8, 8), M.knob);
       knob.position.set(0.03, 0.21, 0.05); g.add(knob);
       return g;
     },
@@ -355,7 +355,7 @@
     const mat = terrain === 'water' ? M.bridgeWoodD : M.castleStone;
     const trim = terrain === 'water' ? M.bridgeWood : M.castleStoneD;
 
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), trim);
+    const deck = new THREE.Mesh(getBoxGeometryPrecise(w, 0.08, d), trim);
     deck.position.y = clearance - 0.04;
     g.add(deck);
 
@@ -363,7 +363,7 @@
     const postW = 0.11;
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.BoxGeometry(postW, postH, postW), mat);
+        const post = new THREE.Mesh(getBoxGeometryPrecise(postW, postH, postW), mat);
         post.position.set(sx * (halfW - postW / 2), postH / 2, sz * (halfD - postW / 2));
         g.add(post);
       }
@@ -371,20 +371,20 @@
 
     const archH = 0.10;
     const beamY = clearance - 0.18;
-    const north = new THREE.Mesh(new THREE.BoxGeometry(w, archH, postW), mat);
+    const north = new THREE.Mesh(getBoxGeometryPrecise(w, archH, postW), mat);
     north.position.set(0, beamY, -halfD + postW / 2);
     g.add(north);
     const south = north.clone();
     south.position.z = halfD - postW / 2;
     g.add(south);
-    const west = new THREE.Mesh(new THREE.BoxGeometry(postW, archH, d), mat);
+    const west = new THREE.Mesh(getBoxGeometryPrecise(postW, archH, d), mat);
     west.position.set(-halfW + postW / 2, beamY, 0);
     g.add(west);
     const east = west.clone();
     east.position.x = halfW - postW / 2;
     g.add(east);
 
-    const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.08, 0.04, d + 0.08), trim);
+    const lip = new THREE.Mesh(getBoxGeometryPrecise(w + 0.08, 0.04, d + 0.08), trim);
     lip.position.y = clearance + 0.02;
     g.add(lip);
 
@@ -419,7 +419,7 @@
     g.add(roof);
 
     // Roof eave trim — a thin dark rim around the roof base for visual punch
-    const eaveR = new THREE.Mesh(new THREE.BoxGeometry(SIDE + 0.04, 0.04, SIDE + 0.04), M.roofBlueD);
+    const eaveR = new THREE.Mesh(getBoxGeometryPrecise(SIDE + 0.04, 0.04, SIDE + 0.04), M.roofBlueD);
     eaveR.position.y = wallH + 0.02;
     g.add(eaveR);
 
@@ -594,12 +594,12 @@
     }
 
     // Roof cap (slightly larger than body)
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, 0.05, D + 0.04), M.skyRoof);
+    const roof = new THREE.Mesh(getBoxGeometryPrecise(W + 0.04, 0.05, D + 0.04), M.skyRoof);
     roof.position.y = totalH + 0.025;
     g.add(roof);
 
     // Rooftop details — HVAC unit + antenna
-    const hvac = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.16), M.castleStoneD);
+    const hvac = new THREE.Mesh(getBoxGeometryPrecise(0.20, 0.10, 0.16), M.castleStoneD);
     hvac.position.set(-0.18, totalH + 0.10, 0.20);
     g.add(hvac);
     const ant = new THREE.Mesh(getBoxGeometry(0.03, 0.36, 0.03), M.skyFrame);
@@ -607,7 +607,7 @@
     g.add(ant);
 
     // Ground-floor entrance — wood door for some warmth
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.32, 0.04), M.door);
+    const door = new THREE.Mesh(getBoxGeometryPrecise(0.20, 0.32, 0.04), M.door);
     door.position.set(0, 0.16, D / 2 + 0.01);
     g.add(door);
 
@@ -632,12 +632,12 @@
     g.add(walls);
 
     // White stone plinth (ground band)
-    const plinth = new THREE.Mesh(new THREE.BoxGeometry(W + 0.06, 0.10, D + 0.06), M.manorTrim);
+    const plinth = new THREE.Mesh(getBoxGeometryPrecise(W + 0.06, 0.10, D + 0.06), M.manorTrim);
     plinth.position.y = 0.05;
     g.add(plinth);
 
     // Cornice trim at top of walls
-    const cornice = new THREE.Mesh(new THREE.BoxGeometry(W + 0.06, 0.06, D + 0.06), M.manorTrim);
+    const cornice = new THREE.Mesh(getBoxGeometryPrecise(W + 0.06, 0.06, D + 0.06), M.manorTrim);
     cornice.position.y = wallH - 0.03;
     g.add(cornice);
 
@@ -649,7 +649,7 @@
     g.add(roof);
 
     // Roof ridge accent
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(W * 0.5, 0.04, 0.08), M.manorRoofD);
+    const ridge = new THREE.Mesh(getBoxGeometryPrecise(W * 0.5, 0.04, 0.08), M.manorRoofD);
     ridge.position.y = wallH + 0.50;
     g.add(ridge);
 
@@ -659,13 +659,13 @@
     const porticoW = 0.62;
     const porticoH = Math.min(wallH - 0.12, H.WALL_H - 0.10);
     // Floor slab
-    const porchSlab = new THREE.Mesh(new THREE.BoxGeometry(porticoW + 0.12, 0.06, porticoD + 0.08), M.manorTrim);
+    const porchSlab = new THREE.Mesh(getBoxGeometryPrecise(porticoW + 0.12, 0.06, porticoD + 0.08), M.manorTrim);
     porchSlab.position.set(0, 0.06, halfD + porticoD / 2 - 0.01);
     g.add(porchSlab);
-    const porchStep = new THREE.Mesh(new THREE.BoxGeometry(porticoW + 0.28, 0.05, 0.18), M.manorTrim);
+    const porchStep = new THREE.Mesh(getBoxGeometryPrecise(porticoW + 0.28, 0.05, 0.18), M.manorTrim);
     porchStep.position.set(0, 0.025, halfD + porticoD + 0.10);
     g.add(porchStep);
-    const doorThreshold = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.035, 0.12), M.manorTrim);
+    const doorThreshold = new THREE.Mesh(getBoxGeometryPrecise(0.34, 0.035, 0.12), M.manorTrim);
     doorThreshold.position.set(0, 0.095, halfD + 0.07);
     g.add(doorThreshold);
     // Front columns plus wall-side pilasters make the portico read as attached.
@@ -676,27 +676,27 @@
       );
       col.position.set(u * (porticoW - 0.10), 0.06 + porticoH / 2, halfD + porticoD - 0.06);
       g.add(col);
-      const pilaster = new THREE.Mesh(new THREE.BoxGeometry(0.09, porticoH, 0.035), M.manorTrim);
+      const pilaster = new THREE.Mesh(getBoxGeometryPrecise(0.09, porticoH, 0.035), M.manorTrim);
       pilaster.position.set(u * (porticoW - 0.10), 0.06 + porticoH / 2, halfD + 0.018);
       g.add(pilaster);
     }
     // Architrave
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(porticoW + 0.12, 0.08, porticoD + 0.10), M.manorTrim);
+    const arch = new THREE.Mesh(getBoxGeometryPrecise(porticoW + 0.12, 0.08, porticoD + 0.10), M.manorTrim);
     arch.position.set(0, 0.06 + porticoH + 0.04, halfD + porticoD / 2 - 0.01);
     g.add(arch);
-    const porticoCeiling = new THREE.Mesh(new THREE.BoxGeometry(porticoW + 0.04, 0.035, porticoD + 0.08), M.manorTrim);
+    const porticoCeiling = new THREE.Mesh(getBoxGeometryPrecise(porticoW + 0.04, 0.035, porticoD + 0.08), M.manorTrim);
     porticoCeiling.position.set(0, 0.06 + porticoH - 0.035, halfD + porticoD / 2 - 0.01);
     g.add(porticoCeiling);
     // Pediment (triangular front) — fake with a thin tilted box
-    const ped = new THREE.Mesh(new THREE.BoxGeometry(porticoW + 0.06, 0.16, 0.04), M.manorTrim);
+    const ped = new THREE.Mesh(getBoxGeometryPrecise(porticoW + 0.06, 0.16, 0.04), M.manorTrim);
     ped.position.set(0, 0.06 + porticoH + 0.16, halfD + porticoD - 0.035);
     g.add(ped);
 
     // Front door (under the portico)
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.46, 0.04), M.door);
+    const door = new THREE.Mesh(getBoxGeometryPrecise(0.26, 0.46, 0.04), M.door);
     door.position.set(0, 0.23, halfD + 0.005);
     g.add(door);
-    const doorKnob = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), M.knob);
+    const doorKnob = new THREE.Mesh(getSphereGeometry(0.018, 6, 6), M.knob);
     doorKnob.position.set(0.09, 0.23, halfD + 0.03);
     g.add(doorKnob);
 
@@ -866,7 +866,7 @@
     roofCap.position.y = wallH + 0.86;
     g.add(roofCap);
 
-    const finialBall = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), M.knob);
+    const finialBall = new THREE.Mesh(getSphereGeometry(0.05, 8, 8), M.knob);
     finialBall.position.y = wallH + 0.95;
     g.add(finialBall);
     const finialSpike = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.18, 6), matStoneD);
@@ -874,7 +874,7 @@
     g.add(finialSpike);
 
     // Bigger arched front door on +z.
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.46, 0.04), M.door);
+    const door = new THREE.Mesh(getBoxGeometryPrecise(0.28, 0.46, 0.04), M.door);
     door.position.set(0, 0.39, radius + 0.02);
     g.add(door);
     const archTop = new THREE.Mesh(
@@ -898,7 +898,7 @@
       win.rotation.y = angle;
       g.add(win);
     }
-    const sideWin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.20, 0.10), M.castleSlit);
+    const sideWin = new THREE.Mesh(getBoxGeometryPrecise(0.03, 0.20, 0.10), M.castleSlit);
     sideWin.position.set(radius + 0.015, wallH * 0.55 + 0.12, 0);
     g.add(sideWin);
 
@@ -906,13 +906,13 @@
     const pole = new THREE.Mesh(getBoxGeometry(0.025, 0.30, 0.025), matStoneD);
     pole.position.y = wallH + 1.18;
     g.add(pole);
-    const flag = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.02), M.flagRed);
+    const flag = new THREE.Mesh(getBoxGeometryPrecise(0.18, 0.10, 0.02), M.flagRed);
     flag.position.set(0.11, wallH + 1.26, 0);
     g.add(flag);
     const beaconCup = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.055, 8), matRoofD);
     beaconCup.position.y = wallH + 1.40;
     g.add(beaconCup);
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), M.windowLit);
+    const beacon = new THREE.Mesh(getSphereGeometry(0.065, 8, 8), M.windowLit);
     beacon.position.y = wallH + 1.46;
     g.add(beacon);
     for (const side of [-1, 1]) {
@@ -967,7 +967,7 @@
     // No neighbours — render a stub (orphan castle fence).
     if (segs.length === 0) {
       const stub = new THREE.Mesh(
-        new THREE.BoxGeometry(wallT * 1.4, wallH, wallT * 1.4),
+        getBoxGeometryPrecise(wallT * 1.4, wallH, wallT * 1.4),
         M.castleStone
       );
       stub.position.y = wallH / 2;
@@ -975,7 +975,7 @@
     }
 
     for (const s of segs) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(s.w, wallH, s.d), M.castleStone);
+      const wall = new THREE.Mesh(getBoxGeometryPrecise(s.w, wallH, s.d), M.castleStone);
       wall.position.set(s.x, wallH / 2, s.z);
       g.add(wall);
 
@@ -1010,14 +1010,14 @@
     const nbrCount = (neighbors.n?1:0)+(neighbors.s?1:0)+(neighbors.e?1:0)+(neighbors.w?1:0);
     if (nbrCount >= 2) {
       const cap = new THREE.Mesh(
-        new THREE.BoxGeometry(wallT * 1.15, wallH + 0.06, wallT * 1.15),
+        getBoxGeometryPrecise(wallT * 1.15, wallH + 0.06, wallT * 1.15),
         M.castleStone
       );
       cap.position.y = (wallH + 0.06) / 2;
       g.add(cap);
       // Cap merlon (single block on top, slightly taller than wall merlons)
       const capMerlon = new THREE.Mesh(
-        new THREE.BoxGeometry(wallT * 0.9, 0.12, wallT * 0.9),
+        getBoxGeometryPrecise(wallT * 0.9, 0.12, wallT * 0.9),
         M.castleStone
       );
       capMerlon.position.y = wallH + 0.06 + 0.06;
@@ -1048,10 +1048,10 @@
       // Two short pillars flanking the crossing.
       const pillarMat = M.castleStone || M.fenceSteel;
       for (const s of [-1, 1]) {
-        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.34, 0.12), pillarMat);
+        const pillar = new THREE.Mesh(getBoxGeometryPrecise(0.12, 0.34, 0.12), pillarMat);
         pillar.position.set(spanAlongX ? s * 0.42 : 0, 0.17, spanAlongX ? 0 : s * 0.42);
         g.add(pillar);
-        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.16), M.castleStoneD || M.fenceSteel);
+        const cap = new THREE.Mesh(getBoxGeometryPrecise(0.16, 0.05, 0.16), M.castleStoneD || M.fenceSteel);
         cap.position.set(spanAlongX ? s * 0.42 : 0, 0.36, spanAlongX ? 0 : s * 0.42);
         g.add(cap);
       }
@@ -1061,18 +1061,18 @@
       const beamMat   = M.castleStoneD || M.fenceSteel;
       const pillarH   = 0.55 + Math.min(level - 3, 4) * 0.06;
       for (const s of [-1, 1]) {
-        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.14, pillarH, 0.14), pillarMat);
+        const pillar = new THREE.Mesh(getBoxGeometryPrecise(0.14, pillarH, 0.14), pillarMat);
         pillar.position.set(spanAlongX ? s * 0.42 : 0, pillarH / 2, spanAlongX ? 0 : s * 0.42);
         g.add(pillar);
       }
       const beam = new THREE.Mesh(
-        new THREE.BoxGeometry(spanAlongX ? 1.00 : 0.16, 0.10, spanAlongX ? 0.16 : 1.00),
+        getBoxGeometryPrecise(spanAlongX ? 1.00 : 0.16, 0.10, spanAlongX ? 0.16 : 1.00),
         beamMat
       );
       beam.position.y = pillarH + 0.05;
       g.add(beam);
       // Banner / keystone in the middle.
-      const stone = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.18, 0.20), pillarMat);
+      const stone = new THREE.Mesh(getBoxGeometryPrecise(0.20, 0.18, 0.20), pillarMat);
       stone.position.y = pillarH + 0.20;
       g.add(stone);
       if (level >= 5) {
@@ -1139,13 +1139,13 @@
       const wallH = level >= 5 ? 0.58 : 0.46;
       const wallT = level >= 5 ? 0.14 : 0.18;
       const wall = new THREE.Mesh(
-        new THREE.BoxGeometry(alongX ? 1.08 : wallT, wallH, alongX ? wallT : 1.08),
+        getBoxGeometryPrecise(alongX ? 1.08 : wallT, wallH, alongX ? wallT : 1.08),
         stone
       );
       wall.position.set(offsetX, wallH / 2, offsetZ);
       g.add(wall);
       const cap = new THREE.Mesh(
-        new THREE.BoxGeometry(alongX ? 1.12 : wallT + 0.04, 0.055, alongX ? wallT + 0.04 : 1.12),
+        getBoxGeometryPrecise(alongX ? 1.12 : wallT + 0.04, 0.055, alongX ? wallT + 0.04 : 1.12),
         capMat
       );
       cap.position.set(offsetX, wallH + 0.027, offsetZ);
@@ -1262,13 +1262,13 @@
     ];
     positions.forEach(p => {
       const r = 0.16 * p.s;
-      const pump = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), M.pumpkin);
+      const pump = new THREE.Mesh(getSphereGeometry(r, 10, 8), M.pumpkin);
       pump.scale.y = 0.72;
       pump.position.set(p.x, r * 0.72, p.z);
       pump.rotation.y = p.rot;
       g.add(pump);
       // dark band suggestion — thin slice of darker pumpkin across the equator
-      const band = new THREE.Mesh(new THREE.BoxGeometry(r * 2.05, 0.025, 0.04), M.pumpkinDk);
+      const band = new THREE.Mesh(getBoxGeometryPrecise(r * 2.05, 0.025, 0.04), M.pumpkinDk);
       band.position.set(p.x, r * 0.72, p.z);
       band.rotation.y = p.rot;
       g.add(band);
@@ -1291,7 +1291,7 @@
 
     // Main coach body — flattened sphere standing on the dirt.
     const bodyR = 0.30;
-    const body = new THREE.Mesh(new THREE.SphereGeometry(bodyR, 14, 10), M.pumpkin);
+    const body = new THREE.Mesh(getSphereGeometry(bodyR, 14, 10), M.pumpkin);
     body.scale.set(1.1, 0.95, 0.95);
     body.position.y = bodyR * 0.95;
     g.add(body);
@@ -1300,17 +1300,17 @@
     const bandCount = 6;
     for (let i = 0; i < bandCount; i++) {
       const ang = (i / bandCount) * Math.PI;
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.02, bodyR * 1.8, bodyR * 2.0), M.pumpkinDk);
+      const band = new THREE.Mesh(getBoxGeometryPrecise(0.02, bodyR * 1.8, bodyR * 2.0), M.pumpkinDk);
       band.position.y = bodyR * 0.95;
       band.rotation.y = ang;
       g.add(band);
     }
 
     // Door panel + small window on the front face.
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.20, 0.04), M.pumpkinDk);
+    const door = new THREE.Mesh(getBoxGeometryPrecise(0.18, 0.20, 0.04), M.pumpkinDk);
     door.position.set(0, bodyR * 0.95, bodyR * 0.95 + 0.01);
     g.add(door);
-    const windowPane = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.02), M.windowB);
+    const windowPane = new THREE.Mesh(getBoxGeometryPrecise(0.10, 0.08, 0.02), M.windowB);
     windowPane.position.set(0, bodyR * 1.15, bodyR * 0.95 + 0.03);
     g.add(windowPane);
     const doorKnob = new THREE.Mesh(getBoxGeometry(0.025, 0.025, 0.02), M.knob);
@@ -1345,7 +1345,7 @@
       g.add(hub);
       // Spokes — three short bars across the face for a coach feel.
       for (let s = 0; s < 3; s++) {
-        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.018, 0.012), M.knob);
+        const spoke = new THREE.Mesh(getBoxGeometryPrecise(0.16, 0.018, 0.012), M.knob);
         spoke.position.set(x, 0.10, z);
         spoke.rotation.x = (s / 3) * Math.PI;
         g.add(spoke);
@@ -1353,7 +1353,7 @@
     });
 
     // Tiny gold trim band where the wheels meet the body.
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.025, 0.42), M.knob);
+    const trim = new THREE.Mesh(getBoxGeometryPrecise(0.50, 0.025, 0.42), M.knob);
     trim.position.y = 0.20;
     g.add(trim);
 
@@ -1467,7 +1467,7 @@
   function makeFlower() {
     const g = new THREE.Group();
     // Small grass cluster at base.
-    const base = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.18), M.leaves);
+    const base = new THREE.Mesh(getBoxGeometryPrecise(0.18, 0.05, 0.18), M.leaves);
     base.position.y = 0.025;
     g.add(base);
     const palettes = [M_PLANT.petalRed, M_PLANT.petalYellow, M_PLANT.petalPurple, M_PLANT.petalWhite];
@@ -1476,7 +1476,7 @@
       const stem = new THREE.Mesh(getBoxGeometry(0.03, 0.14, 0.03), M.leavesDk);
       stem.position.set(x, 0.10, z);
       g.add(stem);
-      const petals = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.05, 0.10), palettes[i % palettes.length]);
+      const petals = new THREE.Mesh(getBoxGeometryPrecise(0.10, 0.05, 0.10), palettes[i % palettes.length]);
       petals.position.set(x, 0.20, z);
       g.add(petals);
       const heart = new THREE.Mesh(getBoxGeometry(0.04, 0.03, 0.04), M_PLANT.petalYellow);
@@ -1496,7 +1496,7 @@
       [0.05,-0.16,0.18, 0.16],
     ];
     positions.forEach(([x, z, w, h], i) => {
-      const lobe = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), i % 2 ? M.leavesDk : M.leaves);
+      const lobe = new THREE.Mesh(getBoxGeometryPrecise(w, h, w), i % 2 ? M.leavesDk : M.leaves);
       lobe.position.set(x, h / 2, z);
       g.add(lobe);
     });
@@ -1513,18 +1513,18 @@
   }
   function makeCow() {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.26, 0.24), M_ANIMAL.cowWhite);
+    const body = new THREE.Mesh(getBoxGeometryPrecise(0.42, 0.26, 0.24), M_ANIMAL.cowWhite);
     body.position.set(0, 0.22, 0);
     g.add(body);
     // Spots
-    const spot1 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.12), M_ANIMAL.cowSpot);
+    const spot1 = new THREE.Mesh(getBoxGeometryPrecise(0.18, 0.05, 0.12), M_ANIMAL.cowSpot);
     spot1.position.set(0.06, 0.36, 0.06);
     g.add(spot1);
-    const spot2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.05, 0.10), M_ANIMAL.cowSpot);
+    const spot2 = new THREE.Mesh(getBoxGeometryPrecise(0.12, 0.05, 0.10), M_ANIMAL.cowSpot);
     spot2.position.set(-0.08, 0.36, -0.08);
     g.add(spot2);
     // Head
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.16), M_ANIMAL.cowWhite);
+    const head = new THREE.Mesh(getBoxGeometryPrecise(0.18, 0.16, 0.16), M_ANIMAL.cowWhite);
     head.position.set(0.27, 0.30, 0);
     g.add(head);
     const muzzle = new THREE.Mesh(getBoxGeometry(0.08, 0.08, 0.10), M_ANIMAL.cowMuzzle);
@@ -1542,17 +1542,17 @@
   }
   function makeSheep() {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.24, 0.22), M_ANIMAL.sheepWool);
+    const body = new THREE.Mesh(getBoxGeometryPrecise(0.34, 0.24, 0.22), M_ANIMAL.sheepWool);
     body.position.set(0, 0.22, 0);
     g.add(body);
     // Wool puffs along the back
     [[-0.10, 0.05], [0.00, 0.00], [0.10, 0.05]].forEach(([x, z]) => {
-      const puff = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.10), M_ANIMAL.sheepWool);
+      const puff = new THREE.Mesh(getBoxGeometryPrecise(0.10, 0.06, 0.10), M_ANIMAL.sheepWool);
       puff.position.set(x, 0.36, z);
       g.add(puff);
     });
     // Face
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.14, 0.12), M_ANIMAL.sheepFace);
+    const head = new THREE.Mesh(getBoxGeometryPrecise(0.14, 0.14, 0.12), M_ANIMAL.sheepFace);
     head.position.set(0.22, 0.28, 0);
     g.add(head);
     // Legs

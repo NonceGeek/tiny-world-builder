@@ -1202,6 +1202,7 @@
         if (pose) {
           xrReticle.visible = true;
           xrReticle.matrix.fromArray(pose.transform.matrix);
+          xrReticle.matrixWorldNeedsUpdate = true;
           xrReticleHit = hit;
         }
       } else {

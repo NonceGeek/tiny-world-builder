@@ -263,6 +263,9 @@
         // origin, so this produces a uniform fattening.
         const s = new THREE.Matrix4().makeScale(OUTLINE_SCALE, OUTLINE_SCALE, OUTLINE_SCALE);
         hull.matrix.multiply(s);
+        // Scene matrix updates are non-forced; flag the manual matrix so the
+        // next traversal computes this hull's matrixWorld.
+        hull.matrixWorldNeedsUpdate = true;
         hull.renderOrder = 999;
         selectionGroup.add(hull);
       } catch (_) {}

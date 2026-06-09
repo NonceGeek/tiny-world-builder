@@ -255,7 +255,9 @@
     sideFillB.position.copy(target).add(SIDE_FILL_OFFSET_B);
     backFill.position.copy(target).add(BACK_FILL_OFFSET);
     modelStampImportDirFill.position.copy(target).add(MODEL_STAMP_IMPORT_LIGHT_OFFSET);
-    sun.shadow.camera.updateProjectionMatrix();
+    // The shadow camera frustum constants are fixed; its projection matrix is
+    // recomputed in setShadowQuality(). Recomputing it on every orbit/pan
+    // frame here was pure waste — only the light *position* follows target.
   };
 
   function applyLightingSettings() {
@@ -285,7 +287,9 @@
       sun.shadow.map.dispose();
       sun.shadow.map = null;
     }
+    sun.shadow.camera.updateProjectionMatrix();
     sun.shadow.needsUpdate = true;
+    if (typeof window.requestShadowMapUpdate === 'function') window.requestShadowMapUpdate();
   }
   setShadowQuality(renderShadowQuality);
   applyLightingSettings();

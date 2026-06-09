@@ -1511,25 +1511,25 @@
     </div>
   </div>
 
-  <script src="vendor/three/three.r128.min.js"></script>
-  <script src="vendor/three/DRACOLoader.r128.js"></script>
-  <script src="vendor/three/meshopt_decoder.r128.js"></script>
-  <script src="vendor/three/GLTFLoader.r128.js"></script>
-  <script src="vendor/three/libs/fflate.min.js"></script>
-  <script src="vendor/three/USDZExporter.r128.js"></script>
-  <script src="vendor/three/curves/NURBSUtils.r128.js"></script>
-  <script src="vendor/three/curves/NURBSCurve.r128.js"></script>
-  <script src="vendor/three/FBXLoader.r128.js"></script>
-  <script src="vendor/three/VOXLoader.r128.js"></script>
-  <script src="vendor/three/VDBLoader.r128.js"></script>
+  <script defer src="vendor/three/three.r128.min.js"></script>
+  <script defer src="vendor/three/DRACOLoader.r128.js"></script>
+  <script defer src="vendor/three/meshopt_decoder.r128.js"></script>
+  <script defer src="vendor/three/GLTFLoader.r128.js"></script>
+  <script defer src="vendor/three/libs/fflate.min.js"></script>
+  <script defer src="vendor/three/USDZExporter.r128.js"></script>
+  <script defer src="vendor/three/curves/NURBSUtils.r128.js"></script>
+  <script defer src="vendor/three/curves/NURBSCurve.r128.js"></script>
+  <script defer src="vendor/three/FBXLoader.r128.js"></script>
+  <script defer src="vendor/three/VOXLoader.r128.js"></script>
+  <script defer src="vendor/three/VDBLoader.r128.js"></script>
   <script type="module" src="vendor/three/KTX2Loader.bootstrap.r128.js"></script>
-  <script src="vendor/tiny-crowd-layer.js"></script>
-  <script src="LandscapeEngine.js"></script>
-  <script src="engine/landscape/noise.js"></script>
-  <script src="engine/landscape/shaders.js"></script>
-  <script src="engine/landscape/geometries.js"></script>
-  <script src="engine/landscape/water.js"></script>
-  <script src="engine/landscape/chunks.js"></script>
+  <script defer src="vendor/tiny-crowd-layer.js"></script>
+  <script defer src="LandscapeEngine.js"></script>
+  <script defer src="engine/landscape/noise.js"></script>
+  <script defer src="engine/landscape/shaders.js"></script>
+  <script defer src="engine/landscape/geometries.js"></script>
+  <script defer src="engine/landscape/water.js"></script>
+  <script defer src="engine/landscape/chunks.js"></script>
   <script id="tinyworld-defaults-bootstrap">
   /* =====================================================================
      Defaults bootstrap — seeds localStorage from tinyworld-defaults.json
@@ -1538,9 +1538,11 @@
      ===================================================================== */
   (function tinyworldDefaultsBootstrap() {
     try {
-      // Synchronous XHR is deprecated but reliable for this tiny static file.
-      // It runs once at boot before any other localStorage reads, and the JSON
-      // is cached by the browser so subsequent loads pay no cost.
+      // Synchronous XHR is deprecated but intentional for this ~4KB file: it
+      // must seed localStorage before the deferred engine modules evaluate
+      // (they read settings at top level), and an async fetch cannot gate
+      // deferred script execution. This is the only parser-blocking request
+      // left — one small same-origin round trip.
       var xhr = new XMLHttpRequest();
       xhr.open('GET', 'tinyworld-defaults.json', false);
       xhr.send(null);
@@ -1566,16 +1568,19 @@
      is missing/invalid. Fetched once; the browser caches it.
      ===================================================================== */
   (function tinyworldDefaultIslandBootstrap() {
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'default_island.json', false);
-      xhr.send(null);
-      if (xhr.status < 200 || xhr.status >= 300) return;
-      var data = JSON.parse(xhr.responseText || 'null');
-      if (data && Array.isArray(data.cells)) window.__tinyworldDefaultIsland = data;
-    } catch (_) {
-      // Missing file / invalid JSON / blocked fetch — fall back to loadInitialScene().
-    }
+    // Async fetch started at parse time: it downloads in parallel with the
+    // deferred engine scripts, so by boot the data is almost always ready.
+    // applyDefaultIslandState() falls back to __tinyworldDefaultIslandReady
+    // for the rare slow-network case. Missing file / invalid JSON / blocked
+    // fetch — callers fall back to loadInitialScene().
+    window.__tinyworldDefaultIslandSettled = false;
+    window.__tinyworldDefaultIslandReady = fetch('default_island.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && Array.isArray(data.cells)) window.__tinyworldDefaultIsland = data;
+      })
+      .catch(function (_) {})
+      .finally(function () { window.__tinyworldDefaultIslandSettled = true; });
   })();
   </script>
   <script id="tinyworld-auth-bootstrap">
@@ -1598,63 +1603,63 @@
   <!-- i18n: locale data registers onto window.TWI18N_DATA, then the core
        resolves the active locale and exposes global t()/tx(). Must load before
        the engine modules so their top-level code can translate at build time. -->
-  <script src="engine/i18n/en.js"></script>
-  <script src="engine/i18n/fr.js"></script>
-  <script src="engine/i18n/es.js"></script>
-  <script src="engine/i18n/zh.js"></script>
-  <script src="engine/i18n/i18n-core.js"></script>
-  <script src="engine/world/00-prelude.js"></script>
-  <script src="engine/world/01-render-core.js"></script>
-  <script src="engine/world/02-cameras-lighting.js"></script>
-  <script src="engine/world/03-geometry-materials.js"></script>
-  <script src="engine/world/04-textures.js"></script>
-  <script src="engine/world/05-tile-factory.js"></script>
-  <script src="engine/world/06-history-object-factories.js"></script>
-  <script src="engine/world/07-house-primitives.js"></script>
-  <script src="engine/world/08-voxel-stamp-renderer.js"></script>
-  <script src="engine/world/09-model-stamp-loader.js"></script>
-  <script src="engine/world/09b-voxel-build-factories.js"></script>
-  <script src="engine/world/10-world-data.js"></script>
-  <script src="engine/world/11-vehicle-crowd.js"></script>
-  <script src="engine/world/12-selection-tool.js"></script>
-  <script src="engine/world/13-distant-dressing-ghost.js"></script>
-  <script src="engine/world/14-editable-islands-moorings.js"></script>
-  <script src="engine/world/15-ghost-generation-fade.js"></script>
-  <script src="engine/world/16-drop-anim-adjacency.js"></script>
-  <script src="engine/world/17-tile-renderers.js"></script>
-  <script src="engine/world/18-scene-pick-xr.js"></script>
-  <script src="engine/world/19-tools-toolbar.js"></script>
-  <script src="engine/world/20-input-place-erase.js"></script>
-  <script src="engine/world/21-object-transform-voxel-build.js"></script>
-  <script src="engine/world/22-audio.js"></script>
-  <script src="engine/world/23-particles-clouds.js"></script>
-  <script src="engine/world/24-crop-duster-banners.js"></script>
-  <script src="engine/world/25-animation-loop-schema.js"></script>
-  <script src="engine/world/26-ai-generation.js"></script>
-  <script src="engine/world/27-landscape-engine.js"></script>
-  <script src="engine/world/28-generate-panel-agent.js"></script>
-  <script src="engine/world/29-persistence-api.js"></script>
-  <script src="engine/world/30-ui-boot-wiring.js"></script>
-  <script src="engine/world/31-cloud-sea.js"></script>
-  <script src="engine/world/32-layers-panel.js"></script>
-  <script src="engine/world/33-radial-menu.js"></script>
-  <script src="engine/world/34-flight-sim.js"></script>
-  <script src="engine/world/35-tool-palette.js"></script>
-  <script src="engine/world/36-mooring-interaction.js"></script>
-  <script src="engine/world/37-island-placement-holos.js"></script>
-  <script src="engine/world/38-multiplayer-partykit.js"></script>
-  <script src="engine/world/39-atmosphere-effects.js"></script>
-  <script src="engine/world/40-shield-system.js"></script>
-  <script src="engine/world/41-flight-combat.js"></script>
-  <script src="engine/world/42-account-wallet-players.js"></script>
-  <script src="engine/world/43-drag-drop-import.js"></script>
-  <script src="engine/world/44-sub-object-edit.js"></script>
-  <script src="engine/world/45-shader-fx.js"></script>
-  <script src="engine/world/46-mesh-terrain.js"></script>
-  <script src="engine/world/46-worlds-universe.js"></script>
-  <script src="engine/world/47-worlds-room.js"></script>
-  <script src="engine/world/48-worlds-harvest-hud.js"></script>
-  <script src="engine/world/49-worlds-avatar-picker.js"></script>
-  <script src="engine/world/99-late-boot.js"></script>
+  <script defer src="engine/i18n/en.js"></script>
+  <script defer src="engine/i18n/fr.js"></script>
+  <script defer src="engine/i18n/es.js"></script>
+  <script defer src="engine/i18n/zh.js"></script>
+  <script defer src="engine/i18n/i18n-core.js"></script>
+  <script defer src="engine/world/00-prelude.js"></script>
+  <script defer src="engine/world/01-render-core.js"></script>
+  <script defer src="engine/world/02-cameras-lighting.js"></script>
+  <script defer src="engine/world/03-geometry-materials.js"></script>
+  <script defer src="engine/world/04-textures.js"></script>
+  <script defer src="engine/world/05-tile-factory.js"></script>
+  <script defer src="engine/world/06-history-object-factories.js"></script>
+  <script defer src="engine/world/07-house-primitives.js"></script>
+  <script defer src="engine/world/08-voxel-stamp-renderer.js"></script>
+  <script defer src="engine/world/09-model-stamp-loader.js"></script>
+  <script defer src="engine/world/09b-voxel-build-factories.js"></script>
+  <script defer src="engine/world/10-world-data.js"></script>
+  <script defer src="engine/world/11-vehicle-crowd.js"></script>
+  <script defer src="engine/world/12-selection-tool.js"></script>
+  <script defer src="engine/world/13-distant-dressing-ghost.js"></script>
+  <script defer src="engine/world/14-editable-islands-moorings.js"></script>
+  <script defer src="engine/world/15-ghost-generation-fade.js"></script>
+  <script defer src="engine/world/16-drop-anim-adjacency.js"></script>
+  <script defer src="engine/world/17-tile-renderers.js"></script>
+  <script defer src="engine/world/18-scene-pick-xr.js"></script>
+  <script defer src="engine/world/19-tools-toolbar.js"></script>
+  <script defer src="engine/world/20-input-place-erase.js"></script>
+  <script defer src="engine/world/21-object-transform-voxel-build.js"></script>
+  <script defer src="engine/world/22-audio.js"></script>
+  <script defer src="engine/world/23-particles-clouds.js"></script>
+  <script defer src="engine/world/24-crop-duster-banners.js"></script>
+  <script defer src="engine/world/25-animation-loop-schema.js"></script>
+  <script defer src="engine/world/26-ai-generation.js"></script>
+  <script defer src="engine/world/27-landscape-engine.js"></script>
+  <script defer src="engine/world/28-generate-panel-agent.js"></script>
+  <script defer src="engine/world/29-persistence-api.js"></script>
+  <script defer src="engine/world/30-ui-boot-wiring.js"></script>
+  <script defer src="engine/world/31-cloud-sea.js"></script>
+  <script defer src="engine/world/32-layers-panel.js"></script>
+  <script defer src="engine/world/33-radial-menu.js"></script>
+  <script defer src="engine/world/34-flight-sim.js"></script>
+  <script defer src="engine/world/35-tool-palette.js"></script>
+  <script defer src="engine/world/36-mooring-interaction.js"></script>
+  <script defer src="engine/world/37-island-placement-holos.js"></script>
+  <script defer src="engine/world/38-multiplayer-partykit.js"></script>
+  <script defer src="engine/world/39-atmosphere-effects.js"></script>
+  <script defer src="engine/world/40-shield-system.js"></script>
+  <script defer src="engine/world/41-flight-combat.js"></script>
+  <script defer src="engine/world/42-account-wallet-players.js"></script>
+  <script defer src="engine/world/43-drag-drop-import.js"></script>
+  <script defer src="engine/world/44-sub-object-edit.js"></script>
+  <script defer src="engine/world/45-shader-fx.js"></script>
+  <script defer src="engine/world/46-mesh-terrain.js"></script>
+  <script defer src="engine/world/46-worlds-universe.js"></script>
+  <script defer src="engine/world/47-worlds-room.js"></script>
+  <script defer src="engine/world/48-worlds-harvest-hud.js"></script>
+  <script defer src="engine/world/49-worlds-avatar-picker.js"></script>
+  <script defer src="engine/world/99-late-boot.js"></script>
 </body>
 </html>

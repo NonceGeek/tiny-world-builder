@@ -322,10 +322,14 @@
       } catch (err) { console.warn('[radial] action failed', id, err); }
     }
 
+    const radialBoundsBox = new THREE.Box3();
     function projectObjectBounds(obj, cam, rect) {
       if (!obj) return null;
-      obj.updateMatrixWorld(true);
-      const box = new THREE.Box3().setFromObject(obj);
+      // Non-forced: dirty transforms (gizmo moves) still propagate, but a
+      // clean subtree skips the full matrix re-multiply. Box3 is reused —
+      // this runs every visible frame and allocated per call before.
+      obj.updateMatrixWorld();
+      const box = radialBoundsBox.setFromObject(obj);
       if (box.isEmpty()) return null;
       const min = box.min, max = box.max;
       radialBoxCorners[0].set(min.x, min.y, min.z);
