@@ -412,7 +412,7 @@
     document.getElementById('features-exit-btn')?.addEventListener('click', exitAdmin);
 
     function renderAdminBar() {
-      document.getElementById('features-admin-bar').hidden = !adminMode;
+      const _ab = document.getElementById('features-admin-bar'); if (_ab) _ab.hidden = !adminMode;
     }
 
     function adminHeaders() {
