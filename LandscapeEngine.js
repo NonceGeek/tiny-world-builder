@@ -18,7 +18,7 @@ class LandscapeEngine {
    * @param {THREE.Color} [config.fogColorOut] - Color object updated with current fog color
    * @param {Object|false} [config.airfield] - Optional runway/airfield terrain-carving configuration. Pass false to disable.
    */
-  constructor({ scene, seed = 8472, initialBiome = 'grassland', styleMode = 'realistic', fogColorOut = null, airfield = undefined }) {
+  constructor({ scene, seed = 8472, initialBiome = 'grassland', styleMode = 'realistic', fogColorOut = null, airfield = undefined, flood = null }) {
     if (!THREE) {
       throw new Error('LandscapeEngine: Three.js (THREE) must be loaded first.');
     }
@@ -53,7 +53,12 @@ class LandscapeEngine {
     this.AIRFIELD_FLAT_R2 = this.AIRFIELD_FLAT_RADIUS * this.AIRFIELD_FLAT_RADIUS;
     this.AIRFIELD_SURFACE_Y = this.airfield.surfaceY;
 
-    this.WATER_LEVEL = 4.0;
+    // Flooded-archipelago mode (planet underlay): raise the waterline and gentle the
+    // terrain so most of the world is ocean with small islands poking through. `flood`
+    // is null for the home builder, so its terrain is unchanged.
+    this.flood = flood;
+    this.HEIGHT_SCALE = (flood && flood.heightScale != null) ? flood.heightScale : 1.0;
+    this.WATER_LEVEL = (flood && flood.waterLevel != null) ? flood.waterLevel : 4.0;
     this.WATER_EXTENT = 24000;
     this.WATER_RUNWAY_R = this.airfield.enabled ? this.airfield.waterRunwayRadius : 0;
 
@@ -124,6 +129,21 @@ class LandscapeEngine {
     this.currentBiome = { ...this.BIOMES[this.currentBiomeName] };
     this.STRATA = this.currentBiome.strata.map(s => ({ h: s.h, c: new THREE.Color(s.c) }));
     this.CLIFF_TINT = new THREE.Color(this.currentBiome.cliffTint);
+    if (flood) {
+      // Seabed below the raised waterline, a sandy beach band at the shore, then grass
+      // and highland above — voxel-poser's calm sea + scattered sandy isles.
+      const W = this.WATER_LEVEL;
+      this.STRATA = [
+        { h: W - 70, c: new THREE.Color(0x16323f) },   // deep seabed
+        { h: W - 10, c: new THREE.Color(0x2f6b6f) },   // shallow seabed
+        { h: W + 0.4, c: new THREE.Color(0xe9d9ad) },  // wet sand at the waterline
+        { h: W + 7, c: new THREE.Color(0xe0c794) },    // dry sand beach
+        { h: W + 16, c: new THREE.Color(0x6a9040) },   // grass
+        { h: W + 44, c: new THREE.Color(0x7e9448) },   // meadow
+        { h: W + 100, c: new THREE.Color(0x90886a) },  // highland
+        { h: W + 180, c: new THREE.Color(0xb4b0a0) },  // peaks
+      ].map(s => ({ h: s.h, c: s.c }));
+    }
 
     // Sun direction vector
     this.sunDir = new THREE.Vector3(0.58, 0.76, 0.28).normalize();
@@ -283,7 +303,7 @@ class LandscapeEngine {
     h *= 1 - airfieldMasks.airfieldPad * airfield.padFlatten;
     h = Math.max(0, h - airfieldMasks.airfieldPad * airfield.padCut);
 
-    return h;
+    return h * this.HEIGHT_SCALE;
   }
 
   _strataColor(h, out) {

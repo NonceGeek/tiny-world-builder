@@ -565,6 +565,7 @@
       initialBiome: next.biome,
       styleMode: next.styleMode,
       airfield: false,
+      flood: { waterLevel: 110, heightScale: 0.5 },   // flooded ocean + scattered sandy islands
     });
     configurePlanetLandscapeEngine(planetLandscapeEngine, next);
     resetPlanetLandscapeStreamState();
