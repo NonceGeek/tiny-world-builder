@@ -124,6 +124,15 @@
      give it a high id-weight. The trailing :not(#…) here match nothing on this
      button — they only inflate specificity enough to beat that trim. */
   body.tw-admin-fulledit.tw-worlds-play .controls > #stamp-builder:not(#home):not(#persp):not(#generate):not(#import){display:inline-flex !important}
+  /* Mesh Terrain sculptor (surface edit). The tool is complete but its toggle is
+     TEMP-HIDDEN globally via an inline style.display='none' (46-mesh-terrain.js)
+     and dropped from the toolbar flyout. Surface ONLY the floating toggle here,
+     lobby+admin-scoped — a stylesheet !important beats the non-important inline
+     hide, so the global hide stays intact everywhere else. Its panel opens off
+     its own [hidden] attr (not play-mode-hidden), so no extra rule is needed.
+     The island underside is edited via the existing editable-pyramid inspector
+     (click the underside → #agent-panel pyramid props), already unlocked above. */
+  body.tw-admin-fulledit.tw-worlds-play #mesh-terrain-toggle{display:inline-flex !important}
   `;
       const style = document.createElement('style');
       style.id = 'tw-lobby-admin-style';
