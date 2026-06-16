@@ -332,7 +332,14 @@
     function step(dx, dz) {
       if (selfEnt && (selfEnt._traveling || selfEnt._climb || selfEnt._skyfall || selfEnt._srActive)) return;   // no grid move mid-portal/climb/freefall/surface-roam
       const now = Date.now();
-      if (now - lastStepAt < 175) return;   // one tile at a time: hold-to-move is capped to the glide
+      // Pace hold-to-move to the GLIDE, not a magic number. The avatar tweens one
+      // tile (1 unit) at VOXEL_WALK_SPEED u/s, so a tile takes ~1000/VOXEL_WALK_SPEED ms.
+      // A faster cadence lets the logical/network position outrun the tween; the gap
+      // accumulates until it crosses animVoxel's 2.5-unit snap threshold and the avatar
+      // teleports across tiles — visible to peers too (they render the same glide off
+      // our move stream). Gating on glide time keeps both self and peers smooth.
+      const STEP_MS = Math.ceil(1000 / VOXEL_WALK_SPEED);
+      if (now - lastStepAt < STEP_MS) return;
       // The island edge is SOLID: a step past the rim clamps to a no-op below (you can't walk
       // off and freefall). To descend to the surface, walk through a stargate (see tryEnterGate).
       const nx = Math.max(0, Math.min(gridSize - 1, you.x + dx));   // cadence so key-repeat can't skip tiles
