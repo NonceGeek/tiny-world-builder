@@ -187,6 +187,12 @@
 
     'tips.show': '显示操作说明',
     'tips.hide': '隐藏提示',
+    'tips.todoTitle': '该做什么',
+    'tips.controlsTitle': '操作',
+    'tips.step1': '从工具栏选择一个工具',
+    'tips.step2': '在网格上放置地形和物体',
+    'tips.step3': '点击任意物体即可编辑',
+    'tips.step4': '切换到游玩模式，漫步你的世界',
     'layers.toggle': '世界物品',
     'layers.open': '打开世界物品面板',
     'layers.close': '关闭世界物品',

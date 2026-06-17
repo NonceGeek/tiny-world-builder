@@ -187,6 +187,12 @@
 
     'tips.show': 'Mostrar controles',
     'tips.hide': 'Ocultar consejos',
+    'tips.todoTitle': 'Qué hacer',
+    'tips.controlsTitle': 'Controles',
+    'tips.step1': 'Elige una herramienta de la barra de herramientas',
+    'tips.step2': 'Coloca terreno y objetos en la cuadrícula',
+    'tips.step3': 'Haz clic en cualquier cosa para editarla',
+    'tips.step4': 'Cambia al modo Jugar para recorrer tu mundo',
     'layers.toggle': 'Elementos del mundo',
     'layers.open': 'Abrir panel de elementos del mundo',
     'layers.close': 'Cerrar elementos del mundo',

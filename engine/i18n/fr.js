@@ -187,6 +187,12 @@
 
     'tips.show': 'Afficher les commandes',
     'tips.hide': 'Masquer les astuces',
+    'tips.todoTitle': 'Que faire',
+    'tips.controlsTitle': 'Commandes',
+    'tips.step1': 'Choisissez un outil dans la barre d’outils',
+    'tips.step2': 'Placez le terrain et les objets sur la grille',
+    'tips.step3': 'Cliquez sur un élément pour le modifier',
+    'tips.step4': 'Passez en mode Jeu pour parcourir votre monde',
     'layers.toggle': 'Éléments du monde',
     'layers.open': 'Ouvrir le panneau des éléments du monde',
     'layers.close': 'Fermer les éléments du monde',

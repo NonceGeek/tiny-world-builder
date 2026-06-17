@@ -264,6 +264,52 @@
       grid.appendChild(val);
     }
 
+    // First-run coach: explain the core loop above the controls. Two labelled
+    // sections — "What to do" (numbered steps) + "Controls" (the existing grid).
+    // Built once at setup; reuses the card's own classes / CSS vars so it stays
+    // visually consistent and dark-theme aware. No new tutorial subsystem.
+    const tx = (k, fb) => (window.tx ? window.tx(k, fb) : fb);
+    function sectionTitle(key, fallback) {
+      const h = document.createElement('div');
+      h.className = 'tips-label';
+      h.style.cssText = 'text-transform:uppercase;letter-spacing:.04em;font-size:9px;opacity:.65;margin-bottom:4px;';
+      h.textContent = tx(key, fallback);
+      return h;
+    }
+
+    const STEPS = [
+      ['tips.step1', 'Pick a tool from the toolbar'],
+      ['tips.step2', 'Place terrain & objects on the grid'],
+      ['tips.step3', 'Click anything to edit it'],
+      ['tips.step4', 'Switch to Play to walk your world'],
+    ];
+    const steps = document.createElement('div');
+    steps.className = 'tips-grid';
+    steps.style.gridTemplateColumns = 'auto 1fr';
+    STEPS.forEach(([key, fallback], i) => {
+      const num = document.createElement('div');
+      num.className = 'tips-label';
+      num.textContent = (i + 1) + '.';
+      const txt = document.createElement('div');
+      txt.className = 'tips-keys';
+      txt.style.whiteSpace = 'normal';
+      txt.textContent = tx(key, fallback);
+      steps.appendChild(num);
+      steps.appendChild(txt);
+    });
+
+    const content = document.createElement('div');
+    content.style.cssText = 'display:flex;flex-direction:column;gap:10px;flex:1;min-width:0;';
+    const todoSection = document.createElement('div');
+    todoSection.appendChild(sectionTitle('tips.todoTitle', 'What to do'));
+    todoSection.appendChild(steps);
+    const ctrlSection = document.createElement('div');
+    ctrlSection.appendChild(sectionTitle('tips.controlsTitle', 'Controls'));
+    ctrlSection.appendChild(grid); // reparent the existing controls grid
+    content.appendChild(todoSection);
+    content.appendChild(ctrlSection);
+    panel.appendChild(content); // close button keeps its CSS `order` on the right
+
     function show() {
       panel.hidden = false;
       if (showBtn) showBtn.hidden = true;
