@@ -353,5 +353,12 @@
     'toast.downloadFailed': 'Download failed.',
     'toast.invalidJson': 'That file is not valid JSON.',
     'toast.readFailed': 'Could not read that file.',
+
+    // ---- builder Properties panel: action gating tooltips + toasts ----
+    'props.gate.needTool': 'Pick a placeable tool first',
+    'props.gate.nothingCopied': 'Nothing copied yet',
+    'props.gate.noTemplate': 'No saved template yet',
+    'props.gate.voxelOnly': 'Voxel parts only',
+    'props.action.failed': 'Nothing to do here',
   };
 }());
