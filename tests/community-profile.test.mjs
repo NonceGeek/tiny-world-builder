@@ -59,7 +59,10 @@ test('avatar keys map to absolute preset PNGs only', () => {
     assert.equal(avatarUrlForKey('http://x/y.png'), '');
     assert.equal(avatarKeyForUrl('/assets/avatars/fox.png'), 'fox');
     assert.equal(avatarKeyForUrl('https://tinyworld.build/assets/avatars/fox.png'), 'fox');
+    assert.equal(avatarKeyForUrl('https://tinyworld.build/assets/avatars/wizard.png'), 'wizard');
+    assert.equal(avatarKeyForUrl('https://evil.example/assets/avatars/wizard.png'), '');
     assert.equal(avatarKeyForUrl('https://evil.example/x.png'), '');
+    assert.equal(avatarKeyForUrl('https://tinyworld.build/assets/avatars/notakey.png'), '');
   });
 });
 

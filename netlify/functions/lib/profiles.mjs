@@ -1,6 +1,8 @@
 import { getSql } from './db.mjs';
 import { absoluteSiteUrl } from './http.mjs';
 
+export const PROFILE_AVATAR_KEYS = ['knight', 'wizard', 'builder', 'explorer', 'knave', 'robot', 'fox', 'cat'];
+
 function cleanText(value, limit) {
   return String(value || '').trim().slice(0, limit);
 }
@@ -30,8 +32,11 @@ export function normalizeProfileHandle(value) {
 
 export function normalizeProfileImageUrl(value, limit = 2048) {
   const image = cleanText(value, limit);
-  if (!image || /^https?:\/\//i.test(image)) return image;
-  if (/^\/?assets\/avatars\/[a-z]+\.png$/i.test(image)) return absoluteSiteUrl(image);
+  if (!image) return '';
+  if (/^https?:\/\//i.test(image)) return image;
+  const m = image.match(/^\/?assets\/avatars\/([a-z]+)\.png$/i);
+  const key = m ? m[1].toLowerCase() : '';
+  if (key && PROFILE_AVATAR_KEYS.includes(key)) return absoluteSiteUrl(image);
   return image;
 }
 

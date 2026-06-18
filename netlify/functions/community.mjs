@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { requireAuthUser } from './lib/auth.mjs';
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
-import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard } from './lib/http.mjs';
-import { ensureProfile, normalizeProfileImageUrl, profileDto } from './lib/profiles.mjs';
+import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard, siteOrigin } from './lib/http.mjs';
+import { ensureProfile, normalizeProfileImageUrl, PROFILE_AVATAR_KEYS, profileDto } from './lib/profiles.mjs';
 import { emitCommunityEvent, screenMessage, suspendMember, activeSuspension, ensureSuspensionTable, unsuspendMember, deleteMessage, hideMessage, unhideMessage, SUSPENSION_HOURS, POLICY_NOTICE } from './lib/community-moderation.mjs';
 import { issueChallenge, verifySubmission, HONEYPOT_FIELD } from './lib/human-verification.mjs';
 
@@ -129,7 +129,7 @@ export function isValidGithub(handle) { return GITHUB_RE.test(String(handle || '
 // -------- preset avatars (allowlist; no user uploads => no NSFW image risk) --------
 // Keys map to canonical site PNGs under assets/avatars/. Editing the profile can
 // only ever select one of these; arbitrary image URLs are rejected.
-export const AVATAR_KEYS = ['knight', 'wizard', 'builder', 'explorer', 'knave', 'robot', 'fox', 'cat'];
+export const AVATAR_KEYS = PROFILE_AVATAR_KEYS;
 const AVATAR_BASE = '/assets/avatars/';
 export function avatarUrlForKey(key) {
   const k = String(key || '').trim().toLowerCase();
@@ -137,7 +137,20 @@ export function avatarUrlForKey(key) {
 }
 // Reverse-map a stored image URL back to a preset key (for pre-selecting in UI).
 export function avatarKeyForUrl(url) {
-  const m = String(url || '').match(/\/assets\/avatars\/([a-z]+)\.png$/i);
+  let raw = String(url || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) {
+    let parsed;
+    try {
+      parsed = new URL(raw);
+    } catch (_) {
+      return '';
+    }
+    if (parsed.origin !== siteOrigin()) return '';
+    raw = parsed.pathname;
+  }
+  const path = '/' + raw.split(/[?#]/)[0].replace(/^\/+/, '');
+  const m = path.match(/^\/assets\/avatars\/([a-z]+)\.png$/i);
   return m && AVATAR_KEYS.includes(m[1].toLowerCase()) ? m[1].toLowerCase() : '';
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeProfileImageUrl } from '../netlify/functions/lib/profiles.mjs';
+import { normalizeProfileImageUrl, profileDto } from '../netlify/functions/lib/profiles.mjs';
 
 const SITE_ENV_KEYS = ['TINYWORLD_SITE_URL', 'URL', 'DEPLOY_PRIME_URL', 'DEPLOY_URL'];
 
@@ -31,6 +31,7 @@ test('normalizes preset avatar paths against the configured site origin', () => 
       normalizeProfileImageUrl('assets/avatars/wizard.png'),
       'https://tinyworld.build/assets/avatars/wizard.png',
     );
+    assert.equal(normalizeProfileImageUrl('/assets/avatars/notakey.png'), '/assets/avatars/notakey.png');
   });
 });
 
@@ -52,4 +53,11 @@ test('does not bless arbitrary relative profile image paths', () => {
     assert.equal(normalizeProfileImageUrl('/uploads/custom.png'), '/uploads/custom.png');
     assert.equal(normalizeProfileImageUrl('javascript:alert(1)'), 'javascript:alert(1)');
   });
+});
+
+test('keeps empty profile image values as strings', () => {
+  assert.equal(normalizeProfileImageUrl(null), '');
+  assert.equal(normalizeProfileImageUrl(undefined), '');
+  assert.equal(profileDto({ image: null }).image, '');
+  assert.equal(profileDto({ image: undefined }).image, '');
 });
