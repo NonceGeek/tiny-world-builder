@@ -304,6 +304,9 @@
   
     // ---- manage (name / tax / publish / unpublish) ----
     function manageFlow(w) {
+  // taxCooldown support from server (after our updates)
+  const cd = w.taxCooldown || null;
+  const onCooldown = cd && !cd.canChange;
       const nameI = el('input', { value: w.name || '', maxlength: '48' });
       const taxI = el('input', { type: 'number', min: '1', max: '100', value: String(w.taxPercent || 10) });
       const draft = w.status === 'draft';
