@@ -260,3 +260,5 @@ Next suggested: surface cooldown in world cards + full client-side block before 
 
 
 **Client tax cooldown UX complete (manage dialog blocks + HUD timer) + redeployed to alias.**
+
+**Tax cooldown client surface complete** (cards (CD), manage dialog block + remaining time, HUD CD timer). Redeployed to mmo-preview.
