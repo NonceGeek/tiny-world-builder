@@ -131,8 +131,7 @@ export default async function adminUsersFunction(request) {
   const email = cleanEmail(user && user.email);
   const allowedEmails = ['jason@bouncingfish.com', 'jason.kneen@bouncingfish.com', 'jason.kneen@gmail.com'];
   const allowed = allowedEmails.includes(email);
-  return jsonResponse({ allowed, admin: isWorldAdminEmail(user && user.email) }, origin);
-}
+          return jsonResponse({ allowed, admin: isWorldAdminEmail(user && user.email) }, origin);
         }
         return jsonResponse({ allowed: false }, origin);
       }
