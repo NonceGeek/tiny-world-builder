@@ -291,3 +291,11 @@ All previous features (interest scoping, GOLD accrual on harvest, weekly payouts
 
 
 **mmo-burst-3 (tax cooldown) marked complete** — full server + client enforcement + visibility in HUD/role/cards + in-room lastTaxChange flow.
+
+**Testing note for preview (important):**
+- /admin-users ("User access") god-admin tool requires a real Netlify Database connection.
+- This is intentionally unavailable in local sessions and deploy previews (see isDatabaseUnavailable guard in lib/db.mjs and the many functions that use it).
+- Workaround: use the **main production site** (not mmo-preview alias) to sign in as god-admin and grant "Enable Tinyverse lobby + multiplayer access".
+- Then test the mmo-preview URL with those accounts. Profile flags are in the shared DB.
+- For most email-verified accounts, `accountMeetsCriteria(user)` already grants lobby access automatically (no toggle needed).
+- Local full admin testing: `tools/db-local.sh` then `NETLIFY_DATABASE_URL=... netlify dev`.
