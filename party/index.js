@@ -1548,6 +1548,10 @@ export default class TinyWorldParty {
     await this.flushPending();
     // Keep ticking while anyone is connected.
     if (this.presence.size > 0) this.scheduleTick();
+    // demo weekly payout tick for all (real cycle check inside grant)
+    for (const [pid, seat] of this.admitted) {
+      if (seat.profileId) this.grantWeeklyGoldPayout(seat.profileId, 10000, 1);
+    }
     // Interest tick: push scoped updates to all admitted (mmo-core buildInterestSnapshot)
     for (const pid of this.players.keys()) {
       try { if (typeof this.sendInterestUpdate === "function") this.sendInterestUpdate(pid); } catch(e){}
