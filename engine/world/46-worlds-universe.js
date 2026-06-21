@@ -211,6 +211,14 @@
     let overlay = null, gridEl = null;
     let me = null;
     let savedFreeform = null;   // freeform world to restore when leaving a world
+
+    function stateCellKind(cell) { return Array.isArray(cell) ? cell[3] : (cell && cell.kind); }
+    function looksLikeLegacyPickerBoard(state) {
+      const cells = state && Array.isArray(state.cells) ? state.cells : [];
+      let stargates = 0;
+      for (const cell of cells) if (stateCellKind(cell) === 'stargate') stargates += 1;
+      return stargates >= 4;
+    }
   
     function ensureOverlay() {
       if (overlay) return overlay;
@@ -417,7 +425,11 @@
       if (typeof buildWorldStateObject === 'function') { try { savedFreeform = buildWorldStateObject(); } catch (_) {} }
     }
     function restoreFreeform() {
-      if (savedFreeform && typeof applyState === 'function') { try { applyState(savedFreeform); } catch (_) {} }
+      if (savedFreeform && typeof applyState === 'function') {
+        try {
+          applyState(looksLikeLegacyPickerBoard(savedFreeform) ? { v: 4, gridSize: 8, cells: [] } : savedFreeform);
+        } catch (_) {}
+      }
       savedFreeform = null;
     }
     WS.rememberFreeform = rememberFreeform;

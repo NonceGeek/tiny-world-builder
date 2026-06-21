@@ -400,6 +400,14 @@ function computeTaxCooldown(lastTaxChangeAt) {
       clearActiveTinyverseSession();
       if (typeof WS.restoreFreeform === 'function') WS.restoreFreeform();
     };
+    WS.exitToWorldPicker = function () {
+      leaveRoom();
+      clearActiveTinyverseSession();
+      if (typeof WS.restoreFreeform === 'function') WS.restoreFreeform();
+      setTimeout(() => {
+        try { if (typeof WS.open === 'function') WS.open(); } catch (_) {}
+      }, 0);
+    };
     WS.getSelfEnt = () => selfEnt;
   
     function safeParse(s) { try { return JSON.parse(s); } catch (_) { return null; } }
@@ -830,10 +838,10 @@ function computeTaxCooldown(lastTaxChangeAt) {
     }
     function openWorldPickerFromGate() {
       try { selfEnt && (selfEnt._traveling = false); } catch (_) {}
-      try { if (typeof WS.leaveRoom === 'function') WS.leaveRoom(); } catch (_) {}
-      setTimeout(() => {
-        try { if (typeof WS.open === 'function') WS.open(); } catch (_) {}
-      }, 0);
+      try {
+        if (typeof WS.exitToWorldPicker === 'function') WS.exitToWorldPicker();
+        else if (typeof WS.leaveRoom === 'function') WS.leaveRoom();
+      } catch (_) {}
     }
     function scheduleSelectionGateArrival() {
       if (!selectionGateArrivalPending || selectionGateArrivalTimer) return;

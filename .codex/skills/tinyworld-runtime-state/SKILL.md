@@ -178,6 +178,13 @@ defaults — sets the welcome shot for new users.
   refreshing back into the last active Tinyverse world. It is not a world save,
   not account-synced, and must stay excluded from shipped defaults in both
   `tools/dev-server.js` and the client Save Defaults filter.
+- Tinyverse room teardown and user-facing exit are separate concerns:
+  `47-worlds-room.js` internal `leaveRoom()` should only tear down sockets/HUDs/
+  avatars/minimaps. User-facing island exits should call `WS.exitToWorldPicker()`,
+  which clears `tinyworld:worlds.activeTinyverse.v1`, restores the pre-room
+  builder state through `WS.restoreFreeform()`, and opens the picker overlay.
+  Do not hide picker navigation inside minimap or teardown helpers; that has
+  previously exposed legacy multi-gate selector boards.
 - `tinyworld:features:cluso` — legacy Cluso flag; no app runtime path reads this
   key. The Cluso embed is now injected local-dev-only by `tools/dev-server.js`
   (see tinyworld-single-file SKILL), not gated by this key.
