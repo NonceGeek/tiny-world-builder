@@ -950,7 +950,7 @@ function getTestUser() {
   ];
   const PREF_SYNC_KEYS = new Set([
     'tinyworld:view.camera', 'tinyworld:season.v1', 'tinyworld:weather.v1',
-    'tinyworld:weather-intensity.v2', 'tinyworld:weather-splashes.v1', 'tinyworld:tod.v1',
+    'tinyworld:weather-intensity.v2', 'tinyworld:weather-splashes.v1',
     'tinyworld:uiTheme', 'tinyworld:lang', 'tinyworld:showGroups', 'tinyworld:tips.dismissed',
     'tinyworld:welcome:dismissedId', 'tinyworld:stamp-builder-recent.v1',
     'tinyworld:agent:input-pos', 'tinyworld:agent:panel-pos', 'tinyworld:minimap.pos',
@@ -2595,9 +2595,16 @@ function getTestUser() {
     }
 
     // -- time / weather --
-    const TOD_LS = 'tinyworld:tod.v1';
+    const TOD_GMT_SYNC_INTERVAL_MS = 10000;
     const SEASON_LS = 'tinyworld:season.v1';
     const WEATHER_LS = 'tinyworld:weather.v1';
+    function clampTodMinutes(min) {
+      return Math.max(0, Math.min(1439.999, Number(min) || 0));
+    }
+    function gmtTodMinutes(now) {
+      const d = now instanceof Date ? now : new Date();
+      return d.getUTCHours() * 60 + d.getUTCMinutes() + (d.getUTCSeconds() / 60);
+    }
     function todClassFromMinutes(min) {
       if (min < 360 || min >= 1260) return 'tod-night'; // 21:00 - 06:00
       if (min < 480) return 'tod-dawn';                  // 06:00 - 08:00
@@ -2628,6 +2635,7 @@ function getTestUser() {
       if (typeof updateAllBuildingWindowLights === 'function') updateAllBuildingWindowLights();
       if (typeof requestMinimapRepaint === 'function') requestMinimapRepaint();
     }
+    window.__tinyworldGmtTodMinutes = gmtTodMinutes;
     function applySeason(seasonV) {
       document.body.classList.remove('season-spring','season-summer','season-autumn','season-winter');
       const normalized = seasonV === 'fall' ? 'autumn' : seasonV;
@@ -2818,17 +2826,17 @@ function getTestUser() {
     window.__applyLights = applyLights;
     window.__lightBase = () => lightBase;
     function formatTime(min) {
-      const h = String(Math.floor(min / 60) % 24).padStart(2, '0');
-      const m = String(min % 60).padStart(2, '0');
+      const whole = Math.floor(clampTodMinutes(min));
+      const h = String(Math.floor(whole / 60) % 24).padStart(2, '0');
+      const m = String(whole % 60).padStart(2, '0');
       return h + ':' + m;
     }
 
-    let todMinutes = currentTodMinutes;
+    let repaintTimeWeatherPopup = function () {};
+    let todMinutes = gmtTodMinutes();
     let season = 'summer';
     let weather = 'clear';
     try {
-      const t = parseInt(localStorage.getItem(TOD_LS), 10);
-      if (Number.isFinite(t)) todMinutes = Math.max(0, Math.min(1439, t));
       const s = localStorage.getItem(SEASON_LS);
       if (s && ['spring','summer','autumn','winter'].includes(s)) season = s;
       const w = localStorage.getItem(WEATHER_LS);
@@ -2837,6 +2845,13 @@ function getTestUser() {
     applyTod(todMinutes);
     applySeason(season);
     applyWeather(weather);
+    function syncTodToGmt() {
+      todMinutes = gmtTodMinutes();
+      applyTod(todMinutes);
+      repaintTimeWeatherPopup();
+    }
+    window.__tinyworldSyncTodToGmt = syncTodToGmt;
+    setInterval(syncTodToGmt, TOD_GMT_SYNC_INTERVAL_MS);
     const uiThemeSelect = document.getElementById('ui-theme-mode');
     if (uiThemeSelect) {
       uiThemeSelect.value = ['auto', 'light', 'dark'].includes(uiThemeMode) ? uiThemeMode : 'auto';
@@ -2966,12 +2981,18 @@ function getTestUser() {
         });
       }
       function paintReadout() {
-        if (range) range.value = String(todMinutes);
-        if (readout) readout.textContent = formatTime(todMinutes);
+        if (range) range.value = String(Math.floor(clampTodMinutes(todMinutes)));
+        if (readout) readout.textContent = formatTime(todMinutes) + ' GMT';
         if (intensityRange) intensityRange.value = String(Math.round(weatherIntensity * 100));
         if (intensityReadout) intensityReadout.textContent = Math.round(weatherIntensity * 100) + '%';
         if (splashesRange) splashesRange.value = String(Math.round(weatherSplashIntensity * 100));
         if (splashesReadout) splashesReadout.textContent = Math.round(weatherSplashIntensity * 100) + '%';
+      }
+      repaintTimeWeatherPopup = paintReadout;
+      if (range) {
+        range.disabled = true;
+        range.setAttribute('aria-readonly', 'true');
+        range.setAttribute('title', 'Synced live to GMT');
       }
       paintPills(); paintReadout();
 
@@ -2983,10 +3004,7 @@ function getTestUser() {
       timePopup.addEventListener('click', e => e.stopPropagation());
       if (range) {
         range.addEventListener('input', () => {
-          todMinutes = Math.max(0, Math.min(1439, parseInt(range.value, 10) || 0));
-          applyTod(todMinutes);
-          paintReadout();
-          try { localStorage.setItem(TOD_LS, String(todMinutes)); } catch (_) {}
+          syncTodToGmt();
         });
       }
       if (seasonPills) {

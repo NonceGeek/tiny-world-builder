@@ -4100,6 +4100,18 @@
       0 1px 3px rgba(20, 30, 50, 0.22);
     cursor: pointer;
   }
+  .time-row input[type="range"]:disabled {
+    cursor: default;
+    opacity: 0.82;
+  }
+  .time-row input[type="range"]:disabled::-webkit-slider-thumb {
+    cursor: default;
+    background: rgba(232, 240, 255, 0.78);
+  }
+  .time-row input[type="range"]:disabled::-moz-range-thumb {
+    cursor: default;
+    background: rgba(232, 240, 255, 0.78);
+  }
   .modal-head {
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 2px;

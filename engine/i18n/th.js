@@ -112,7 +112,7 @@
     'view.walk': 'เดิน (บุคคลที่หนึ่ง)',
     'view.walk.desc': 'มองผ่านตาตัวละคร',
     'time.title': 'เวลาและอากาศ',
-    'time.timeOfDay': 'ช่วงเวลา',
+    'time.timeOfDay': 'ช่วงเวลา (GMT)',
     'time.season': 'ฤดูกาล',
     'time.weather': 'สภาพอากาศ',
     'time.intensity': 'ความแรงของอากาศ',

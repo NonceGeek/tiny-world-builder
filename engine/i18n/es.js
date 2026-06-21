@@ -113,7 +113,7 @@
     'view.walk.desc': 'a través de los ojos del personaje',
 
     'time.title': 'Hora y clima',
-    'time.timeOfDay': 'Hora del día',
+    'time.timeOfDay': 'Hora del día (GMT)',
     'time.season': 'Estación',
     'time.weather': 'Clima',
     'time.intensity': 'Intensidad del clima',

@@ -1280,7 +1280,7 @@
 
     // ---- environment capture (host) ----
     // Reads the LIVE controls/globals so the snapshot + live-env messages carry
-    // the host's actual environment. time-of-day, weatherIntensity and
+    // the host's actual environment. weatherIntensity and
     // weatherSplashIntensity are shared top-level globals (01/23); season +
     // weather are module-30 closure state, so we read them off the active pills.
     function activePillValue(containerId, attr) {
@@ -1301,7 +1301,7 @@
 
     function captureEnvState() {
       const env = {
-        // shared top-level global (engine/world/01-render-core.js:137).
+        // Legacy wire field: new clients ignore host time and follow GMT/UTC.
         timeOfDay: (typeof currentTodMinutes === 'number') ? currentTodMinutes : 720,
         weather: activePillValue('weather-pills', 'data-weather') || 'clear',
         season: activePillValue('season-pills', 'data-season') || 'summer',
@@ -1320,7 +1320,7 @@
 
     // Stable string for dedupe (so a no-op slider tick never re-broadcasts).
     function envKey(env) {
-      return [env.timeOfDay, env.weather, env.season,
+      return [env.weather, env.season,
         Number(env.weatherIntensity).toFixed(2), Number(env.weatherSplashes).toFixed(2),
         env.shield ? 1 : 0].join('|');
     }
@@ -1328,9 +1328,10 @@
     // ---- environment apply (peer) ----
     // Drive module 30's OWN controls so its closure season/weather/todMinutes
     // and the lighting recompute stay consistent: click the matching pill and
-    // dispatch 'input' on the sliders. Wrapped in applyingRemoteEnv so our own
+    // dispatch 'input' on the sliders. Time-of-day is intentionally ignored:
+    // every client follows live GMT/UTC instead of a room host. Wrapped in applyingRemoteEnv so our own
     // change listeners do not re-broadcast. Order: season -> weather ->
-    // intensity -> splashes -> time -> shield.
+    // intensity -> splashes -> shield.
     function clickPill(containerId, attr, value) {
       if (!value) return;
       try {
@@ -1362,9 +1363,6 @@
         }
         if (Number.isFinite(Number(env.weatherSplashes))) {
           setRange('weather-splashes', Math.round(Number(env.weatherSplashes) * 100), true);
-        }
-        if (Number.isFinite(Number(env.timeOfDay))) {
-          setRange('time-range', Math.max(0, Math.min(1439, Math.round(Number(env.timeOfDay)))), true);
         }
         // Shield: drive the public API so the toolbar state + visuals follow.
         try {
@@ -1854,12 +1852,10 @@
     // / broadcastEnv, so a peer applying a remote env never re-emits. Listeners
     // attach unconditionally (cheap) and self-gate, so role changes are handled.
     (function wireEnvBroadcast() {
-      const timeRange = document.getElementById('time-range');
       const intensity = document.getElementById('weather-intensity');
       const splashes = document.getElementById('weather-splashes');
       const seasonPills = document.getElementById('season-pills');
       const weatherPills = document.getElementById('weather-pills');
-      if (timeRange) timeRange.addEventListener('input', scheduleEnvBroadcast);
       if (intensity) intensity.addEventListener('input', scheduleEnvBroadcast);
       if (splashes) splashes.addEventListener('input', scheduleEnvBroadcast);
       // Pills update season/weather synchronously on click; broadcast after the
