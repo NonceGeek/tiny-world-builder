@@ -30,3 +30,11 @@ test('legacy multi-gate picker boards are not restored behind the world picker',
   assert.match(universeJs, /stargates >= 4/);
   assert.match(universeJs, /applyState\(looksLikeLegacyPickerBoard\(savedFreeform\) \? \{ v: 4, gridSize: 8, cells: \[\] \} : savedFreeform\)/);
 });
+
+test('world minimap uses the same front/back orientation for drawing and clicks', () => {
+  assert.match(roomJs, /function mapCellRect\(x, z\)/);
+  assert.match(roomJs, /gridSize - 1 - z/);
+  assert.match(roomJs, /function mapCanvasPointToCell\(px, py, width, height\)/);
+  assert.match(roomJs, /const cz = gridSize - 1 - row/);
+  assert.doesNotMatch(roomJs, /fillRect\(x \* CELL, z \* CELL, CELL, CELL\)/);
+});

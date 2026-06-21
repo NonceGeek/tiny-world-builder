@@ -560,7 +560,7 @@ if (/\.minimap-wrap\.collapsed\s*\{[^}]*translateX/.test(cssRaw) || !/function c
   fail('minimap must clamp restored/dragged/collapsed positions without translating off-screen');
 }
 const renderDefaults = {
-  'tinyworld:render:version': '24',
+  'tinyworld:render:version': '25',
   'tinyworld:render:resolution': '0.75',
   'tinyworld:render:brightness': '0.80',
   'tinyworld:render:lighting': '0.50',
@@ -573,6 +573,7 @@ const renderDefaults = {
   'tinyworld:render:tiltBlur': '10.5',
   'tinyworld:render:tiltFocus': '21',
   'tinyworld:render:planesEnabled': '0',
+  'tinyworld:render:materialWear': '1.00',
 };
 for (const [key, value] of Object.entries(renderDefaults)) {
   if (!shippedDefaults.settings || shippedDefaults.settings[key] !== value) {
@@ -588,8 +589,8 @@ try {
 if (!shippedCamera || !shippedCamera.target || shippedCamera.target.x !== 0 || shippedCamera.target.z !== 0 || !/const DEFAULT_TARGET = new THREE\.Vector3\(0, 0, 0\)/.test(html) || !/clampTargetToHomeBoard\(\);\s*updateCamera\(\);/.test(html)) {
   fail('camera defaults must start centered and clamp stale off-board targets before first render');
 }
-if (!/const RENDER_SETTINGS_VERSION = '24'/.test(html) || !/resolution:\s*'0\.75'/.test(html) || !/brightness:\s*'0\.80'/.test(html) || !/tiltBlur:\s*'10\.5'/.test(html)) {
-  fail('hard-coded render defaults must match the shipped v24 defaults');
+if (!/const RENDER_SETTINGS_VERSION = '25'/.test(html) || !/resolution:\s*'0\.75'/.test(html) || !/brightness:\s*'0\.80'/.test(html) || !/tiltBlur:\s*'10\.5'/.test(html) || !/materialWear:\s*'1'/.test(html)) {
+  fail('hard-coded render defaults must match the shipped v25 defaults');
 }
 if (!/<div id="welcome-modal" class="modal launch-modal" hidden aria-hidden="true">[\s\S]*<img class="welcome-logo" src="assets\/twlogo\.png" alt="Tiny World Builder"[\s\S]*id="welcome-tinyverse"[^>]*>Tinyverse<\/button>[\s\S]*id="welcome-battleworlds"[^>]*>Battleworlds<\/button>[\s\S]*id="welcome-build"[^>]*>Build<\/button>[\s\S]*id="welcome-play"[^>]*>Play<\/button>[\s\S]*class="welcome-credit"[\s\S]*Created by Jason Kneen[\s\S]*https:\/\/x\.com\/jasonkneen[\s\S]*@jasonkneen[\s\S]*https:\/\/x\.com\/tinyworldsapp[\s\S]*@tinyworldsapp/.test(htmlRaw)) {
   fail('welcome launcher must render the Tiny World logo, Tinyverse/Battleworlds/Build/Play buttons, creator credit, and social links');

@@ -2016,12 +2016,26 @@ function tryEnterGate() {
       handle.addEventListener('pointercancel', end);
     }
   
+    function mapCellRect(x, z) {
+      return { x: x * CELL, y: (gridSize - 1 - z) * CELL };
+    }
+    function mapCellCenter(x, z) {
+      return { x: x * CELL + CELL / 2, y: (gridSize - 1 - z) * CELL + CELL / 2 };
+    }
+    function mapCanvasPointToCell(px, py, width, height) {
+      const sx = width > 0 ? width / Math.max(1, gridSize) : CELL;
+      const sy = height > 0 ? height / Math.max(1, gridSize) : CELL;
+      const cx = Math.floor(px / sx);
+      const row = Math.floor(py / sy);
+      const cz = gridSize - 1 - row;
+      return { x: cx, z: cz };
+    }
+
     function onMapClick(e) {
       const rect = canvas.getBoundingClientRect();
-      const sx = rect.width > 0 ? rect.width / Math.max(1, gridSize) : CELL;
-      const sz = rect.height > 0 ? rect.height / Math.max(1, gridSize) : CELL;
-      const cx = Math.floor((e.clientX - rect.left) / sx);
-      const cz = Math.floor((e.clientY - rect.top) / sz);
+      const p = mapCanvasPointToCell(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
+      const cx = p.x;
+      const cz = p.z;
       if (cx < 0 || cz < 0 || cx >= gridSize || cz >= gridSize) return;
       // Walk (auto-path) to the clicked tile; the server still validates each
       // one-cell step. Arrow/WASD keys interrupt the walk.
@@ -3111,27 +3125,34 @@ function tryEnterGate() {
       for (const c of cells) {
         const x = Array.isArray(c) ? c[0] : c.x, z = Array.isArray(c) ? c[1] : c.z, ter = Array.isArray(c) ? c[2] : c.terrain;
         if (x == null || z == null || x < 0 || z < 0 || x >= gridSize || z >= gridSize) continue;
-        ctx.fillStyle = terrainColor(ter); ctx.fillRect(x * CELL, z * CELL, CELL, CELL);
+        const p = mapCellRect(Number(x), Number(z));
+        ctx.fillStyle = terrainColor(ter); ctx.fillRect(p.x, p.y, CELL, CELL);
       }
       // nodes
       for (const id of Object.keys(nodes)) {
         const n = nodes[id]; const pos = nodeCellPos(n); if (!pos && n.type !== 'fish') continue;
         const p = pos || null; if (!p) continue;
+        const cp = mapCellCenter(Number(p.x), Number(p.z));
         ctx.fillStyle = n.charges > 0 ? (n.type === 'ore' ? '#d8c150' : '#9fe0ff') : '#555';
-        ctx.beginPath(); ctx.arc(p.x * CELL + CELL / 2, p.z * CELL + CELL / 2, 4, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(cp.x, cp.y, 4, 0, 7); ctx.fill();
       }
       // animals
       ctx.fillStyle = '#f0c0a0';
-      for (const a of animals) { ctx.fillRect(a.x * CELL + 4, a.z * CELL + 4, CELL - 8, CELL - 8); }
+      for (const a of animals) {
+        const p = mapCellRect(Number(a.x), Number(a.z));
+        ctx.fillRect(p.x + 4, p.y + 4, CELL - 8, CELL - 8);
+      }
       // peers
       for (const p of peers.values()) {
         if (isSelfPresence(p)) continue;   // never plot yourself as a separate peer dot
         const pos = p.cursor || p; if (pos.x == null) continue;
+        const cp = mapCellCenter(Number(pos.x), Number(pos.z));
         ctx.fillStyle = p.color || '#ffd166';
-        ctx.beginPath(); ctx.arc(pos.x * CELL + CELL / 2, pos.z * CELL + CELL / 2, 5, 0, 7); ctx.fill();
+        ctx.beginPath(); ctx.arc(cp.x, cp.y, 5, 0, 7); ctx.fill();
       }
       // you
+      const yp = mapCellCenter(Number(you.x), Number(you.z));
       ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#1f6feb'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(you.x * CELL + CELL / 2, you.z * CELL + CELL / 2, 5, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(yp.x, yp.y, 5, 0, 7); ctx.fill(); ctx.stroke();
     }
   })();

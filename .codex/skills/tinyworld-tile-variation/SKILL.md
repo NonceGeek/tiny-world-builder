@@ -20,6 +20,7 @@ Expected behavior:
 - Object variations should remain the same `kind` unless a schema change is explicitly requested.
 - Same-kind rock neighbours should blend by neighbour strength, not render as identical stamped cells.
 - Terrain surface detail should stay batched/instanced per tile. Add grass blades, pavers, scuffs, pebbles, or flowers through lightweight instanced detail layers, not individual loose meshes per fleck.
+- Stone terrain defaults to the masonry/castle-block surface, while rock props default to rock-face. Keep terrain defaults and linked model defaults separate so walkways do not inherit boulder texture treatment and rocks do not inherit walkway brickwork unless the user explicitly changes the linked surface texture.
 - Heavy terrain such as path and stone can have a render-only kerb drop through `terrainVisualRiseForCell`; water sits one top-cap height lower via `WATER_SURFACE_DROP = TOP_H` while its rim/shore strips stay at the tile edge, and dirt can sit slightly raised through the same `terrainSurfaceOffset` path. Do not store these visual offsets in `terrainFloors` or saved world data.
 - Heavy terrain kerb strips must render only on exposed paved edges. Use `sameTerrainEdgeFamily` for path/stone joins so continuous paths, roads, and plazas do not get brick strips across the travelled surface.
 - Castle/tower/default stone wall textures should read as tight masonry

@@ -1603,11 +1603,11 @@
   applyWorldUVs(M.castleStoneD, texCastleBlock, 0.86);
   M.stone.color.set(0x8b8d88);
   M.stoneDk.color.set(0x5f6668);
-  applyWorldUVs(M.stone, texRockFace, 2.8);
-  applyWorldUVs(M.stoneDk, texRockFace, 2.8);
+  applyWorldUVs(M.stone, texCastleBlock, 0.86);
+  applyWorldUVs(M.stoneDk, texCastleBlock, 0.86);
   M.stoneSide = M.stone.clone();
   M.stoneSide.color.set(0x8c8980);
-  applyWorldUVs(M.stoneSide, texRockFace, 1.9, { voxelSeams: true });
+  applyWorldUVs(M.stoneSide, texCastleBlock, 0.86, { voxelSeams: true });
   applyWorldUVs(M.rock, texRockFace, 3.8);
   applyWorldUVs(M.rockDk, texRockFace, 3.8);
   applyWorldUVs(M.rockHi, texRockFace, 3.8);
@@ -1830,10 +1830,10 @@
     grass: { texture: 'cottage-grass', fallbackTexture: 'checkered', scale: 1.0, materials: ['grass', 'grassEdge', 'grassHi'] },
     dirt: { texture: 'soil-side', scale: 0.22, materials: ['dirt', 'dirtRich'] },
     sand: { texture: 'sand', scale: 1.8, materials: ['sand', 'sandDk'] },
-    stone: { texture: 'rock-face', scale: 2.8, materials: ['stone', 'stoneDk'] },
+    stone: { texture: 'castle-block', scale: 0.86, materials: ['stone', 'stoneDk'] },
   };
   const SURFACE_LINKED_MODEL_DEFAULT_TEXTURES = {
-    stone: 'castle-block',
+    stone: 'rock-face',
   };
   const SURFACE_LINKED_MODEL_MATERIALS = {
     stone: ['rock', 'rockDk', 'rockHi', 'castleStone', 'castleStoneD', 'towerStone', 'towerStoneD', 'chimney'],
@@ -1959,7 +1959,7 @@
   let renderMaterialTarget = localStorage.getItem(RENDER_LS.materialTarget) || 'walls';
   if (!PART_MATERIAL_GROUPS[renderMaterialTarget]) renderMaterialTarget = 'walls';
   let renderPartMaterialAdjustments = loadPartMaterialAdjustments();
-  let renderMaterialWear = storedNumber(RENDER_LS.materialWear, 0, 0, 1);
+  let renderMaterialWear = storedNumber(RENDER_LS.materialWear, 1, 0, 1);
 
   function captureTerrainMaterialBaseColors() {
     terrainMaterialBaseColors.clear();

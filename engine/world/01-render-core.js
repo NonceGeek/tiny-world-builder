@@ -212,7 +212,7 @@
     crowdEnabled: 'tinyworld:crowd:enabled',
     version: 'tinyworld:render:version',
   };
-  const RENDER_SETTINGS_VERSION = '24';
+  const RENDER_SETTINGS_VERSION = '25';
   const RENDER_DEFAULTS = {
     // Defaults tuned from the light-mode render panel: lower internal
     // resolution, softer direct light, full ambient fill, and stronger colour
@@ -263,7 +263,7 @@
     terrainColorTarget: 'grass',
     materialParts: '{}',
     materialTarget: 'walls',
-    materialWear: '0',
+    materialWear: '1',
     enhancedWater: '1',
     landscapeMeshMode: '1',
     terrainVoxelResolution: 'mixed',

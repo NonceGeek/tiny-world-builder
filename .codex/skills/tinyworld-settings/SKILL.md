@@ -37,6 +37,10 @@ Organization guidance:
 - Environment owns the `Planes` checkbox (`render-planes-enabled`) because it
   controls ambient flyovers and towed banners. It defaults off for the current
   performance pass and should stay searchable by plane/crop-duster/banner terms.
+- Material wear defaults to 100% (`materialWear: '1'` and shipped
+  `tinyworld:render:materialWear` = `1.00`). When changing shipped render
+  defaults that must override older browser localStorage, bump
+  `RENDER_SETTINGS_VERSION` and update `tinyworld-defaults.json` together.
 - Materials, Environment, Crowd, and AI can be improved independently, but keep their current control IDs and listener wiring intact.
 
 Validation:

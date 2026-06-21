@@ -27,6 +27,9 @@ Checks:
 - Right-drag and Space+drag pan smoothly.
 - Dragging/clicking the minimap canvas pans the camera target while dragging the minimap chrome/footer still moves the widget.
 - Minimap colours should track live scene materials plus time/weather theme tint, not a stale fixed palette.
+- Tinyverse world-map front/back orientation must match the island view and card
+  previews. Keep draw projection and click hit-testing paired; if one flips an
+  axis, the other must invert it too.
 - Orbit still works with normal left-drag.
 - Ghost boards do not become editable.
 - The opacity torch is smooth and does not reveal square board seams.

@@ -4,12 +4,18 @@
 // behaviour + clamping + enum guards.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildEngineFns } from './helpers/extract-fn.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEXTURES = join(__dirname, '..', 'engine', 'world', '04-textures.js');
+const RENDER_CORE = join(__dirname, '..', 'engine', 'world', '01-render-core.js');
+const DEFAULTS = join(__dirname, '..', 'tinyworld-defaults.json');
+const texturesJs = readFileSync(TEXTURES, 'utf8');
+const renderCoreJs = readFileSync(RENDER_CORE, 'utf8');
+const defaultsJson = JSON.parse(readFileSync(DEFAULTS, 'utf8'));
 
 // materialTextureMap is a closure global used by normalizeMaterialTextureKey; an
 // empty stub makes every key normalize to 'default', which is all we need here.
@@ -18,6 +24,19 @@ const { normalizeAppearance } = buildEngineFns(
   ['normalizeHexColor', 'normalizeMaterialTextureKey', 'normalizeMaterialTextureScale', 'normalizeAppearance'],
   'const materialTextureMap = {};'
 );
+
+test('stone terrain defaults to masonry while rock props default to rock-face', () => {
+  assert.match(texturesJs, /stone:\s*\{\s*texture:\s*'castle-block',\s*scale:\s*0\.86,\s*materials:\s*\['stone', 'stoneDk'\]\s*\}/);
+  assert.match(texturesJs, /const SURFACE_LINKED_MODEL_DEFAULT_TEXTURES = \{\s*stone:\s*'rock-face'/);
+});
+
+test('material wear defaults to 100 percent for shipped and fresh settings', () => {
+  assert.match(renderCoreJs, /const RENDER_SETTINGS_VERSION = '25'/);
+  assert.match(renderCoreJs, /materialWear:\s*'1'/);
+  assert.match(texturesJs, /let renderMaterialWear = storedNumber\(RENDER_LS\.materialWear,\s*1,\s*0,\s*1\)/);
+  assert.equal(defaultsJson.settings['tinyworld:render:version'], '25');
+  assert.equal(defaultsJson.settings['tinyworld:render:materialWear'], '1.00');
+});
 
 test('emissive + opacity round-trip and clamp', () => {
   const a = normalizeAppearance({ emissiveColor: '#ffcc88', emissiveIntensity: 5, opacity: -1 });
