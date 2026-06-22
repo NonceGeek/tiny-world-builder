@@ -56,6 +56,8 @@
     let lastCollabRegistryRttMs = null;
     let roomCloseBtnEl = null;
     let closingRoom = false;
+    let collabControlToken = '';
+    let collabCanControl = false;
 
     // -------- lobby / roles / moderation state --------
     // SAFETY INVARIANT: default to ADMITTED. An un-upgraded server sends no
@@ -378,19 +380,73 @@
       } catch (_) {}
     }
 
+    function walletToken() {
+      try { return localStorage.getItem('tinyworld:auth:wallet-session.v1') || ''; } catch (_) { return ''; }
+    }
+
+    function cookieToken() {
+      try {
+        const m = document.cookie.match(/(?:^|; )nf_jwt=([^;]*)/);
+        return m ? decodeURIComponent(m[1]) : '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    async function collabAccessToken() {
+      try {
+        if (window.__tinyworldAuthReady) await window.__tinyworldAuthReady;
+      } catch (_) {}
+      const A = window.TinyWorldAuth;
+      if (A && typeof A.getUser === 'function') {
+        try {
+          const u = await A.getUser();
+          if (u && typeof u.jwt === 'function') {
+            try {
+              const jwt = await u.jwt();
+              if (jwt) return jwt;
+            } catch (_) {}
+          }
+          if (u && u.token && u.token.access_token) return u.token.access_token;
+        } catch (_) {}
+      }
+      return walletToken() || cookieToken() || '';
+    }
+
+    async function fetchCollabRoomStatus(wantsControl = false) {
+      const headers = { Accept: 'application/json' };
+      let url = '/api/collabs?roomId=' + encodeURIComponent(roomId);
+      if (wantsControl) {
+        const token = await collabAccessToken();
+        if (token) {
+          headers.Authorization = 'Bearer ' + token;
+          url += '&control=1';
+        }
+      }
+      const res = await fetch(url, {
+        headers,
+        credentials: 'same-origin',
+        cache: 'no-store',
+      });
+      if (!res || !res.ok) return null;
+      const body = await res.json();
+      collabCanControl = !!(body && body.canControl);
+      collabControlToken = String((body && body.controlToken) || '');
+      return body;
+    }
+
     async function collabRegistryClosed() {
       try {
-        const res = await fetch('/api/collabs?roomId=' + encodeURIComponent(roomId), {
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-          cache: 'no-store',
-        });
-        if (!res || !res.ok) return false;
-        const body = await res.json();
+        const body = await fetchCollabRoomStatus(true);
         return !!(body && body.closed);
       } catch (_) {
         return false;
       }
+    }
+
+    function claimCollabControl() {
+      if (!collabControlToken) return false;
+      return sendMessage({ type: 'control.claim', token: collabControlToken });
     }
 
     async function publishCollabRegistry(force = false) {
@@ -648,9 +704,9 @@
       btn.disabled = !!closingRoom;
     }
 
-    async function closeSharedRoom() {
+    async function closeSharedRoom(options = {}) {
       if (!isHost || closingRoom) return false;
-      const ok = window.confirm ? window.confirm('Stop sharing this room? Observers will be disconnected and the public link will be closed.') : true;
+      const ok = options.skipConfirm || (window.confirm ? window.confirm('Stop sharing this room? Observers will be disconnected and the public link will be closed.') : true);
       if (!ok) return false;
       closingRoom = true;
       updateRoomCloseButton();
@@ -672,10 +728,12 @@
     }
 
     function handleRoomClosed(reason) {
+      const shouldBroadcastClose = isHost && !closingRoom;
       closingRoom = true;
       declined = true;
       admitted = false;
       stopCollabRegistry();
+      if (shouldBroadcastClose) sendMessage({ type: 'room.close' });
       clearSharedRoomUrl();
       showLobbyNotice(reason || 'The host closed this shared build.');
       setStatus('offline', 'Shared room: closed');
@@ -812,45 +870,81 @@
       return sprite;
     }
 
+    function buildZoneDisplayPoint(x, z, offsetX = 0, offsetZ = 0) {
+      let island = null;
+      try {
+        if (typeof editableIslandForWorldCell === 'function') island = editableIslandForWorldCell(x, z);
+      } catch (_) {}
+      if (island && typeof localCoordForWorldCell === 'function' && island.contentGroup) {
+        const local = localCoordForWorldCell(x, z);
+        const point = tilePos(local.x, local.z);
+        point.x += offsetX;
+        point.z += offsetZ;
+        island.contentGroup.localToWorld(point);
+        xrWorldRoot.worldToLocal(point);
+        return point;
+      }
+      const point = (typeof cellDisplayPointForCell === 'function') ? cellDisplayPointForCell(x, z).clone() : tilePos(x, z);
+      point.x += offsetX;
+      point.z += offsetZ;
+      return point;
+    }
+
+    function makeBuildZoneFill(points, y, material) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute([
+        points[0].x, y, points[0].z,
+        points[1].x, y, points[1].z,
+        points[2].x, y, points[2].z,
+        points[3].x, y, points[3].z,
+      ], 3));
+      geo.setIndex([0, 1, 2, 0, 2, 3]);
+      geo.computeVertexNormals();
+      const fill = new THREE.Mesh(geo, material);
+      fill.renderOrder = 1388;
+      return fill;
+    }
+
+    function makeBuildZoneEdge(a, b, y, material) {
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const length = Math.max(0.08, Math.sqrt(dx * dx + dz * dz));
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(length, 0.055, 0.06), material);
+      edge.position.set((a.x + b.x) / 2, y, (a.z + b.z) / 2);
+      edge.rotation.y = Math.atan2(-dz, dx);
+      edge.renderOrder = 1395;
+      return edge;
+    }
+
     function renderBuildZones() {
       clearGroup(zoneRoot);
       buildZoneList().forEach(zone => {
         if (zone.active === false) return;
-        const corners = [
-          { x: zone.minX, z: zone.minZ },
-          { x: zone.maxX, z: zone.minZ },
-          { x: zone.maxX, z: zone.maxZ },
-          { x: zone.minX, z: zone.maxZ },
+        const points = [
+          buildZoneDisplayPoint(zone.minX, zone.minZ, -0.5, -0.5),
+          buildZoneDisplayPoint(zone.maxX, zone.minZ, 0.5, -0.5),
+          buildZoneDisplayPoint(zone.maxX, zone.maxZ, 0.5, 0.5),
+          buildZoneDisplayPoint(zone.minX, zone.maxZ, -0.5, 0.5),
         ];
-        const points = corners.map(cell => tilePos(cell.x, cell.z));
-        const ys = corners.map(cell => cellY(cell.x, cell.z)).filter(Number.isFinite);
-        const y = (ys.length ? Math.max.apply(Math, ys) : 0.05) + 0.06;
-        const minX = Math.min.apply(Math, points.map(p => p.x)) - 0.5;
-        const maxX = Math.max.apply(Math, points.map(p => p.x)) + 0.5;
-        const minZ = Math.min.apply(Math, points.map(p => p.z)) - 0.5;
-        const maxZ = Math.max.apply(Math, points.map(p => p.z)) + 0.5;
+        if (points.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || !Number.isFinite(point.z))) return;
+        const ys = points.map(p => p.y).filter(Number.isFinite);
+        const y = (ys.length ? Math.max.apply(Math, ys) : 0.05) + 0.08;
         const color = cssColorToHex(zone.color);
         const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.92, depthTest: false, depthWrite: false });
-        const fillMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.08, depthTest: false, depthWrite: false });
+        const fillMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.08, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
         const group = new THREE.Group();
         group.name = 'build-zone-' + zone.id;
-        const w = Math.max(0.08, maxX - minX);
-        const d = Math.max(0.08, maxZ - minZ);
-        const fill = new THREE.Mesh(new THREE.BoxGeometry(w, 0.02, d), fillMat);
-        fill.position.set((minX + maxX) / 2, y - 0.01, (minZ + maxZ) / 2);
-        fill.renderOrder = 1388;
-        group.add(fill);
-        const north = new THREE.Mesh(new THREE.BoxGeometry(w, 0.055, 0.06), mat);
-        const south = new THREE.Mesh(new THREE.BoxGeometry(w, 0.055, 0.06), mat);
-        const west = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.055, d), mat);
-        const east = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.055, d), mat);
-        north.position.set((minX + maxX) / 2, y, minZ);
-        south.position.set((minX + maxX) / 2, y, maxZ);
-        west.position.set(minX, y, (minZ + maxZ) / 2);
-        east.position.set(maxX, y, (minZ + maxZ) / 2);
-        [north, south, west, east].forEach(edge => { edge.renderOrder = 1395; group.add(edge); });
+        group.add(makeBuildZoneFill(points, y - 0.01, fillMat));
+        group.add(makeBuildZoneEdge(points[0], points[1], y, mat));
+        group.add(makeBuildZoneEdge(points[1], points[2], y, mat));
+        group.add(makeBuildZoneEdge(points[2], points[3], y, mat));
+        group.add(makeBuildZoneEdge(points[3], points[0], y, mat));
         const label = makeZoneLabelSprite(zone.label, zone.color);
-        label.position.set((minX + maxX) / 2, y + 0.48, (minZ + maxZ) / 2);
+        label.position.set(
+          points.reduce((sum, p) => sum + p.x, 0) / points.length,
+          y + 0.48,
+          points.reduce((sum, p) => sum + p.z, 0) / points.length
+        );
         group.add(label);
         zoneRoot.add(group);
       });
@@ -2324,6 +2418,7 @@
         updateChatAvailability();
         updateZoneLauncher();
         updateRoomCloseButton();
+        claimCollabControl();
         updateCollabRegistry(true);
       } else if (data.type === 'lobby.join') {
         if (!data.id) return;
@@ -2439,6 +2534,7 @@
         everConnected = true;
         connected = true;
         setStatus('online', 'Shared room: ' + roomId);
+        claimCollabControl();
         publishPresence(true);
         renderRoster();
         updateChatAvailability();
@@ -2550,6 +2646,7 @@
       buildZones: () => buildZoneList(),
       assignedZones: () => myZoneIds.slice(),
       isHost: () => isHost,
+      canControl: () => collabCanControl || isHost,
       // Sync-core hooks. broadcastEnv lets the host force an env re-broadcast
       // after a programmatic environment change (no DOM event); sendMessage is
       // the raw channel other live-sync features (flight/chat) broadcast over.

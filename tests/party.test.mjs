@@ -345,6 +345,27 @@ test('host can close a shared build room and prevent host promotion', () => {
   assert.equal(next.closed, true, 'closed room rejects later connections');
 });
 
+test('signed collab control token lets the share owner reclaim host control', async () => {
+  const room = makeRoom({ WORLDS_JOIN_SECRET: 'test-secret' });
+  const party = new TinyWorldParty(room);
+  const connect = (id) => { const c = room.addConn(id); party.onConnect(c); return c; };
+  const host = connect('h');
+  const owner = connect('owner');
+  const badToken = signJoinToken({ typ: 'tinyworld-collab-control', roomId: 'other-room' }, 'test-secret');
+  await party.onMessage(JSON.stringify({ type: 'control.claim', token: badToken }), owner);
+  assert.equal(party.hostId, 'h', 'wrong-room token ignored');
+
+  const token = signJoinToken({ typ: 'tinyworld-collab-control', roomId: 'room-test' }, 'test-secret');
+  await party.onMessage(JSON.stringify({ type: 'control.claim', token }), owner);
+  assert.equal(party.hostId, 'owner');
+  assert.equal(party.admitted.get('owner').role, 'host');
+  assert.equal(party.admitted.get('h').role, 'viewer');
+  assert.ok(typesTo(owner).includes('role'));
+  assert.ok(host.received.some(m => m.type === 'snapshot.request' && m.forId === 'owner'), 'old host is asked to snapshot to owner');
+  assert.equal(last(host).type, 'role');
+  assert.equal(last(host).role, 'viewer');
+});
+
 test('host leaving promotes the next admitted member to host', () => {
   const { party, connect, send, room } = setup();
   const host = connect('h');

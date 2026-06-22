@@ -5420,6 +5420,7 @@
     background: rgba(8, 12, 18, 0.52) !important;
   }
   body.ui-theme-dark .world-menu-icon,
+  body.ui-theme-dark .shared-room-action,
   body.ui-theme-dark .view-thumb,
   body.ui-theme-dark .layers-row-icon,
   body.ui-theme-dark .layers-count,
@@ -5467,6 +5468,8 @@
   }
   body.ui-theme-dark .world-menu-item:hover,
   body.ui-theme-dark .world-menu-slot:hover,
+  body.ui-theme-dark .world-menu-shared-slot:hover,
+  body.ui-theme-dark .world-menu-shared-slot.active,
   body.ui-theme-dark .layers-row:hover,
   body.ui-theme-dark .layers-tree details,
   body.ui-theme-dark .selection-prop-chip,
@@ -5487,6 +5490,14 @@
     color: #b9f2bd !important;
     background: rgba(73, 160, 88, 0.18) !important;
     border-color: rgba(119, 210, 132, 0.32) !important;
+  }
+  body.ui-theme-dark .shared-room-meta {
+    color: rgba(221, 231, 248, 0.66) !important;
+  }
+  body.ui-theme-dark .shared-room-action.danger {
+    color: #ffc4bc !important;
+    border-color: rgba(255, 128, 112, 0.34) !important;
+    background: rgba(160, 54, 45, 0.18) !important;
   }
 
   .toolbar .tool,
@@ -6255,6 +6266,72 @@
   .world-menu-slot .slot-delete[hidden] { display: none !important; }
   .world-menu-slot:hover .slot-delete { opacity: 1; }
   .world-menu-slot .slot-delete:hover { color: #b84838; background: var(--line); }
+  .world-menu-shared-list {
+    max-height: 230px;
+  }
+  .world-menu-shared-slot {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    padding: 8px;
+    border-radius: 9px;
+    color: var(--ink);
+    font-size: 12.5px;
+  }
+  .world-menu-shared-slot:hover,
+  .world-menu-shared-slot.active {
+    background: rgba(255, 255, 255, 0.55);
+  }
+  .world-menu-shared-slot.active {
+    box-shadow: inset 0 0 0 1px rgba(60, 130, 247, 0.22);
+  }
+  .shared-room-info,
+  .shared-room-name,
+  .shared-room-meta {
+    display: block;
+    min-width: 0;
+  }
+  .shared-room-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 750;
+  }
+  .shared-room-meta {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .shared-room-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .shared-room-action {
+    flex: 1 1 auto;
+    min-height: 28px;
+    padding: 4px 7px;
+    border: 1px solid rgba(65, 82, 116, 0.32);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    color: var(--ink);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .shared-room-action:hover {
+    background: rgba(255, 255, 255, 0.72);
+  }
+  .shared-room-action:disabled {
+    cursor: default;
+    opacity: 0.58;
+  }
+  .shared-room-action.danger {
+    border-color: rgba(184, 72, 56, 0.35);
+    color: #a33d34;
+  }
   .world-menu-empty {
     padding: 12px 12px 14px;
     color: var(--muted);

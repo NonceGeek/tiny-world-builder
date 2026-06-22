@@ -3464,6 +3464,9 @@ syncTinyworldOwnerToolControls();
     const renameBtn = document.getElementById('world-menu-rename');
     const listEl = document.getElementById('world-menu-list');
     const emptyEl = document.getElementById('world-menu-empty');
+    const sharedSectionEl = document.getElementById('world-menu-shared');
+    const sharedListEl = document.getElementById('world-menu-shared-list');
+    const sharedEmptyEl = document.getElementById('world-menu-shared-empty');
     const inviteTopBtn = document.getElementById('invite-top-btn');
     if (!trigger || !menu || !labelEl || !nameInput || !listEl) return;
     const manageBtn = menu.querySelector('[data-action="manage"]');
@@ -3472,6 +3475,7 @@ syncTinyworldOwnerToolControls();
     if (!window.TinyWorldAuth && manageBtn) manageBtn.hidden = true;
     if (!window.TinyWorldAuth && shareBtn) shareBtn.hidden = true;
     if (!window.TinyWorldAuth && collaborateBtn) collaborateBtn.hidden = true;
+    let sharedRoomsLoading = false;
 
     function menuWorlds() {
       const loggedIn = twCloudLoggedIn();
@@ -3564,6 +3568,148 @@ syncTinyworldOwnerToolControls();
         li.addEventListener('click', () => loadSlot(w.id));
         listEl.appendChild(li);
       });
+    }
+
+    function roomHrefForMenu(room) {
+      const href = String((room && room.href) || '').trim();
+      if (href && href.charAt(0) === '/') return href;
+      const roomId = String((room && room.roomId) || '').trim();
+      if (!roomId) return '/tiny-world-builder';
+      const p = new URLSearchParams();
+      if (room.shareId) p.set('share', room.shareId);
+      p.set('party', roomId);
+      p.set('observe', '1');
+      return '/tiny-world-builder?' + p.toString();
+    }
+
+    function currentSharedRoomId() {
+      try {
+        if (window.__tinyworldMultiplayer && window.__tinyworldMultiplayer.roomId) return window.__tinyworldMultiplayer.roomId;
+      } catch (_) {}
+      try {
+        const p = new URLSearchParams(location.search);
+        return p.get('party') || p.get('room') || p.get('collab') || '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function sharedRoomTitle(room) {
+      return String((room && room.name) || (room && room.roomId) || 'Shared room');
+    }
+
+    function paintSharedRooms(rooms) {
+      if (!sharedSectionEl || !sharedListEl || !sharedEmptyEl) return;
+      const list = Array.isArray(rooms) ? rooms : [];
+      sharedSectionEl.hidden = !twCloudLoggedIn();
+      sharedListEl.textContent = '';
+      sharedEmptyEl.hidden = !!list.length;
+      if (!twCloudLoggedIn()) return;
+      if (!list.length) {
+        sharedEmptyEl.textContent = sharedRoomsLoading ? 'Loading shared rooms...' : 'No live shared rooms.';
+        return;
+      }
+      const activeRoomId = currentSharedRoomId();
+      list.forEach(room => {
+        const roomId = String(room.roomId || '');
+        const li = document.createElement('li');
+        li.className = 'world-menu-shared-slot' + (roomId && roomId === activeRoomId ? ' active' : '');
+
+        const info = document.createElement('span');
+        info.className = 'shared-room-info';
+        const name = document.createElement('span');
+        name.className = 'shared-room-name';
+        name.textContent = sharedRoomTitle(room);
+        const meta = document.createElement('span');
+        meta.className = 'shared-room-meta';
+        const total = (Number(room.observerCount) || 0) + (Number(room.playerCount) || 0) + (Number(room.editorCount) || 0);
+        meta.textContent = (room.hidden ? 'Private' : 'Public') + ' · ' + total + ' viewing';
+        info.appendChild(name);
+        info.appendChild(meta);
+
+        const actions = document.createElement('span');
+        actions.className = 'shared-room-actions';
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'shared-room-action';
+        open.textContent = roomId === activeRoomId ? 'Here' : 'Open';
+        open.disabled = roomId === activeRoomId;
+        open.addEventListener('click', e => {
+          e.stopPropagation();
+          if (roomId !== activeRoomId) location.assign(roomHrefForMenu(room));
+        });
+        const privacy = document.createElement('button');
+        privacy.type = 'button';
+        privacy.className = 'shared-room-action';
+        privacy.textContent = room.hidden ? 'Make public' : 'Make private';
+        privacy.addEventListener('click', e => {
+          e.stopPropagation();
+          setSharedRoomPrivacy(room, !room.hidden);
+        });
+        const closeRoom = document.createElement('button');
+        closeRoom.type = 'button';
+        closeRoom.className = 'shared-room-action danger';
+        closeRoom.textContent = 'Close';
+        closeRoom.addEventListener('click', e => {
+          e.stopPropagation();
+          closeSharedRoomFromMenu(room);
+        });
+        actions.appendChild(open);
+        actions.appendChild(privacy);
+        actions.appendChild(closeRoom);
+        li.appendChild(info);
+        li.appendChild(actions);
+        sharedListEl.appendChild(li);
+      });
+    }
+
+    async function loadSharedRoomsForMenu() {
+      if (!sharedSectionEl || !twCloudLoggedIn() || sharedRoomsLoading) {
+        if (sharedSectionEl) sharedSectionEl.hidden = !twCloudLoggedIn();
+        return;
+      }
+      sharedRoomsLoading = true;
+      paintSharedRooms([]);
+      const data = await twCloudApiCall('/api/collabs?mine=1&limit=100', 'GET');
+      sharedRoomsLoading = false;
+      if (!data || data.error) {
+        if (sharedSectionEl) sharedSectionEl.hidden = true;
+        return;
+      }
+      paintSharedRooms(Array.isArray(data.rooms) ? data.rooms : []);
+    }
+
+    async function setSharedRoomPrivacy(room, makePrivate) {
+      const roomId = String(room && room.roomId || '');
+      if (!roomId) return;
+      const result = await twCloudApiCall('/api/collabs', 'POST', {
+        action: makePrivate ? 'hide' : 'unhide',
+        roomId,
+      });
+      if (result && result.error) {
+        twToast(result.error, 'err');
+        return;
+      }
+      twToast(makePrivate ? 'Shared room is private.' : 'Shared room is public.', 'ok');
+      loadSharedRoomsForMenu();
+    }
+
+    async function closeSharedRoomFromMenu(room) {
+      const roomId = String(room && room.roomId || '');
+      if (!roomId) return;
+      const ok = window.confirm ? window.confirm('Close "' + sharedRoomTitle(room) + '" for everyone?') : true;
+      if (!ok) return;
+      const result = await twCloudApiCall('/api/collabs', 'POST', { action: 'ownerClose', roomId });
+      if (result && result.error) {
+        twToast(result.error, 'err');
+        return;
+      }
+      if (roomId === currentSharedRoomId() && window.__tinyworldMultiplayer && typeof window.__tinyworldMultiplayer.closeRoom === 'function') {
+        window.__tinyworldMultiplayer.closeRoom({ skipConfirm: true });
+      } else {
+        twToast('Shared room closed.', 'ok');
+      }
+      loadSharedRoomsForMenu();
     }
 
     function leaveWorldRoomForMenuLoad() {
@@ -3895,6 +4041,7 @@ syncTinyworldOwnerToolControls();
 
     function open() {
       paintLabel(); paintList();
+      loadSharedRoomsForMenu();
       twWorldCatalogLoad(false).then(() => {
         if (!menu.hidden) { paintLabel(); paintList(); }
       }).catch(err => console.warn('[world-catalog] menu refresh failed:', err));

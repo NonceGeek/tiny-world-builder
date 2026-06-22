@@ -833,7 +833,7 @@ export default class TinyWorldParty {
     if (this.hostId && this.hostId !== conn.id) this.sendTo(this.hostId, { type: 'snapshot.request', forId: conn.id });
   }
 
-  onMessage(message, sender) {
+  async onMessage(message, sender) {
     const data = safeJson(message);
     if (!data || typeof data.type !== 'string') return;
 
@@ -855,6 +855,41 @@ export default class TinyWorldParty {
     if (data.type === 'room.close') {
       if (sender.id !== this.hostId) return;
       this.closeBuildRoom('Host closed the room');
+      return;
+    }
+
+    if (data.type === 'control.claim') {
+      const secret = this.env.WORLDS_JOIN_SECRET || this.env.WORLDS_SERVICE_TOKEN || '';
+      const payload = await verifyJoinTokenWeb(data.token, secret);
+      if (!payload || payload.typ !== 'tinyworld-collab-control' || payload.roomId !== this.room.id) return;
+      const previousHostId = this.hostId;
+      if (previousHostId && previousHostId !== sender.id) {
+        this.sendTo(previousHostId, { type: 'snapshot.request', forId: sender.id });
+      }
+      this.hostId = sender.id;
+      this.admitted.set(sender.id, { role: 'host', island: null, zoneIds: [] });
+      this.seats.set(sender.id, { role: 'host', island: null, zoneIds: [] });
+      this.sendTo(sender.id, {
+        type: 'role',
+        role: 'host',
+        island: null,
+        zoneIds: [],
+        zones: this.zoneList(),
+        admitted: true,
+      });
+      if (previousHostId && previousHostId !== sender.id) {
+        const oldSeat = { role: 'viewer', island: null, zoneIds: [] };
+        this.admitted.set(previousHostId, oldSeat);
+        this.seats.set(previousHostId, oldSeat);
+        this.sendTo(previousHostId, {
+          type: 'role',
+          role: 'viewer',
+          island: null,
+          zoneIds: [],
+          zones: this.zoneList(),
+          admitted: true,
+        });
+      }
       return;
     }
 

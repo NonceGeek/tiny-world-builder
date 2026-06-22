@@ -91,6 +91,22 @@ backend:
   `/api/collabs` so the public registry stores a short-lived tombstone in
   `collab_room_closures`. Heartbeats for tombstoned rooms must return
   `{ closed: true }` instead of recreating the listing.
+- Admin collab moderation lives on `/collabs`: authenticated world-admin
+  sessions call `/api/collabs` with `{ action: 'hide', roomId }` to add a
+  short-lived `collab_room_hides` tombstone that removes a room from public
+  lists without disconnecting occupants, or `{ action: 'adminClose', roomId }`
+  to use the close tombstone. When a host sees that close tombstone on its
+  registry heartbeat, the client must send PartyKit `room.close` before closing
+  its socket so connected peers get the same shutdown event as a manual host
+  stop.
+- Shared build owners are tracked from the `/api/share` row. `/api/collabs`
+  copies `world_shares.owner_auth_id/profile_id` into `collab_rooms`, exposes
+  `GET /api/collabs?mine=1` for the builder world-menu "Shared rooms" section,
+  and lets the owner/admin `hide` (make private), `unhide`, or `ownerClose`.
+  `GET /api/collabs?roomId=<id>&control=1` can return a signed
+  `tinyworld-collab-control` token; the builder sends `control.claim` to
+  PartyKit so the original sharer/admin can reclaim host controls when reopening
+  their own room link instead of staying an observer.
 - Collaborative build zones are transient PartyKit room permission data, not
   saved world cells. Host clients send `zones.set`; the server sanitizes zones,
   stores editor `zoneIds`, and must gate every non-host `cell.set` against
