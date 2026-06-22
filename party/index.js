@@ -687,6 +687,9 @@ export default class TinyWorldParty {
     // Host-defined build zones for collaborative build rooms. These are
     // transient room permission data, not saved world cells.
     this.buildZones = new Map();
+    // Explicit host-close state. A closed shared build must not promote a
+    // replacement host on socket teardown or admit later connections.
+    this.closed = false;
 
     // ---- Worlds MMO room state (only for 'world-' rooms) ----
     this.isWorldRoom = String((room && room.id) || '').startsWith(WORLD_ROOM_PREFIX);
@@ -732,6 +735,27 @@ export default class TinyWorldParty {
     return Array.from(this.buildZones.values());
   }
 
+  closeBuildRoom(reason = 'Host closed the room') {
+    if (this.isWorldRoom || this.closed) return false;
+    this.closed = true;
+    const ids = new Set([...this.admitted.keys(), ...this.lobby.keys()]);
+    if (this.hostId) ids.add(this.hostId);
+    const msg = { type: 'room.closed', reason: cleanText(reason, 120) || 'Host closed the room' };
+    for (const id of ids) this.sendTo(id, msg);
+    for (const id of ids) {
+      const c = this.room.getConnection(id);
+      if (c) c.close();
+    }
+    this.hostId = null;
+    this.presence.clear();
+    this.rateLimits.clear();
+    this.admitted.clear();
+    this.lobby.clear();
+    this.seats.clear();
+    this.buildZones.clear();
+    return true;
+  }
+
   onConnect(conn) {
     if (this.isWorldRoom) {
       // World rooms have no host/lobby: everyone connects as a provisional
@@ -746,6 +770,11 @@ export default class TinyWorldParty {
         world: true,
         peers: Array.from(this.presence.values()),
       }));
+      return;
+    }
+    if (this.closed) {
+      conn.send(JSON.stringify({ type: 'room.closed', reason: 'Host closed the room' }));
+      conn.close();
       return;
     }
     if (!this.hostId) {
@@ -822,6 +851,12 @@ export default class TinyWorldParty {
 
     // World rooms run a separate, authoritative message path.
     if (this.isWorldRoom) return this.onWorldMessage(data, sender);
+
+    if (data.type === 'room.close') {
+      if (sender.id !== this.hostId) return;
+      this.closeBuildRoom('Host closed the room');
+      return;
+    }
 
     if (data.type === 'presence') {
       const presence = cleanPresence(data.presence, sender.id);
@@ -1102,6 +1137,13 @@ export default class TinyWorldParty {
       return;
     }
     const wasLobby = this.lobby.has(conn.id);
+    if (this.closed) {
+      this.presence.delete(conn.id);
+      this.rateLimits.delete(conn.id);
+      this.admitted.delete(conn.id);
+      this.lobby.delete(conn.id);
+      return;
+    }
     const wasHost = conn.id === this.hostId;
     this.presence.delete(conn.id);
     this.rateLimits.delete(conn.id);

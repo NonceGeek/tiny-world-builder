@@ -321,6 +321,30 @@ test('kick is host-only, removes the seat, and closes the connection', () => {
   assert.ok(typesTo(room.getConnection('v')).includes('kicked'));
 });
 
+test('host can close a shared build room and prevent host promotion', () => {
+  const { party, connect, send, room } = setup();
+  const host = connect('h');
+  const viewer = connect('v');
+  send({ id: 'v' }, { type: 'room.close' });
+  assert.equal(party.closed, false, 'non-host close ignored');
+  assert.equal(party.hostId, 'h');
+
+  send(host, { type: 'room.close' });
+  assert.equal(party.closed, true);
+  assert.equal(party.hostId, null, 'closed room does not keep or promote a host');
+  assert.equal(party.admitted.size, 0);
+  assert.equal(party.seats.size, 0);
+  assert.ok(typesTo(host).includes('room.closed'));
+  assert.ok(typesTo(viewer).includes('room.closed'));
+  assert.equal(room.getConnection('h').closed, true);
+  assert.equal(room.getConnection('v').closed, true);
+
+  const next = room.addConn('next');
+  party.onConnect(next);
+  assert.equal(last(next).type, 'room.closed');
+  assert.equal(next.closed, true, 'closed room rejects later connections');
+});
+
 test('host leaving promotes the next admitted member to host', () => {
   const { party, connect, send, room } = setup();
   const host = connect('h');

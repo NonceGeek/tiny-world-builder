@@ -4,6 +4,7 @@ import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGua
 export const config = { path: '/api/collabs' };
 
 const ACTIVE_WINDOW_SECONDS = 150;
+const CLOSED_ROOM_TTL_DAYS = 30;
 const MAX_NAME = 100;
 const MAX_HOST = 80;
 const MAX_LOCATION = 80;
@@ -86,6 +87,17 @@ async function ensureCollabRooms(sql) {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS collab_rooms_last_seen_idx ON collab_rooms (last_seen DESC)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS collab_room_closures (
+      room_id TEXT PRIMARY KEY,
+      closed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS collab_room_closures_closed_at_idx ON collab_room_closures (closed_at DESC)`;
+  await sql`
+    DELETE FROM collab_room_closures
+    WHERE closed_at < NOW() - (${CLOSED_ROOM_TTL_DAYS} * INTERVAL '1 day')
+  `;
 }
 
 function collabDto(row) {
@@ -105,6 +117,26 @@ function collabDto(row) {
   };
 }
 
+async function isRoomClosed(sql, roomId) {
+  const rows = await sql`
+    SELECT room_id
+    FROM collab_room_closures
+    WHERE room_id = ${roomId}
+      AND closed_at > NOW() - (${CLOSED_ROOM_TTL_DAYS} * INTERVAL '1 day')
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+async function closeCollabRoom(sql, roomId) {
+  await sql`
+    INSERT INTO collab_room_closures (room_id, closed_at)
+    VALUES (${roomId}, NOW())
+    ON CONFLICT (room_id) DO UPDATE SET closed_at = EXCLUDED.closed_at
+  `;
+  await sql`DELETE FROM collab_rooms WHERE room_id = ${roomId}`;
+}
+
 export default async function collabsFunction(request) {
   const origin = request.headers.get('origin');
   if (request.method === 'OPTIONS') return corsResponse(origin);
@@ -115,17 +147,37 @@ export default async function collabsFunction(request) {
 
     if (request.method === 'GET') {
       const url = new URL(request.url);
+      const statusRoomId = cleanId(url.searchParams.get('roomId') || url.searchParams.get('room') || '');
+      if (statusRoomId) {
+        return jsonResponse({
+          roomId: statusRoomId,
+          closed: await isRoomClosed(sql, statusRoomId),
+          activeWindowSeconds: ACTIVE_WINDOW_SECONDS,
+        }, origin, 200, { 'Cache-Control': 'no-store' });
+      }
       const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit')) || 50));
       const rows = await sql`
-        SELECT *
-        FROM collab_rooms
-        WHERE last_seen > NOW() - (${ACTIVE_WINDOW_SECONDS} * INTERVAL '1 second')
-        ORDER BY last_seen DESC
+        SELECT cr.*
+        FROM collab_rooms cr
+        LEFT JOIN collab_room_closures cc ON cc.room_id = cr.room_id
+          AND cc.closed_at > NOW() - (${CLOSED_ROOM_TTL_DAYS} * INTERVAL '1 day')
+        WHERE cr.last_seen > NOW() - (${ACTIVE_WINDOW_SECONDS} * INTERVAL '1 second')
+          AND cc.room_id IS NULL
+        ORDER BY cr.last_seen DESC
         LIMIT ${limit}
       `;
       return jsonResponse({ rooms: rows.map(collabDto), activeWindowSeconds: ACTIVE_WINDOW_SECONDS }, origin, 200, {
         'Cache-Control': 'no-store',
       });
+    }
+
+    if (request.method === 'DELETE') {
+      if (!sameOriginWriteGuard(request)) return errorResponse('Forbidden', 403, origin);
+      const url = new URL(request.url);
+      const roomId = cleanId(url.searchParams.get('roomId') || url.searchParams.get('room') || url.searchParams.get('party') || '');
+      if (!roomId) return errorResponse('Missing room id', 400, origin);
+      await closeCollabRoom(sql, roomId);
+      return jsonResponse({ roomId, closed: true }, origin, 200, { 'Cache-Control': 'no-store' });
     }
 
     if (request.method === 'POST') {
@@ -135,6 +187,14 @@ export default async function collabsFunction(request) {
 
       const roomId = cleanId(body.roomId || body.room || body.party);
       if (!roomId) return errorResponse('Missing room id', 400, origin);
+      const action = String(body.action || body.type || '').trim().toLowerCase();
+      if (action === 'close' || action === 'delete' || action === 'stop') {
+        await closeCollabRoom(sql, roomId);
+        return jsonResponse({ roomId, closed: true }, origin, 200, { 'Cache-Control': 'no-store' });
+      }
+      if (await isRoomClosed(sql, roomId)) {
+        return jsonResponse({ roomId, closed: true }, origin, 200, { 'Cache-Control': 'no-store' });
+      }
       const shareId = cleanId(body.shareId || body.share || '');
       const partyHost = cleanPartyHost(body.partyHost || '');
       const network = body.network && typeof body.network === 'object' ? body.network : {};

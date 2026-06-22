@@ -85,6 +85,12 @@ backend:
   feed and `/collabs` page list those rooms with observer links
   (`observe=1`). This public visibility must not grant edit authority; edits
   still require a host-assigned role plus server-side island/zone checks.
+- Closing a shared build is a two-layer operation: host clients send
+  `room.close` to PartyKit so every connected peer receives `room.closed` and no
+  replacement host is promoted, and they POST `{ action: 'close', roomId }` to
+  `/api/collabs` so the public registry stores a short-lived tombstone in
+  `collab_room_closures`. Heartbeats for tombstoned rooms must return
+  `{ closed: true }` instead of recreating the listing.
 - Collaborative build zones are transient PartyKit room permission data, not
   saved world cells. Host clients send `zones.set`; the server sanitizes zones,
   stores editor `zoneIds`, and must gate every non-host `cell.set` against

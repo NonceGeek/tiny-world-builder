@@ -54,6 +54,8 @@
     let collabRegistryTimer = null;
     let lastCollabRegistrySent = 0;
     let lastCollabRegistryRttMs = null;
+    let roomCloseBtnEl = null;
+    let closingRoom = false;
 
     // -------- lobby / roles / moderation state --------
     // SAFETY INVARIANT: default to ADMITTED. An un-upgraded server sends no
@@ -364,6 +366,18 @@
       collabRegistryTimer = null;
     }
 
+    async function closeCollabRegistry() {
+      try {
+        await fetch('/api/collabs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          credentials: 'same-origin',
+          keepalive: true,
+          body: JSON.stringify({ action: 'close', roomId, shareId }),
+        });
+      } catch (_) {}
+    }
+
     async function publishCollabRegistry(force = false) {
       if (!connected || !admitted || !isHost) {
         stopCollabRegistry();
@@ -395,6 +409,12 @@
           }),
         });
         if (!res || !res.ok) return;
+        let body = null;
+        try { body = await res.json(); } catch (_) {}
+        if (body && body.closed) {
+          handleRoomClosed('This shared room has been closed.');
+          return;
+        }
         const ended = performance && typeof performance.now === 'function' ? performance.now() : Date.now();
         lastCollabRegistryRttMs = Math.round(Math.max(0, ended - started));
       } catch (_) {}
@@ -481,6 +501,8 @@
         chat: ['M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'],
         // paper plane (send)
         send: ['M22 2 11 13 M22 2 15 22 11 13 2 9z'],
+        // stop sharing
+        stop: ['M6 6h12v12H6z'],
       };
       (paths[kind] || []).forEach(d => {
         const p = document.createElementNS(NS, 'path');
@@ -577,6 +599,76 @@
       }
       el.appendChild(avatars);
       el.classList.add('visible');
+    }
+
+    function clearSharedRoomUrl() {
+      try {
+        const url = new URL(window.location.href);
+        ['party', 'room', 'collab', 'observe', 'partyHost'].forEach(key => url.searchParams.delete(key));
+        window.history.replaceState(window.history.state, '', url.pathname + (url.search ? url.search : '') + url.hash);
+      } catch (_) {}
+    }
+
+    function ensureRoomCloseButton() {
+      if (roomCloseBtnEl) return roomCloseBtnEl;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mp-room-close';
+      btn.dataset.posType = 'destructive';
+      btn.setAttribute('aria-label', 'Stop sharing room');
+      btn.appendChild(svgGlyph('stop'));
+      const label = document.createElement('span');
+      label.textContent = 'Stop sharing';
+      btn.appendChild(label);
+      btn.addEventListener('click', () => { closeSharedRoom(); });
+      document.body.appendChild(btn);
+      roomCloseBtnEl = btn;
+      return btn;
+    }
+
+    function updateRoomCloseButton() {
+      const btn = ensureRoomCloseButton();
+      const show = connected && admitted && isHost && !closingRoom;
+      btn.classList.toggle('visible', !!show);
+      btn.disabled = !!closingRoom;
+    }
+
+    async function closeSharedRoom() {
+      if (!isHost || closingRoom) return false;
+      const ok = window.confirm ? window.confirm('Stop sharing this room? Observers will be disconnected and the public link will be closed.') : true;
+      if (!ok) return false;
+      closingRoom = true;
+      updateRoomCloseButton();
+      stopCollabRegistry();
+      const registryClose = closeCollabRegistry();
+      sendMessage({ type: 'room.close' });
+      declined = true;
+      admitted = false;
+      clearSharedRoomUrl();
+      setStatus('offline', 'Shared room: closed');
+      showToast('Sharing stopped');
+      renderRoster();
+      updateChatAvailability();
+      updateZoneLauncher();
+      updateRoomCloseButton();
+      await registryClose;
+      try { if (socket) socket.close(); } catch (_) {}
+      return true;
+    }
+
+    function handleRoomClosed(reason) {
+      closingRoom = true;
+      declined = true;
+      admitted = false;
+      stopCollabRegistry();
+      clearSharedRoomUrl();
+      showLobbyNotice(reason || 'The host closed this shared build.');
+      setStatus('offline', 'Shared room: closed');
+      renderRoster();
+      updateChatAvailability();
+      updateZoneLauncher();
+      updateRoomCloseButton();
+      try { if (socket) socket.close(); } catch (_) {}
     }
 
     // MVP editor grant = the host's home board: world x,z in [0, GRID-1].
@@ -1776,6 +1868,7 @@
       updateGuestMenuVisibility();
       updateChatAvailability();
       updateZoneLauncher();
+      updateRoomCloseButton();
       updateCollabRegistry(true);
     }
 
@@ -2215,6 +2308,7 @@
         updateGuestMenuVisibility();
         updateChatAvailability();
         updateZoneLauncher();
+        updateRoomCloseButton();
         updateCollabRegistry(true);
       } else if (data.type === 'lobby.join') {
         if (!data.id) return;
@@ -2245,6 +2339,8 @@
         declined = true;
         admitted = false;
         showLobbyNotice('You have been removed from the shared build.');
+      } else if (data.type === 'room.closed') {
+        handleRoomClosed(data.reason || 'The host closed this shared build.');
       } else if (data.type === 'role') {
         // An admitted peer's role changed, or we were promoted to host. There
         // is no id field by protocol => this is always about US.
@@ -2328,6 +2424,7 @@
         renderRoster();
         updateChatAvailability();
         updateZoneLauncher();
+        updateRoomCloseButton();
         updateCollabRegistry(true);
       });
       socket.addEventListener('message', handleMessage);
@@ -2340,6 +2437,7 @@
         // disconnected; they refresh on reconnect / re-admit.
         updateChatAvailability();
         updateZoneLauncher();
+        updateRoomCloseButton();
         stopCollabRegistry();
         typingPeers.forEach((entry) => { if (entry && entry.timer) clearTimeout(entry.timer); });
         typingPeers.clear();
@@ -2456,6 +2554,7 @@
       openChat,
       closeChat,
       sendChat,
+      closeRoom: closeSharedRoom,
     };
 
     ensureLocalName();

@@ -69,7 +69,10 @@ test('collabs page lists room location, host, and network quality', () => {
 test('public collab registry endpoint stores host heartbeats and returns active rooms', () => {
   assert.match(collabsFunctionJs, /export const config = \{ path: '\/api\/collabs' \}/);
   assert.match(collabsFunctionJs, /CREATE TABLE IF NOT EXISTS collab_rooms/);
+  assert.match(collabsFunctionJs, /CREATE TABLE IF NOT EXISTS collab_room_closures/);
   assert.match(collabsFunctionJs, /sameOriginWriteGuard\(request\)/);
+  assert.match(collabsFunctionJs, /request\.method === 'DELETE'/);
+  assert.match(collabsFunctionJs, /action === 'close'/);
   assert.match(collabsFunctionJs, /observerHref\(roomId, shareId, partyHost, request\)/);
   assert.match(collabsFunctionJs, /last_seen > NOW\(\) - \(\$\{ACTIVE_WINDOW_SECONDS\} \* INTERVAL '1 second'\)/);
 });
