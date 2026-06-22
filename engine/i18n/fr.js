@@ -131,7 +131,7 @@
     'time.hours': '{n} h',
     'time.minutes': '{n} min',
     'time.seconds': '{n} s',
-    'countdown.label': 'WAVE 1 arrive, WAVE 2 dans {time}',
+    'countdown.label': 'WAVE 2 dans {time}',
     'countdown.live': 'WAVE 2 est en ligne',
     'season.spring': 'Printemps',
     'season.summer': 'Été',

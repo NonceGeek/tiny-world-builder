@@ -131,7 +131,7 @@
     'time.hours': '{n}小时',
     'time.minutes': '{n}分',
     'time.seconds': '{n}秒',
-    'countdown.label': 'WAVE 1 已到来，WAVE 2 还有 {time}',
+    'countdown.label': 'WAVE 2 还有 {time}',
     'countdown.live': 'WAVE 2 已上线',
     'season.spring': '春',
     'season.summer': '夏',
