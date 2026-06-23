@@ -30,6 +30,87 @@
 }
 </script>
 <script type="module" src="vendor/tinyworld-auth.js"></script>
+<style>
+  /* ---- Latest news teaser (sits directly under the hero) ----
+     Same glass idiom as the news-page entries so the home page and the
+     /news timeline read as one system. The whole card is a link to /news. */
+  .top-story-section {
+    width: min(1200px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 28px 0 4px;
+  }
+  .top-story {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 16px 22px;
+    text-decoration: none;
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    border-radius: var(--radius-lg);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.85) inset,
+      0 1px 2px rgba(20, 30, 50, 0.05),
+      0 16px 40px -22px rgba(40, 50, 80, 0.30);
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .top-story:hover,
+  .top-story:focus-visible {
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 1px 2px rgba(20, 30, 50, 0.06),
+      0 22px 52px -20px rgba(40, 50, 80, 0.36);
+  }
+  .top-story-flag {
+    flex: none;
+    align-self: flex-start;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: #e7f0fe;
+    color: #1a56b0;
+    border: 1px solid #cadcfb;
+  }
+  .top-story-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .top-story-headline {
+    font-family: var(--display-font);
+    font-size: clamp(17px, 2.4vw, 21px);
+    line-height: 1.2;
+    color: #111b45;
+  }
+  .top-story-summary {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .top-story-arrow {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  @media (max-width: 600px) {
+    .top-story { flex-wrap: wrap; gap: 10px 14px; padding: 14px 16px; }
+    .top-story-arrow { display: none; }
+  }
+</style>
 </head>
 <body class="landing-page">
   <header class="site-header" aria-label="Tiny World Builder">
@@ -91,6 +172,17 @@
       </aside>
       <a class="scroll-cue" href="#features" aria-label="Scroll to features">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+      </a>
+    </section>
+
+    <section class="top-story-section" aria-label="Latest news">
+      <a class="top-story" href="/news" aria-label="Latest news: Sign in with Google">
+        <span class="top-story-flag">Latest</span>
+        <span class="top-story-body">
+          <span class="top-story-headline">Sign in with Google</span>
+          <span class="top-story-summary">Google sign-in is here, and the old email verification step is off, so getting into your account is quicker and more reliable.</span>
+        </span>
+        <svg class="top-story-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
       </a>
     </section>
 

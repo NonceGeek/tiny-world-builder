@@ -3007,6 +3007,22 @@ syncTinyworldOwnerToolControls();
       });
     }
 
+    // Invert look (Y axis). A single global boolean read by every mouse-look
+    // controller (surface-roam / first-person in 47-worlds-room, flight-sim in
+    // 34-flight-sim). Standalone key — it's an input preference, not a render
+    // setting, so it stays out of the RENDER_LS reset-group pipeline.
+    const invertYCheckbox = document.getElementById('controls-invert-y');
+    if (invertYCheckbox) {
+      let invertYInit = false;
+      try { invertYInit = localStorage.getItem('tinyworld:controls:invertLookY') === '1'; } catch (_) {}
+      window.__twInvertLookY = invertYInit;
+      invertYCheckbox.checked = invertYInit;
+      invertYCheckbox.addEventListener('change', () => {
+        window.__twInvertLookY = !!invertYCheckbox.checked;
+        try { localStorage.setItem('tinyworld:controls:invertLookY', window.__twInvertLookY ? '1' : '0'); } catch (_) {}
+      });
+    }
+
     // i18n language switcher. Reflects the resolved locale; changing it persists
     // the choice and reloads (reload-on-switch — see engine/i18n/i18n-core.js).
     const uiLangSelect = document.getElementById('ui-lang-mode');
