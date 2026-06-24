@@ -1,4 +1,5 @@
 import { requireAuthUser } from './lib/auth.mjs';
+import { requireTinyverseAccess } from './lib/tinyverse-access.mjs';
 import { ensureProfile } from './lib/profiles.mjs';
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
 import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard, absoluteSiteUrl } from './lib/http.mjs';
@@ -17,6 +18,8 @@ export default async function referral(request) {
 
   const auth = await requireAuthUser(request, origin);
   if (auth.response) return auth.response;
+    const tvGate = requireTinyverseAccess(auth.user, origin);
+    if (tvGate) return tvGate;
 
   try {
     const sql = getSql();

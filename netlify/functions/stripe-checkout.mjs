@@ -1,4 +1,5 @@
 import { requireAuthUser } from './lib/auth.mjs';
+import { requireTinyverseAccess } from './lib/tinyverse-access.mjs';
 import { ensureProfile } from './lib/profiles.mjs';
 import { getSql } from './lib/db.mjs';
 import { corsResponse, errorResponse, jsonResponse, readJson, sameOriginWriteGuard, absoluteSiteUrl } from './lib/http.mjs';
@@ -25,6 +26,8 @@ export default async function stripeCheckout(request) {
 
   const auth = await requireAuthUser(request, origin);
   if (auth.response) return auth.response;
+    const tvGate = requireTinyverseAccess(auth.user, origin);
+    if (tvGate) return tvGate;
 
   let body;
   try { body = await readJson(request); } catch (_) { return errorResponse('invalid-json', 400, origin); }

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { requireTinyverseAccess } from './lib/tinyverse-access.mjs';
 import { requireAuthUser } from './lib/auth.mjs';
 import { ensureProfile } from './lib/profiles.mjs';
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
@@ -32,6 +33,8 @@ export default async function worldRemix(request) {
 
   const auth = await requireAuthUser(request, origin);
   if (auth.response) return auth.response;
+    const tvGate = requireTinyverseAccess(auth.user, origin);
+    if (tvGate) return tvGate;
 
   let body;
   try { body = await readJson(request); } catch (_) { return errorResponse('invalid-json', 400, origin); }

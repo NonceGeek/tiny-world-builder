@@ -1,4 +1,5 @@
 import { requireAuthUser } from "./lib/auth.mjs";
+import { requireTinyverseAccess } from './lib/tinyverse-access.mjs';
 import { ensureProfile } from "./lib/profiles.mjs";
 import { getSql } from "./lib/db.mjs";
 import { corsResponse, errorResponse, jsonResponse } from "./lib/http.mjs";
@@ -22,6 +23,8 @@ export default async function meGold(request) {
   // `const user = await requireAuthUser(...)` shape dereferenced a wrapper and 500'd.)
   const auth = await requireAuthUser(request, origin);
   if (auth.response) return auth.response;
+    const tvGate = requireTinyverseAccess(auth.user, origin);
+    if (tvGate) return tvGate;
 
   try {
     const sql = getSql();

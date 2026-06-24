@@ -1,5 +1,7 @@
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
 import { corsResponse, errorResponse, jsonResponse } from './lib/http.mjs';
+import { requireAuthUser } from './lib/auth.mjs';
+import { requireTinyverseAccess } from './lib/tinyverse-access.mjs';
 import { normalizeWorldSelectionGateData, worldPreview, TINYVERSE_HUB_SLUG } from './lib/worlds.mjs';
 
 export const config = { path: '/api/worlds/featured' };
@@ -53,7 +55,12 @@ export default async function worldsFeatured(request) {
     const sql = getSql();
 
     if (isTemplates) {
-      // Template marketplace listing — public, unauthenticated.
+      // Template marketplace listing — gated to the tinyverse economy allowlist
+      // (dark launch). The public home carousel (non-templates path below) stays open.
+      const auth = await requireAuthUser(request, origin);
+      if (auth.response) return auth.response;
+      const tvGate = requireTinyverseAccess(auth.user, origin);
+      if (tvGate) return tvGate;
       // Reads world_shares (user-built worlds) where is_template=TRUE and
       // template_price IS NOT NULL. The profile_id IS NOT NULL guard mirrors the
       // remix predicate (deleted-author templates are never shown or remixable).
