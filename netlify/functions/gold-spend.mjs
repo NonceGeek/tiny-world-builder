@@ -61,27 +61,32 @@ export default async function goldSpend(request) {
       // read the same `available` and overspend. Released at COMMIT/ROLLBACK.
       await tx`SELECT pg_advisory_xact_lock(hashtext(${wallet})::bigint)`;
 
-      // Idempotent replay: a prior spend with the same key returns the same outcome.
+      // Load this cycle's events in DETERMINISTIC order so reduceGoldLedger's
+      // "latest ALLOWANCE_RECALCULATED wins" reflects chronological, not physical, order.
+      const loadEvents = () => tx`
+        SELECT type, wallet, cycle_id AS "cycleId", amount FROM gold_ledger_events
+        WHERE wallet = ${wallet} AND cycle_id = ${cycleId}
+        ORDER BY created_at ASC, id ASC
+      `;
+
+      // Idempotency: a prior spend with the same key replays ONLY if the request
+      // fingerprint (amount + reason) matches. A reused key with a different spend is
+      // rejected (409) so a cheap key can never authorize an expensive action.
       const prior = await tx`
-        SELECT amount FROM gold_ledger_events
+        SELECT amount, reason FROM gold_ledger_events
         WHERE wallet = ${wallet} AND type = 'GOLD_SPENT' AND reference_id = ${idempotencyKey}
         LIMIT 1
       `;
       if (prior.length) {
-        const events = await tx`
-          SELECT type, wallet, cycle_id AS "cycleId", amount FROM gold_ledger_events
-          WHERE wallet = ${wallet} AND cycle_id = ${cycleId}
-        `;
-        const summary = reduceGoldLedger(events, { wallet, cycleId });
-        return { ok: true, replayed: true, spent: Number(prior[0].amount), available: summary.available, cycleId };
+        if (Number(prior[0].amount) !== amount || String(prior[0].reason || '') !== reason) {
+          return { ok: false, reason: 'idempotency-key-reused', status: 409 };
+        }
+        const summary = reduceGoldLedger(await loadEvents(), { wallet, cycleId });
+        return { ok: true, replayed: true, spent: amount, available: summary.available, cycleId };
       }
 
       // Compute authoritative available from the ledger and attempt the spend.
-      const events = await tx`
-        SELECT type, wallet, cycle_id AS "cycleId", amount FROM gold_ledger_events
-        WHERE wallet = ${wallet} AND cycle_id = ${cycleId}
-      `;
-      const summary = reduceGoldLedger(events, { wallet, cycleId });
+      const summary = reduceGoldLedger(await loadEvents(), { wallet, cycleId });
       const spend = spendGold(summary, amount, { wallet, action: reason, referenceId: idempotencyKey });
       if (!spend.ok) return { ok: false, reason: spend.reason, available: summary.available, cycleId };
 
@@ -92,14 +97,29 @@ export default async function goldSpend(request) {
         DO NOTHING
         RETURNING id
       `;
-      // If the conflict path hit (lost an idempotency race despite the lock), treat as replay.
-      const eventId = inserted.length ? inserted[0].id : null;
-      return { ok: true, replayed: !eventId, spent: amount, available: spend.available, cycleId, eventId };
+      if (!inserted.length) {
+        // Conflict despite the lock (a non-locking writer raced us). Do NOT claim a
+        // debit we didn't make: re-read the conflicting row and only replay on a
+        // fingerprint match; otherwise reject.
+        const conflict = await tx`
+          SELECT amount, reason FROM gold_ledger_events
+          WHERE wallet = ${wallet} AND type = 'GOLD_SPENT' AND reference_id = ${idempotencyKey}
+          LIMIT 1
+        `;
+        if (!conflict.length || Number(conflict[0].amount) !== amount || String(conflict[0].reason || '') !== reason) {
+          return { ok: false, reason: 'idempotency-key-reused', status: 409 };
+        }
+        const after = reduceGoldLedger(await loadEvents(), { wallet, cycleId });
+        return { ok: true, replayed: true, spent: amount, available: after.available, cycleId };
+      }
+      return { ok: true, replayed: false, spent: amount, available: spend.available, cycleId, eventId: inserted[0].id };
     });
 
     if (!result.ok) {
-      const status = result.reason === 'insufficient-gold' ? 402 : 400;
-      return jsonResponse(result, origin, status);
+      const status = result.status
+        || (result.reason === 'insufficient-gold' ? 402 : 400);
+      const { status: _drop, ...payload } = result;
+      return jsonResponse(payload, origin, status);
     }
     return jsonResponse(result, origin);
   } catch (err) {

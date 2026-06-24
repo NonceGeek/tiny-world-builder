@@ -76,6 +76,16 @@ test('a later ALLOWANCE_RECALCULATED replaces (not adds to) the cycle allowance'
   assert.equal(summary.available, 1500);
 });
 
+test('allowance is order-sensitive — the LAST event wins (so DB reads MUST be chronologically ordered)', () => {
+  // If an allowance is lowered 1000 -> 100, feeding the rows in the wrong physical
+  // order would keep the stale 1000 and let the player overspend. This is why the
+  // endpoint reads events ORDER BY created_at ASC, id ASC. (Codex E3 finding #1.)
+  const chronological = [allowanceEvent(1000), allowanceEvent(100)];
+  const reversed = [allowanceEvent(100), allowanceEvent(1000)];
+  assert.equal(reduceGoldLedger(chronological, { wallet: WALLET, cycleId: CYCLE }).allowance, 100);
+  assert.equal(reduceGoldLedger(reversed, { wallet: WALLET, cycleId: CYCLE }).allowance, 1000);
+});
+
 function goldSpent(amount) {
   return createGoldLedgerEvent('GOLD_SPENT', { wallet: WALLET, cycleId: CYCLE, amount, referenceId: 'seed-' + amount }, NOW);
 }
