@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { requireAuthUser } from './lib/auth.mjs';
 import { ensureProfile } from './lib/profiles.mjs';
 import { getSql, isDatabaseUnavailable, isMissingRelations } from './lib/db.mjs';
@@ -46,7 +47,10 @@ export default async function worldRemix(request) {
     const buyerId = Number(buyer.id);
     // Coin refs are bound to the share so a key reused across shares can't false-replay
     // a coin debit; the share_remixes table is the operation-level idempotency surface.
-    const coinRef = `rmx:${shareId}:${idempotencyKey}`.slice(0, 128);
+    // Fixed-length hashed coin ref so a long TEXT shareId + key can never overflow the
+    // 128-char coin-ref limit (which would fail the author-credit and roll back the
+    // remix). The durable share_remixes(buyer, key) row is the operation idempotency.
+    const coinRef = 'rmx:' + createHash('sha256').update(shareId + ':' + idempotencyKey).digest('hex').slice(0, 48);
 
     const result = await coinsTransaction(sql, async ({ debit, credit, tx }) => {
       // Serialize ALL of this buyer's remix work (and coin ops — same lock key) so the
