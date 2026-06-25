@@ -216,6 +216,11 @@
   ],
   "feed": [
     {
+      "ts": "2026-06-25T19:56:20.174Z",
+      "kind": "tick",
+      "text": "Autonomous tick (safe scope): drafted news/tweet for \"production-line: tick drafts + dashboard refresh [skip ci]\" -> plans/production-line/drafts/2026-06-25T19-56-production-line-tick-drafts-dashboard-refresh-sk.md. No economy paths touched."
+    },
+    {
       "ts": "2026-06-25T18:58:34.905Z",
       "kind": "tick",
       "text": "Autonomous tick (safe scope): drafted news/tweet for \"production-line: tick drafts + dashboard refresh [skip ci]\" -> plans/production-line/drafts/2026-06-25T18-58-production-line-tick-drafts-dashboard-refresh-sk.md. No economy paths touched."
@@ -409,12 +414,7 @@
       "ts": "2026-06-24T09:40:00Z",
       "kind": "fix",
       "text": "Mission Control sprite animations fixed: re-render re-attached pets without re-applying styles (full-sheet crop). Added attach() + pixel-exact positioning. Verified across a poll."
-    },
-    {
-      "ts": "2026-06-24T09:05:00Z",
-      "kind": "system",
-      "text": "Owner directive: economy launch gate active. Economy PRs are reviewed + staged but HELD until the tinyverse economy is preview-ready."
     }
   ],
-  "lastTick": "2026-06-25T18:58:34.905Z"
+  "lastTick": "2026-06-25T19:56:20.174Z"
 }
