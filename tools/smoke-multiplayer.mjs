@@ -13,7 +13,7 @@
 //   node tools/smoke-multiplayer.mjs --with-ai-bots   # also spawns LLM bots (needs ANTHROPIC_API_KEY)
 //
 // Then open in a normal browser:
-//   http://localhost:8888/tiny-world-builder?world=mixed-hollow
+//   http://localhost:8888/?world=mixed-hollow
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -276,7 +276,7 @@ async function probeWorldJoin(world) {
 }
 
 function printPlaybook(slug) {
-  const viewUrl = `${CFG.origin}/tiny-world-builder?world=${encodeURIComponent(slug)}`;
+  const viewUrl = `${CFG.origin}/?world=${encodeURIComponent(slug)}`;
   console.log('');
   console.log('────────────────────────────────────────────────────────');
   console.log('  OPEN IN BROWSER to see test players:');

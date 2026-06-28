@@ -25,12 +25,12 @@
   var INTERVAL = 5000;
   var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Each share opens in the builder at /tiny-world-builder?share=<id>.
+  // Each share opens in the builder at /?share=<id>.
   // id is a TEXT (base64url) string — never numeric.
   function worldHref(w) {
     var id = String((w && w.id) || '').trim();
-    if (!id) return '/tiny-world-builder';
-    return '/tiny-world-builder?share=' + encodeURIComponent(id);
+    if (!id) return '/';
+    return '/?share=' + encodeURIComponent(id);
   }
 
   function buildSlide(w, idx) {

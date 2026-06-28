@@ -433,6 +433,7 @@
 
   function buildSeededVehicleDemo(seed = VEHICLE_DEMO_DEFAULT_SEED, opts = {}) {
     if (opts.variant === 'large') return buildLargeScaleVehicleDemo(seed || VEHICLE_DEMO_LARGE_SEED, opts);
+    console.info('building seeded vehicle demo');
     const rng = makeMulberry32('vehicle-demo:' + seed);
     const roadCells = new Set();
     const waterRow = 4;

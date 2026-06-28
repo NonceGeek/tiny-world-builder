@@ -31,11 +31,11 @@
 <body>
 
   <header class="site-header" aria-label="Tiny World Builder">
-    <a class="site-logo" href="/" aria-label="Tiny World Builder home">
+    <a class="site-logo" href="/intro" aria-label="Tiny World Builder home">
       <img src="assets/twlogo-wordmark.png" alt="Tiny World Builder" width="1064" height="403" />
     </a>
     <nav class="site-nav" aria-label="Primary">
-      <a href="/">Home</a>
+      <a href="/intro">Home</a>
       <a href="/#features">Features</a>
       <a href="/#workflow">How it works</a>
       <a href="/worlds">Worlds</a>
@@ -44,7 +44,7 @@
       <a href="/features">Suggest</a>
       <a href="/news">News</a>
       <a href="https://github.com/jasonkneen/tiny-world-builder" rel="noopener noreferrer">GitHub</a>
-      <a class="nav-cta" href="/tiny-world-builder">Start building</a>
+      <a class="nav-cta" href="/">Start building</a>
     </nav>
   </header>
 
@@ -163,7 +163,7 @@
         nudge.className = 'tmpl-balance-sign-in';
         nudge.innerHTML = '';
         var link = document.createElement('a');
-        link.href = '/tiny-world-builder';
+        link.href = '/';
         link.textContent = 'Sign in';
         nudge.appendChild(link);
         var after = document.createTextNode(' to remix templates and spend Earned GOLD.');
@@ -249,7 +249,7 @@
         btn.setAttribute('aria-label', 'Sign in to remix');
         btn.disabled = false;
         btn.addEventListener('click', function () {
-          window.location.href = '/tiny-world-builder';
+          window.location.href = '/';
         });
       } else {
         btn.addEventListener('click', function () {
@@ -351,7 +351,7 @@
             var msg = document.createTextNode('Remixed! Opening your copy… ');
             statusEl.appendChild(msg);
             var link = document.createElement('a');
-            link.href = '/tiny-world-builder?share=' + encodeURIComponent(tmpl.id);
+            link.href = '/?share=' + encodeURIComponent(tmpl.id);
             link.textContent = 'Open builder';
             statusEl.appendChild(link);
             // Refresh balance

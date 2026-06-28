@@ -39,7 +39,7 @@ Options:
 Watch setup:
   1. npm run dev
   2. node plugins/examples/sse-command-relay.js
-  3. Open http://localhost:3000/tiny-world-builder
+  3. Open http://localhost:3000/
   4. Set Inbound SSE relay URL to http://localhost:8788/sse
   5. Run this script and watch the road network paint + vehicles drive.
 `);

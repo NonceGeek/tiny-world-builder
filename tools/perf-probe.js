@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const DEFAULT_PORT = Number(process.env.TW_PERF_PORT || process.env.PORT || 3199);
-const DEFAULT_PATH = process.env.TW_PERF_PATH || '/tiny-world-builder?perf=1&stats=1';
+const DEFAULT_PATH = process.env.TW_PERF_PATH || '/?perf=1&stats=1';
 const PROBE_MS = Number(process.env.TW_PERF_MS || 12000);
 const NAV_TIMEOUT_MS = Number(process.env.TW_PERF_NAV_TIMEOUT_MS || 18000);
 
@@ -74,7 +74,7 @@ async function main() {
     });
     server.stdout.on('data', d => process.env.TW_PERF_VERBOSE && process.stdout.write('[dev] ' + d));
     server.stderr.on('data', d => process.stderr.write('[dev] ' + d));
-    await waitForServer('http://127.0.0.1:' + port + '/tiny-world-builder');
+    await waitForServer('http://127.0.0.1:' + port + '/');
   }
 
   const chromePath = findChrome();

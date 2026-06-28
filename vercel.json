@@ -3,7 +3,27 @@
   "buildCommand": "./publish.sh",
   "outputDirectory": "dist",
   "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/tiny-world-builder.html"
+    },
+    {
+      "source": "/intro",
+      "destination": "/index.html"
+    }
+  ],
   "redirects": [
+    {
+      "source": "/tiny-world-builder",
+      "destination": "/",
+      "permanent": true
+    },
+    {
+      "source": "/tiny-world-builder/",
+      "destination": "/",
+      "permanent": true
+    },
     {
       "source": "/community",
       "destination": "/news",

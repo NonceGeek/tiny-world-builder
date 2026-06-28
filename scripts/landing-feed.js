@@ -17,12 +17,12 @@
     var href = String((room && room.href) || '').trim();
     if (href && href.charAt(0) === '/') return href;
     var roomId = String((room && room.roomId) || '').trim();
-    if (!roomId) return '/tiny-world-builder';
+    if (!roomId) return '/';
     var params = new URLSearchParams();
     if (room.shareId) params.set('share', room.shareId);
     params.set('party', roomId);
     params.set('observe', '1');
-    return '/tiny-world-builder?' + params.toString();
+    return '/?' + params.toString();
   }
 
   function qualityLabel(room) {

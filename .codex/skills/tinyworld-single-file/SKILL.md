@@ -10,7 +10,7 @@ Work mainly in `tiny-world-builder.html`; also update `index.html`, `vendor/thre
 Core rules:
 
 - Keep the builder app single-file at runtime: inline CSS, inline JS, no bundler, no npm runtime packages.
-- Root `index.html` is a static landing page entry point; the builder remains available at `/tiny-world-builder` and `/tiny-world-builder.html`.
+- Root `index.html` is the marketing landing page at `/intro`; the builder app is served at `/` (legacy `/tiny-world-builder` redirects to `/`).
 - Do not touch `tiny-world-builder BACKUP.html` if present.
 - Preserve style: 2-space indent, semicolons, single-quoted strings, section comments like `// -------- tools --------`.
 - Mutate board state through `setCell(x, z, opts)`, not direct `world[x][z]` writes outside initialization.
@@ -29,7 +29,7 @@ Validation:
 
 - Run `npm test` (syntax-checks the inline app script, parses `world.schema.json`, verifies embedded schema parity, checks local script/link assets, and runs the no-browser smoke guard).
 - For targeted parser checks, run `perl -0ne 'print $1 if m#<script>\s*(.*?)\s*</script>#s' tiny-world-builder.html | node --check`.
-- Prefer browser validation at `http://localhost:3000/tiny-world-builder`.
+- Prefer browser validation at `http://localhost:3000/` (landing at `/intro`).
 - Check console errors after visual/UI changes.
 
 ## Inline `<script>` gotcha (has burned us twice)

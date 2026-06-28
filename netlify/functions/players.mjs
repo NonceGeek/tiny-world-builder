@@ -76,7 +76,7 @@ function chatRequestDto(row, selfId) {
 }
 
 function partyDto(row, origin) {
-  const url = '/tiny-world-builder?party=' + encodeURIComponent(row.room_id);
+  const url = '/?party=' + encodeURIComponent(row.room_id);
   return {
     id: row.id,
     name: row.name,

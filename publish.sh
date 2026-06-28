@@ -15,8 +15,8 @@ Usage: ./publish.sh [--zip]
 Creates a clean dist/ folder for publishing Tiny World Builder.
 
 Outputs:
-  dist/index.html                 Landing page entry point
-  dist/tiny-world-builder.html    Original app filename
+  dist/index.html                 Landing page (served at /intro)
+  dist/tiny-world-builder.html    Builder app (served at /)
   dist/world.schema.json
   dist/README.md
   dist/LICENSE

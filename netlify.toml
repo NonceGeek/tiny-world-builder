@@ -17,14 +17,29 @@
   node_bundler = "esbuild"
 
 [[redirects]]
-  from = "/tiny-world-builder"
+  from = "/"
   to = "/tiny-world-builder.html"
   status = 200
 
 [[redirects]]
-  from = "/tiny-world-builder/"
-  to = "/tiny-world-builder.html"
+  from = "/intro"
+  to = "/index.html"
   status = 200
+
+[[redirects]]
+  from = "/intro/"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/tiny-world-builder"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/tiny-world-builder/"
+  to = "/"
+  status = 301
 
 [[redirects]]
   from = "/roadmap"

@@ -48,7 +48,7 @@ function cleanPartyHost(value) {
   if (!raw) return '';
   if (!/^(wss?:)?\/\//i.test(raw)) return '';
   try {
-    const url = new URL(raw.replace(/^\/\//, 'wss://'));
+    const url = new URL(raw.replace(/^\/\//, 'wss:'/'));
     if (!/^ws:|^wss:$/.test(url.protocol)) return '';
     return url.href.replace(/\/+$/, '');
   } catch (_) {
@@ -73,7 +73,7 @@ function observerHref(roomId, shareId, partyHost, request) {
       params.set('partyHost', partyHost);
     }
   } catch (_) {}
-  return '/tiny-world-builder?' + params.toString();
+  return '/?' + params.toString();
 }
 
 async function ensureCollabRooms(sql) {

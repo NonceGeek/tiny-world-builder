@@ -26,7 +26,7 @@ function validateWorldData(data) {
 }
 
 function shareUrlForRequest(request, id) {
-  return '/tiny-world-builder?share=' + encodeURIComponent(id);
+  return '/?share=' + encodeURIComponent(id);
 }
 
 async function createShare(sql, input) {

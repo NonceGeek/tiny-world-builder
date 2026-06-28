@@ -737,10 +737,16 @@ function routeForRequest(reqUrl) {
   const parsed = new URL(reqUrl, 'http://localhost');
   const pathname = decodeURIComponent(parsed.pathname);
 
-  // Normal access: show the temporary landing page. The editor remains at
-  // /tiny-world-builder for direct testing and production parity.
-  if (pathname === '/') return { file: path.resolve(root, 'index.html') };
+  // Builder at /; marketing landing page at /intro. Legacy /tiny-world-builder
+  // redirects to / so old share links keep working.
+  if (pathname === '/intro' || pathname === '/intro/') {
+    return { file: path.resolve(root, 'index.html') };
+  }
   if (pathname === '/tiny-world-builder' || pathname === '/tiny-world-builder/') {
+    const dest = '/' + (parsed.search || '') + (parsed.hash || '');
+    return { redirect: dest };
+  }
+  if (pathname === '/') {
     return { file: path.resolve(root, 'tiny-world-builder.html') };
   }
 
@@ -966,8 +972,8 @@ function startClusoWebhook() {
 
 server.listen(port, '127.0.0.1', () => {
   console.log(`Tiny World dev server: http://localhost:${port}/`);
-  console.log(`  -> Landing page entry at /`);
-  console.log(`  -> Builder at /tiny-world-builder`);
+  console.log(`  -> Builder at /`);
+  console.log(`  -> Landing page at /intro`);
   console.log(`  → Click "Vehicle Demo" button for cars/trucks`);
   console.log(`  Or append ?demo=vehicles to jump straight to vehicle demo`);
   console.log('Press Ctrl+C to stop.');

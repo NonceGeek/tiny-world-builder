@@ -1477,7 +1477,7 @@ syncTinyworldOwnerToolControls();
     function absoluteShareUrl(result) {
       if (!result) return '';
       if (result.url) return new URL(result.url, location.origin).href;
-      if (result.id) return new URL('/tiny-world-builder?share=' + encodeURIComponent(result.id), location.origin).href;
+      if (result.id) return new URL('/?share=' + encodeURIComponent(result.id), location.origin).href;
       return '';
     }
 
@@ -3680,12 +3680,12 @@ syncTinyworldOwnerToolControls();
       const href = String((room && room.href) || '').trim();
       if (href && href.charAt(0) === '/') return href;
       const roomId = String((room && room.roomId) || '').trim();
-      if (!roomId) return '/tiny-world-builder';
+      if (!roomId) return '/';
       const p = new URLSearchParams();
       if (room.shareId) p.set('share', room.shareId);
       p.set('party', roomId);
       p.set('observe', '1');
-      return '/tiny-world-builder?' + p.toString();
+      return '/?' + p.toString();
     }
 
     function currentSharedRoomId() {
@@ -4483,7 +4483,7 @@ syncTinyworldOwnerToolControls();
     function worldMenuAbsoluteShareUrl(result) {
       if (!result) return '';
       if (result.url) return new URL(result.url, location.origin).href;
-      if (result.id) return new URL('/tiny-world-builder?share=' + encodeURIComponent(result.id), location.origin).href;
+      if (result.id) return new URL('/?share=' + encodeURIComponent(result.id), location.origin).href;
       return '';
     }
 

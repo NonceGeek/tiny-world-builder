@@ -82,13 +82,12 @@ for (const asset of [
   if (!fs.existsSync(path.join(root, asset))) fail('missing local asset ' + asset);
 }
 
-// Dev server should now default to the temporary landing page on bare access.
-// The builder stays available at /tiny-world-builder for direct testing.
-if (!devServer.includes("if (pathname === '/') return { file: path.resolve(root, 'index.html') };")) {
-  fail('dev server bare root should serve index.html landing page');
+// Builder at /; landing page at /intro.
+if (!devServer.includes("pathname === '/intro'")) {
+  fail('dev server should serve index.html landing page at /intro');
 }
-if (!devServer.includes("pathname === '/tiny-world-builder'")) {
-  fail('dev server should serve tiny-world-builder.html for normal access');
+if (!devServer.includes("pathname === '/'") || !devServer.includes('tiny-world-builder.html')) {
+  fail('dev server root should serve tiny-world-builder.html');
 }
 for (const landingNeedle of [
   'styles/landing.css',
@@ -98,7 +97,8 @@ for (const landingNeedle of [
   'assets/landing-feature-sculpt.png',
   'assets/landing-feature-fly.png',
   'assets/landing-feature-share.png',
-  'href="/tiny-world-builder"',
+  'href="/"',
+  'href="/intro"',
 ]) {
   if (!indexRaw.includes(landingNeedle)) {
     fail('landing page missing required asset/link: ' + landingNeedle);
